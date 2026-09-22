@@ -94,6 +94,20 @@
   .kpi.hero .kpi-value { font-size: 52px; line-height: 1; letter-spacing: -0.02em; margin: 2px 0 4px; }
   .kpi.hero .kpi-sub { font-size: 13px; max-width: 44ch; }
   .fine { font-size: 12px; color: var(--muted); max-width: 84ch; margin: 0 0 16px; text-wrap: pretty; }
+  h3.minor { font: 700 18px/1.2 var(--display); margin: 22px 0 4px; letter-spacing: 0.01em; }
+  .tornado { display: grid; gap: 4px; margin: 0 0 18px; transition: opacity 150ms; }
+  .tornado.stale { opacity: 0.5; }
+  .trow { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+  .tlabel { display: grid; font-size: 12.5px; line-height: 1.25; }
+  .tlabel span { color: var(--muted); font-size: 11.5px; }
+  .ttrack { position: relative; height: 26px; }
+  .tbase { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); }
+  .tseg { position: absolute; top: 9px; height: 8px; }
+  .tseg.better { background: var(--bar); border-radius: 4px 0 0 4px; }
+  .tseg.worse { background: var(--accent); border-radius: 0 4px 4px 0; }
+  .tval { position: absolute; top: 5px; font: 500 11.5px var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+  .tval.l { transform: translateX(-100%); padding-right: 6px; }
+  .tval.r { padding-left: 6px; }
 
   /* Two-column layout */
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0 32px; align-items: start; }
@@ -196,6 +210,7 @@
     .inputs { position: static; max-height: none; border: 1px solid var(--rule); margin-top: 24px; order: 2; }
   }
   @media (max-width: 420px) { .kpi.hero { grid-column: 1 / -1; } }
+  @media (max-width: 560px) { .trow { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
     .page { padding-inline: 16px; }
     h1 { font-size: 36px; }
@@ -231,6 +246,10 @@
         <div class="chart" id="month-chart" role="img" aria-label="Monthly heating cost by zone and upper-level cooling cost"></div>
         <details class="tv"><summary>Table view</summary><div class="table-wrap" id="month-table"></div></details>
         <div class="table-wrap"><table id="cost-table"></table></div>
+        <h3 class="minor">What could move it</h3>
+        <p class="sub">Each unknown set to a better and a worse case, with everything else as in Inputs. Heating and cooling cost per year.</p>
+        <div class="legend" id="tornado-legend"></div>
+        <div class="tornado" id="tornado" aria-label="Annual cost range for each unknown input"></div>
         <div class="callouts" id="cost-callouts"></div>
         <p class="fine" id="rates-note"></p>
       </section>
@@ -322,7 +341,7 @@ const saveInputs = () => { try { localStorage.setItem(STORE, JSON.stringify(inpu
 const atDefaults = () => JSON.stringify(inputs) === JSON.stringify(INPUTS);
 
 // ---------------------------------------------------------------- run orchestration
-let R = null, reqId = 0, worker = null, inlineMod = null, wxCache = null;
+let R = null, SENS = null, sensFresh = false, reqId = 0, worker = null, inlineMod = null, wxCache = null;
 const statusEl = $('#status'), resultsEl = $('#results');
 function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status' + (cls ? ' ' + cls : ''); }
 
@@ -351,10 +370,11 @@ function scheduleRun(delay = 350) {
     if (worker) worker.postMessage({ id, inputs }); else runInline(id);
   }, delay);
 }
-function onResult({ id, result, error }) {
+function onResult({ id, result, sensitivity, error }) {
   if (id !== reqId) return;
   if (error) { setStatus(`Model error: ${error}`, 'error'); return; }
-  R = result;
+  if (sensitivity) { SENS = sensitivity; sensFresh = true; if (R) renderSensitivity(); return; }
+  R = result; sensFresh = false;
   resultsEl.classList.remove('stale');
   setStatus('Up to date');
   renderAll();
@@ -642,6 +662,41 @@ function renderCosts() {
   $('#rates-note').textContent =
     `Rates are from your August 2026 bills, taxes included. Gas is $${i.rates.gas.toFixed(3)}/therm on Black Hills Energy RGS GCA: $0.2008 volumetric, $0.3398 commodity, riders −$0.0115, +$0.0203 and −$0.0007, and 5% sales tax. The commodity charge passes through gas costs and changes during the year. Electricity is $${i.rates.elec.toFixed(4)}/kWh on Rocky Mountain Power Schedule 25: $0.06467 energy, $0.02997 net power cost, −$0.00052 renewable adjustment, 2.84% efficiency and 0.05% carbon charges, and 5% sales tax. The bill shows no demand charge, so none is included. Monthly service charges of $${i.rates.gasMonthly.toFixed(2)} for gas and $${i.rates.elecMonthly.toFixed(2)} for electric are paid regardless and are not in the totals above.`;
 }
+// ---------------------------------------------------------------- sensitivity
+function renderSensitivity() {
+  const el = $('#tornado');
+  el.classList.toggle('stale', !sensFresh);
+  if (!SENS) { el.replaceChildren(Object.assign(document.createElement('p'), { className: 'fine', textContent: 'Working out the ranges…' })); return; }
+  const base = SENS.base;
+  const rows = [...SENS.rows].sort((a, b) => Math.abs(b.worse.total - b.better.total) - Math.abs(a.worse.total - a.better.total));
+  const vals = rows.flatMap(r => [r.better.total, r.worse.total]).concat(base);
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals), pad = (hi0 - lo0) * 0.24 + 1;
+  const lo = lo0 - pad, hi = hi0 + pad, pct = v => `${((v - lo) / (hi - lo) * 100).toFixed(2)}%`;
+  el.replaceChildren(...rows.map(r => {
+    const row = document.createElement('div'); row.className = 'trow';
+    const lab = document.createElement('div'); lab.className = 'tlabel';
+    const b = document.createElement('b'); b.textContent = r.label;
+    const sp = document.createElement('span'); sp.textContent = `${r.better.label} to ${r.worse.label}`;
+    lab.append(b, sp);
+    const tr = document.createElement('div'); tr.className = 'ttrack';
+    const cheap = Math.min(r.better.total, r.worse.total), dear = Math.max(r.better.total, r.worse.total);
+    const seg = (cls, a, z) => { const d = document.createElement('div'); d.className = `tseg ${cls}`; d.style.left = pct(a); d.style.width = `calc(${pct(z)} - ${pct(a)})`; return d; };
+    if (cheap < base - 0.5) tr.append(seg('better', cheap, base));
+    if (dear > base + 0.5) tr.append(seg('worse', base, dear));
+    const bl = document.createElement('div'); bl.className = 'tbase'; bl.style.left = pct(base); tr.append(bl);
+    const vl = document.createElement('span'); vl.className = 'tval l'; vl.style.left = pct(Math.min(cheap, base)); vl.textContent = cheap < base - 0.5 ? `$${nf(cheap)}` : '';
+    const vr = document.createElement('span'); vr.className = 'tval r'; vr.style.left = pct(Math.max(dear, base)); vr.textContent = dear > base + 0.5 ? `$${nf(dear)}` : '';
+    tr.append(vl, vr);
+    tr.setAttribute('aria-label', `${r.label}: $${nf(r.better.total)} at ${r.better.label}, $${nf(r.worse.total)} at ${r.worse.label}`);
+    row.append(lab, tr);
+    return row;
+  }));
+  legend($('#tornado-legend'), [
+    { color: 'var(--bar)', label: `cheaper than the $${nf(base)} estimate` },
+    { color: 'var(--accent)', label: 'costlier' },
+  ]);
+}
+
 // ---------------------------------------------------------------- balance table
 function renderBalance() {
   const M = R.main, idx = z => ZONES.indexOf(z);
@@ -845,14 +900,14 @@ function renderMethod() {
   const items = [
     ['Weather', `${R.station}, ${R.dataset}: 8,760 hours of temperature, sun and wind. Design points from the ASHRAE 2009 Handbook entries in the same file.`],
     ['Zones', `Floor areas from the massing model: shop ${nf(z.shop.A)} ft², ground level ${nf(z.ground.A)} ft² (the ${nf(R.env.loggiaArea)} ft² loggia is outdoors), upper level ${nf(z.upper.A)} ft², vestibule ${nf(z.vest.A)} ft², south leg ${nf(z.garage.A)} ft². Each zone has an air node and a mass node (4″ of slab, or finishes upstairs), stepped every 15 minutes.`],
-    ['Walls and roofs', `Your R-values plus 12″ brick (R-${i.brickR}), drywall and air films. The outside film thickens or thins with the wind, and the windward faces see more of it. Sun heats opaque walls through sol-air temperatures and heats vented attics before it reaches the R-${i.shop.ceilingR} and R-${i.upper.roofR} ceilings.`],
+    ['Walls and roofs', `Your R-values at ${i.framing}× for studs through the foam (1 if the foam is continuous), plus 12″ brick (R-${i.brickR}), drywall and air films. The edge of the 2′ floor structure counts as wall for both levels. The outside film thickens or thins with the wind, and the windward faces see more of it. Sun heats opaque walls through sol-air temperatures and heats vented attics before it reaches the R-${i.shop.ceilingR} and R-${i.upper.roofR} ceilings.`],
     ['Air leakage', `The LBL stack-and-wind model (ASHRAE Fundamentals) on hourly airport wind, shelter class ${i.site.shelter}. Tightness is a blower-door ACH50: ${i.shop.ach50} for the super-airtight shop (no windows, no windward doors), and a best guess of ${i.center.ach50} for the center with ${i.center.achLow}–${i.center.achHigh} run as the range. That works out to an average of ${nf(ach(0), 2)}, ${nf(ach(2), 2)} and ${nf(ach(3), 2)} air changes per hour in the shop, ground level and upper level.`],
     ['Openings', `The upper level's sixteen 41″ × 67″ windows and 72″ slider use U-${i.glass.windowU} and SHGC ${i.glass.windowSHGC}, with overhang shading and ${nf(i.glass.blinds * 100)}% of the sun getting past blinds. The shop and ground level have no windows. The 86″ walkthroughs to the shop and south leg count as insulated doors in the shared walls.`],
     ['Slabs', `Uninsulated slab edge, F-${i.slab.F} Btu/h·ft·°F against the day's mean outdoor air. Slab edge is the ground level's largest single loss, so its real insulation matters.`],
     ['Schedules', `In-use temperatures apply only on heating-degree days (daily mean below 65°F), as you described: shop ${sessionText('shop')}, ground level ${sessionText('ground')}. Each zone can draw up to the AHU's ${nf(i.plant.ahuHeatBtuh)} Btu/h, so warm-ups take time while the slab soaks up heat. The upper level's ${i.upper.unoccDays} empty days are spread evenly through the year.`],
-    ['Equipment', `The Navien condensing combi-boiler heats at an assumed ${nf(i.plant.boilerEff * 100)}% seasonal efficiency. The AHU's large coil should allow low water temperatures, which keeps the boiler condensing. The ${i.plant.coolTons}-ton Apollo cools at COP ${i.plant.coolCOP}, covering the ${nf(R.coolDesign.upper.load / 12000, 1)}-ton design load. The AHU draws ${i.plant.fanW} W and the pumps an assumed ${i.plant.pumpW} W. They run for heat delivered ÷ ${nf(i.plant.ahuHeatBtuh)} Btu/h and for cooling ÷ the Apollo's capacity. Domestic hot water from the combi is not counted.`],
+    ['Equipment', `The Navien condensing combi-boiler heats at an assumed ${nf(i.plant.boilerEff * 100)}% seasonal efficiency, allowing for cycling and hot-water priority. ${nf(i.plant.distLoss * 100)}% of the heating and cooling is assumed lost from ducts and piping before it reaches the rooms. The ${i.plant.coolTons}-ton Apollo cools at COP ${i.plant.coolCOP}, covering the ${nf(R.coolDesign.upper.load / 12000, 1)}-ton design load. The AHU draws ${i.plant.fanW} W and the pumps an assumed ${i.plant.pumpW} W. They run for heat delivered ÷ ${nf(i.plant.ahuHeatBtuh)} Btu/h and for cooling ÷ the Apollo's capacity. Domestic hot water from the combi is not counted.`],
     ['Cooling', `With heat and cool both at ${i.upper.heatF}°F there is no deadband, so the upper level often heats at night and cools the next afternoon. ${nf(mild)}% of its cooling happens while it is below ${i.upper.coolF - 3}°F outside, which open windows or an economizer could cover.`],
-    ['Check first', 'The center\'s airtightness moves the cost most (a blower-door test runs a few hundred dollars), then slab-edge insulation, the boiler\'s real efficiency and the AHU\'s heat output. Change them under Inputs and the page reruns.'],
+    ['Check first', 'The center\'s airtightness and the winter gas price move the cost most, then duct and piping losses, how the foam is framed, and the boiler\'s real efficiency. A blower-door test pins down the first. A year of the previous owner\'s gas and electric usage would let the model be calibrated to the real building.'],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => {
     const li = document.createElement('li');
@@ -936,7 +991,7 @@ $('#reset').addEventListener('click', () => {
 // ---------------------------------------------------------------- render
 function renderAll() {
   if (!R) return;
-  renderKpis(); renderMonthly(); renderCosts(); renderZoneTable(); renderPlan(); renderBalance(); renderWind();
+  renderKpis(); renderMonthly(); renderCosts(); renderSensitivity(); renderZoneTable(); renderPlan(); renderBalance(); renderWind();
   fillWeeks(); renderWeek(); renderMethod();
 }
 let rz = 0;
@@ -948,7 +1003,7 @@ startWorker();
 // Precomputed default results paint the page at once; the live run replaces them.
 if (atDefaults()) {
   fetch(new URL('./data/thermal-defaults.json', import.meta.url)).then(r => r.json()).then(d => {
-    if (!R) { R = d; renderAll(); resultsEl.classList.add('stale'); }
+    if (!R) { R = d; SENS = d.sensitivity || null; sensFresh = !!SENS; renderAll(); resultsEl.classList.add('stale'); }
   }).catch(() => {});
 }
 scheduleRun(0);

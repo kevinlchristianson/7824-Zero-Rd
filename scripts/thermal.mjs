@@ -1,7 +1,7 @@
 // Runs the heating and cooling model and prints a report.
 // Usage: npm run thermal [-- --json]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary } from '../model/thermal.js';
+import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary, SENSITIVITY, sensitivityCase } from '../model/thermal.js';
 
 const wx = JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.meta.url), 'utf8'));
 const t0 = performance.now();
@@ -67,10 +67,16 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 for (let m = 0; m < 12; m++) console.log(`  ${MON[m]}  ${[0, 2, 3].map(z => lpad(mm(M.heat[z][m]), 6)).join('')}   cool ${lpad(mm(M.cool[3][m]), 5)}`);
 console.log('\nSessions:', 'shop', JSON.stringify(sessionSummary(INPUTS, 'shop')), 'ground', JSON.stringify(sessionSummary(INPUTS, 'ground')));
 
+const sens = { base: r.cost.totals.total, rows: SENSITIVITY.map(c => ({ key: c.key, label: c.label, better: sensitivityCase(c, 'better', r), worse: sensitivityCase(c, 'worse', r) })) };
+console.log('\nWhat could move the annual cost ($' + sens.base.toFixed(0) + ')');
+for (const x of [...sens.rows].sort((a, b) => (b.worse.total - b.better.total) - (a.worse.total - a.better.total)))
+  console.log(`  ${x.label.padEnd(30)} ${x.better.label.padStart(14)} $${x.better.total.toFixed(0).padStart(5)}   ${x.worse.label.padStart(14)} $${x.worse.total.toFixed(0).padStart(5)}`);
+
 // --write: save the default-input results (without hourly traces) for the
 // page to show before its own run finishes.
 if (process.argv.includes('--write')) {
   const slim = slimResult(r);
+  slim.sensitivity = sens;
   delete slim.main.T; delete slim.main.Qh; delete slim.main.Qc; delete slim.wx;
   const round = (k, v) => {
     if (ArrayBuffer.isView(v)) v = Array.from(v);

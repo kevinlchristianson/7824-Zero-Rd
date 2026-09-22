@@ -32,33 +32,36 @@ export const GROUPS = [
 export const INPUTS = {
   shop: {
     wallR: 15, ceilingR: 40, minF: 45, occF: 70, hoursPerWeek: 12,
-    sessionHours: 6, startHour: 8, ach50: 1.5, gainsOn: 0.5, gainsOff: 0,
+    sessionHours: 6, startHour: 8, ach50: 1.5, gainsOn: 0.3, gainsOff: 0,
   },
   vest: { wallR: 6.5, ceilingR: 40, ach50: 6 },
   // Center block airtightness is unknown: a best guess for both levels,
   // plus the tight and leaky ends of a plausible range.
-  center: { ach50: 3.5, achLow: 2, achHigh: 6 },
+  center: { ach50: 5, achLow: 3, achHigh: 8 },
   ground: {
     wallR: 30, ceilingR: 20, minF: 60, occF: 70, hoursPerWeek: 28,
-    sessionHours: 7, startHour: 9, gainsOn: 0.5, gainsOff: 0.05,
+    sessionHours: 7, startHour: 9, gainsOn: 0.3, gainsOff: 0.03,
   },
   upper: {
     wallR: 30, roofR: 60, heatF: 68, coolF: 68, unoccDays: 40, unoccMinF: 55,
-    gainsOn: 0.35, gainsOff: 0.1,
+    gainsOn: 0.2, gainsOff: 0.05,
   },
   garage: { wallR: 0, ceilingR: 0, ach50: 15 },
   party: { shopCenterR: 15, garageCenterR: 30, shopVestR: 15 },
   glass: {
-    windowU: 0.35, windowSHGC: 0.40, blinds: 0.85, doorU: 0.35,
+    windowU: 0.45, windowSHGC: 0.45, blinds: 0.85, doorU: 0.35,
     archU: 0.55, archSHGC: 0.55, garageDoorU: 1.0,
   },
   slab: { F: 0.73 },
   brickR: 2.0,
+  // Share of the foam's R-value the wall actually gets: 1 for continuous
+  // foam, about 0.6 with wood studs through it, about 0.4 with steel studs.
+  framing: 0.6,
   site: { shelter: 2, wind: true, groundRefl: 0.2 },
   // Navien condensing combi-boiler heats; MBTEK Apollo 3.5-ton air-to-water
   // heat pump cools; both through an MBTEK AP-AHU-6T air handler.
   plant: {
-    boilerEff: 0.92, coolCOP: 4.6, coolTons: 3.5,
+    boilerEff: 0.88, coolCOP: 4.6, coolTons: 3.5, distLoss: 0.10,
     fanW: 460, pumpW: 150, ahuHeatBtuh: 90000,
   },
   // Marginal rates from the owner's Aug-2026 bills, taxes and riders included.
@@ -112,6 +115,7 @@ export const SCHEMA = [
   ] },
   { group: 'Equipment', items: [
     ['plant.boilerEff', 'Navien seasonal efficiency', '×', 'assumed', 0.7, 0.99, 0.01],
+    ['plant.distLoss', 'Duct and piping losses', '×', 'assumed', 0, 0.4, 0.01],
     ['plant.coolCOP', 'Apollo cooling COP', '×', 'given', 1.5, 8, 0.1],
     ['plant.coolTons', 'Apollo capacity', 'tons', 'given', 1, 10, 0.5],
     ['plant.fanW', 'AHU draw while running', 'W', 'given', 0, 2000, 10],
@@ -148,7 +152,8 @@ export const SCHEMA = [
     ['glass.archSHGC', 'Vestibule arch SHGC', '', 'assumed', 0.1, 0.9, 0.01],
     ['glass.garageDoorU', 'Overhead door U', 'U', 'assumed', 0.1, 1.5, 0.01],
   ] },
-  { group: 'Slab & masonry', items: [
+  { group: 'Walls, slab & masonry', items: [
+    ['framing', 'Foam effectiveness (1 continuous, 0.6 wood studs, 0.4 steel)', '×', 'assumed', 0.2, 1, 0.05],
     ['slab.F', 'Slab edge F-factor', 'Btu/h·ft·°F', 'assumed', 0.1, 1.2, 0.01],
     ['brickR', '12″ brick', 'R', 'assumed', 0.5, 5, 0.1],
   ] },
@@ -284,16 +289,20 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   }
 
   // Opaque walls.
+  const fx = inp.framing;
   const wallRcore = {
-    shop: inp.shop.wallR + inp.brickR + GYP,
-    vest: inp.vest.wallR + inp.brickR + GYP,
-    ground: inp.ground.wallR + inp.brickR + GYP,
-    upper: inp.upper.wallR + inp.brickR + GYP,
-    garage: inp.garage.wallR + inp.brickR,
+    shop: inp.shop.wallR * fx + inp.brickR + GYP,
+    vest: inp.vest.wallR * fx + inp.brickR + GYP,
+    ground: inp.ground.wallR * fx + inp.brickR + GYP,
+    upper: inp.upper.wallR * fx + inp.brickR + GYP,
+    garage: inp.garage.wallR * fx + inp.brickR,
   };
+  // The 2' floor structure between the levels has an exterior edge too; each
+  // level takes half of it on its outside walls.
+  const wallH = { ground: c.ground + c.floor / 2, upper: c.upper + c.floor / 2 };
   for (const z of ZONES) {
     for (const [b, run] of Object.entries(runs[z])) {
-      const gross = run * zones[z].H;
+      const gross = run * (b === 'L' ? zones[z].H : (wallH[z] ?? zones[z].H));
       const A = gross - (openA[key(z, b)] || 0);
       if (A <= 0) continue;
       els.push({ zone: z, group: 'walls', to: b === 'L' ? 'loggia' : 'out', face: b === 'L' ? 'W' : b, A, Rcore: wallRcore[z], Rin: R_IN, alpha: WALL_ABS, gross });
@@ -317,13 +326,13 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   link('ground', 'upper', 'floor', zones.ground.A, floorR + R_CEIL_IN + R_FLOOR_IN);
   const pShop = partyLen(SHOP), pGar = partyLen(GAR);
   const hSG = Math.min(p.north.wall, c.ground + c.floor / 2);
-  const shopParty = inp.party.shopCenterR + inp.brickR + 2 * GYP + 2 * R_IN;
+  const shopParty = inp.party.shopCenterR * fx + inp.brickR + 2 * GYP + 2 * R_IN;
   link('shop', 'ground', 'walls', pShop * hSG - doorA('shop', 'ground'), shopParty);
   link('shop', 'upper', 'walls', pShop * Math.max(0, p.north.wall - hSG), shopParty);
   link('garage', 'ground', 'walls', pGar * Math.min(p.south.wall, c.ground + c.floor / 2) - doorA('garage', 'ground'),
-    inp.party.garageCenterR + inp.brickR + GYP + 2 * R_IN);
+    inp.party.garageCenterR * fx + inp.brickR + GYP + 2 * R_IN);
   link('shop', 'vest', 'walls', faceLen(SHOP, 'W') * p.north.wall - doorA('shop', 'vest'),
-    inp.party.shopVestR + inp.brickR + GYP + 2 * R_IN);
+    inp.party.shopVestR * fx + inp.brickR + GYP + 2 * R_IN);
   // Slab edge between shop and vestibule.
   links.push({ a: 'shop', b: 'vest', group: 'slab', A: 0, G: inp.slab.F * faceLen(SHOP, 'W') });
 
@@ -954,10 +963,11 @@ export function slimResult(r) {
 export function costs(res, inp) {
   const pl = inp.plant, rt = inp.rates;
   const coolCap = pl.coolTons * 12000, distKW = (pl.fanW + pl.pumpW) / 1000;
+  const keep = 1 - (pl.distLoss ?? 0);   // share of plant output that reaches the rooms
   const zone = (heat, cool) => {
-    const therms = heat / pl.boilerEff / 1e5;
-    const heatHours = heat / pl.ahuHeatBtuh, coolHours = cool / coolCap;
-    const compKWh = cool / (pl.coolCOP * 3412);
+    const therms = heat / keep / pl.boilerEff / 1e5;
+    const heatHours = heat / keep / pl.ahuHeatBtuh, coolHours = cool / keep / coolCap;
+    const compKWh = cool / keep / (pl.coolCOP * 3412);
     const distKWh = (heatHours + coolHours) * distKW;
     const heatDistKWh = heatHours * distKW, coolDistKWh = coolHours * distKW;
     return {
@@ -985,4 +995,41 @@ export function costs(res, inp) {
   t.total = t.heating + t.cooling;
   t.fixed = 12 * (rt.gasMonthly + rt.elecMonthly);
   return { zones, monthly, totals: t };
+}
+
+// ---------------------------------------------------------------- sensitivity
+
+// Unknowns worth bracketing. Each is set to a better and a worse case with
+// everything else held at the inputs; `sim` cases need a new year simulated,
+// the rest only change the cost arithmetic.
+const scaleGains = (i, k) => {
+  for (const z of ['shop', 'ground', 'upper']) { i[z].gainsOn *= k; i[z].gainsOff *= k; }
+};
+export const SENSITIVITY = [
+  { key: 'center', label: 'Center airtightness', fmt: v => `ACH50 ${v}`, better: i => i.center.achLow, worse: i => i.center.achHigh, set: (i, v) => { i.center.ach50 = v; }, sim: true },
+  { key: 'framing', label: 'Foam effectiveness in walls', fmt: v => `×${v}`, better: () => 1, worse: () => 0.4, set: (i, v) => { i.framing = v; }, sim: true },
+  { key: 'gas', label: 'Gas price over the winter', fmt: v => `$${v.toFixed(2)}/therm`, better: i => i.rates.gas, worse: i => Math.max(i.rates.gas, 0.80), set: (i, v) => { i.rates.gas = v; }, sim: false },
+  { key: 'dist', label: 'Duct and piping losses', fmt: v => `${Math.round(v * 100)}%`, better: () => 0, worse: () => 0.2, set: (i, v) => { i.plant.distLoss = v; }, sim: false },
+  { key: 'boiler', label: 'Boiler seasonal efficiency', fmt: v => `${Math.round(v * 100)}%`, better: () => 0.93, worse: () => 0.82, set: (i, v) => { i.plant.boilerEff = v; }, sim: false },
+  { key: 'windows', label: 'Window U-factor', fmt: v => `U-${v}`, better: () => 0.3, worse: () => 0.65, set: (i, v) => { i.glass.windowU = v; }, sim: true },
+  { key: 'gains', label: 'Lights, appliances, people', fmt: v => `${v}× inputs`, better: () => 1.5, worse: () => 0.5, set: (i, v) => scaleGains(i, v), sim: true },
+  { key: 'slab', label: 'Slab edge', fmt: v => `F-${v}`, better: () => 0.5, worse: () => 0.9, set: (i, v) => { i.slab.F = v; }, sim: true },
+  { key: 'shop', label: 'Shop airtightness', fmt: v => `ACH50 ${v}`, better: () => 1, worse: () => 3, set: (i, v) => { i.shop.ach50 = v; }, sim: true },
+];
+
+// Annual heating and cooling cost with one unknown moved to its better or
+// worse case. `base` is the runModel() result for the same inputs.
+export function sensitivityCase(c, which, base, p = DEFAULTS) {
+  const inp = base.inp, v = c[which](inp);
+  const i2 = JSON.parse(JSON.stringify(inp));
+  c.set(i2, v);
+  let total;
+  if (!c.sim) total = costs(base.main, i2).totals.total;
+  else if (c.key === 'center') total = base.range[which === 'better' ? 'low' : 'high'].cost.totals.total;
+  else {
+    const res = simulate(buildEnvelope(p, i2), base.wx, i2,
+      { capHeat: base.capHeat, capCool: base.capCool, sched: base.sched, windOn: !!i2.site.wind });
+    total = costs(res, i2).totals.total;
+  }
+  return { v, label: c.fmt(v), total };
 }
