@@ -33,13 +33,25 @@ Plan dimensions are scaled from Google Earth. The ruler reads 82.33 ft along the
   - slab-edge F-factor losses
   - heat flow between zones through the shared walls and the R-20 floor
   - heaters sized at 1.4× each zone's design load, so warm-ups take realistic time
+- **Openings (owner):**
+  - Shop: no windows and no doors on the windward side; it is super airtight (modeled at ACH50 1.5). It is heated to 70°F two 6-hour days a week.
+  - Ground level: no windows. A 36″ walkout to the courtyard, and 86″ walkthroughs into the shop and the south leg.
+- **Equipment (owner):**
+  - A Navien condensing combi-boiler heats, at an assumed 92% seasonal efficiency.
+  - An MBTEK Apollo 3.5-ton air-to-water heat pump cools at COP 4.6.
+  - Both run through an MBTEK AP-AHU-6T air handler drawing 460 W. It runs for heat delivered ÷ its output, and for cooling ÷ the Apollo's capacity.
+- **Rates (owner's Aug-2026 bills, rates only):**
+  - Gas: $0.576/therm all-in, on Black Hills Energy RGS GCA.
+  - Electric: $0.1017/kWh all-in, on Rocky Mountain Power Schedule 25.
+  - Monthly service charges ($34.65 gas, $37.46 electric) are reported separately.
+- **Center airtightness is unknown.** The model runs a best guess (ACH50 3.5) plus a tight (2) to leaky (6) range, and reports costs for all three.
 - **Assumptions to confirm** (tagged *assumed* in the page):
-  - airtightness
+  - center airtightness
   - slab-edge insulation
+  - boiler efficiency
+  - the AHU's heat output
   - window U-factor and SHGC
-  - the ground-level and shop openings
   - internal gains
-  - rates and equipment
 
 ```sh
 npm install

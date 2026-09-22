@@ -90,6 +90,10 @@
   .kpi-value { font: 600 28px/1.15 var(--body); letter-spacing: -0.01em; }
   .kpi-value small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 2px; }
   .kpi-sub { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .kpi.hero { grid-column: span 2; }
+  .kpi.hero .kpi-value { font-size: 52px; line-height: 1; letter-spacing: -0.02em; margin: 2px 0 4px; }
+  .kpi.hero .kpi-sub { font-size: 13px; max-width: 44ch; }
+  .fine { font-size: 12px; color: var(--muted); max-width: 84ch; margin: 0 0 16px; text-wrap: pretty; }
 
   /* Two-column layout */
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0 32px; align-items: start; }
@@ -191,6 +195,7 @@
     .layout { grid-template-columns: 1fr; }
     .inputs { position: static; max-height: none; border: 1px solid var(--rule); margin-top: 24px; order: 2; }
   }
+  @media (max-width: 420px) { .kpi.hero { grid-column: 1 / -1; } }
   @media (max-width: 640px) {
     .page { padding-inline: 16px; }
     h1 { font-size: 36px; }
@@ -219,6 +224,17 @@
 
   <div class="layout">
     <main class="results" id="results">
+      <section id="sec-cost">
+        <h2>What it costs</h2>
+        <p class="sub">Energy for heating and cooling in a typical Casper year at your Black Hills Energy and Rocky Mountain Power rates. Heating cost by zone above the line, the upper level's cooling below it. Dollars.</p>
+        <div class="legend" id="month-legend"></div>
+        <div class="chart" id="month-chart" role="img" aria-label="Monthly heating cost by zone and upper-level cooling cost"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="month-table"></div></details>
+        <div class="table-wrap"><table id="cost-table"></table></div>
+        <div class="callouts" id="cost-callouts"></div>
+        <p class="fine" id="rates-note"></p>
+      </section>
+
       <section id="sec-zones">
         <h2>Zones</h2>
         <p class="sub">What each space is held at, the heat it needs on a design day, and a year's heating and cooling.</p>
@@ -229,14 +245,6 @@
           </figure>
           <div class="table-wrap"><table id="zone-table"></table></div>
         </div>
-      </section>
-
-      <section id="sec-month">
-        <h2>Energy by month</h2>
-        <p class="sub">Heating delivered to each zone above the line; cooling removed from the upper level below it. MMBtu.</p>
-        <div class="legend" id="month-legend"></div>
-        <div class="chart" id="month-chart" role="img" aria-label="Monthly heating by zone and upper-level cooling"></div>
-        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="month-table"></div></details>
       </section>
 
       <section id="sec-balance">
@@ -285,7 +293,7 @@
 
 <script type="module">
 import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, getIn, setIn, sessionSummary } from './model/thermal.js';
-import { DEFAULTS, wallsOf, vestibuleDepth } from './model/params.js';
+import { DEFAULTS, wallsOf, vestibuleDepth, openings } from './model/params.js';
 
 const $ = s => document.querySelector(s);
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -297,7 +305,7 @@ const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HEATED = ['shop', 'ground', 'upper'];
 const ZCOLOR = { shop: 'var(--z-shop)', ground: 'var(--z-ground)', upper: 'var(--z-upper)', outdoor: 'var(--outdoor)' };
 const SHORT = { shop: 'Shop', ground: 'Ground level', upper: 'Upper level', vest: 'Vestibule', garage: 'South leg' };
-const STORE = 'zero-rd-thermal-inputs-v1';
+const STORE = 'zero-rd-thermal-inputs-v2';
 
 // ---------------------------------------------------------------- inputs state
 function merge(base, over) {
@@ -399,36 +407,26 @@ const Tdesign = () => F(R.design.heating.db996C);
 const Vdesign = () => R.design.heating.wsDb996Ms * 2.23694;
 
 // ---------------------------------------------------------------- KPIs
-function fuelLine(b) {
-  const f = inputs.plant.fuel;
-  if (f === 'gas') return `${nf(b.fuelQty)} therms of natural gas at ${nf(inputs.plant.heatEff * 100)}%`;
-  if (f === 'propane') return `${nf(b.fuelQty)} gallons of propane at ${nf(inputs.plant.heatEff * 100)}%`;
-  if (f === 'heatpump') return `${nf(b.fuelQty)} kWh by heat pump`;
-  return `${nf(b.fuelQty)} kWh of electric resistance`;
-}
 function renderKpis() {
-  const b = R.bill, hd = R.heatDesign;
-  const heatDes = hd.shop.load + hd.ground.load + hd.upper.load;
-  const calm = R.calm ? sum(R.calm.heatTot) : null;
-  const windPct = calm ? (b.heatMMBtu * 1e6 / calm - 1) * 100 : null;
+  const c = R.cost.totals, i = inputs;
+  const lo = R.range.low.cost.totals.total, hi = R.range.high.cost.totals.total;
+  const heat = sum(R.main.heatTot), calm = R.calm ? sum(R.calm.heatTot) : null;
+  const windPct = calm ? (heat / calm - 1) * 100 : null;
   const tiles = [
-    ['Heating per year', nf(b.heatMMBtu), 'MMBtu', fuelLine(b)],
-    ['Cooling per year', nf(b.coolKWh), 'kWh', `${nf(b.coolMMBtu)} MMBtu removed from the upper level, SEER2 ${nf(inputs.plant.seer2, 1)}`],
-    ['Energy cost per year', `$${nf(b.heatCost + b.coolCost)}`, '', `$${nf(b.heatCost)} heating + $${nf(b.coolCost)} cooling at the example rates in Inputs`],
-    ['Heating design load', nf(heatDes / 1000), 'kBtu/h', `${nf(Tdesign())}°F with ${nf(Vdesign(), 1)} mph wind. The worst windy hour needs ${nf(R.worst.total / 1000)}.`],
-    ['Cooling design load', nf(R.coolDesign.upper.load / 12000, 1), 'tons', `${nf(R.coolDesign.upper.load / 1000, 1)} kBtu/h for the upper level on a ${nf(F(R.design.cooling.db004C))}°F clear July day`],
-    ['Wind adds', windPct == null ? 'off' : `+${nf(windPct)}%`, '', windPct == null ? 'Wind is switched off in Inputs' : `to heating, against the same year with still air (${nf(b.heatMMBtu - calm / 1e6)} MMBtu)`],
+    ['hero', 'Heating & cooling, per year', `$${nf(c.total)}`, `$${nf(lo)} if the center is tight (ACH50 ${i.center.achLow}), $${nf(hi)} if leaky (ACH50 ${i.center.achHigh}). Service charges add $${nf(c.fixed)} a year either way.`],
+    ['', 'Gas for heat', `$${nf(c.gas)}`, `${nf(c.therms)} therms at $${i.rates.gas.toFixed(3)}, Navien at ${nf(i.plant.boilerEff * 100)}%`],
+    ['', 'Electric for cooling', `$${nf(c.cooling)}`, `${nf(c.compKWh)} kWh for the Apollo at COP ${i.plant.coolCOP}, plus the AHU and pumps`],
+    ['', 'AHU and pumps for heat', `$${nf(c.heatElec)}`, `${nf(c.heatHours)} hours at ${nf(i.plant.fanW + i.plant.pumpW)} W`],
+    ['', 'Wind adds', windPct == null ? 'off' : `+${nf(windPct)}%`, windPct == null ? 'Wind is switched off in Inputs' : `to heating, against the same year in still air`],
   ];
-  $('#kpis').replaceChildren(...tiles.map(([label, value, unit, subText]) => {
-    const d = document.createElement('div'); d.className = 'kpi';
+  $('#kpis').replaceChildren(...tiles.map(([cls, label, value, subText]) => {
+    const d = document.createElement('div'); d.className = 'kpi' + (cls ? ' ' + cls : '');
     const l = document.createElement('div'); l.className = 'kpi-label'; l.textContent = label;
     const v = document.createElement('div'); v.className = 'kpi-value'; v.textContent = value;
-    if (unit) { const u = document.createElement('small'); u.textContent = unit; v.append(' ', u); }
     const s = document.createElement('div'); s.className = 'kpi-sub'; s.textContent = subText;
     d.append(l, v, s); return d;
   }));
 }
-
 // ---------------------------------------------------------------- zones
 function sessionText(z) {
   const blocks = sessionSummary(inputs, z);
@@ -475,6 +473,22 @@ function renderZoneTable() {
   }
 }
 
+// Doorways the owner described: gaps in the walls with their width.
+function doorMarks(P, C, L) {
+  let out = '';
+  for (const o of openings(P)) {
+    let xa, xb, za, zb, lx, lz, lab;
+    if (o.panel === 'center.N' && o.to) { const cx = C.x1 - o.x; xa = cx - o.w / 2; xb = cx + o.w / 2; za = zb = C.z0; lx = cx; lz = C.z0 + 6.5; }
+    else if (o.panel === 'center.S' && o.to) { const cx = C.x0 + o.x; xa = cx - o.w / 2; xb = cx + o.w / 2; za = zb = C.z1; lx = cx; lz = C.z1 - 3; }
+    else if (o.panel === 'loggia.W') { const cz = L.z0 + o.x; xa = xb = L.x1; za = cz - o.w / 2; zb = cz + o.w / 2; lx = L.x1 + 2; lz = cz + 1.6; }
+    else continue;
+    lab = `${Math.round(o.w * 12)}″`;
+    out += `<line x1="${xa}" y1="${za}" x2="${xb}" y2="${zb}" stroke="var(--sheet)" stroke-width="3"/>`;
+    out += `<text x="${lx}" y="${lz}" text-anchor="${o.panel === 'loggia.W' ? 'start' : 'middle'}" class="ps">${lab}</text>`;
+  }
+  return out;
+}
+
 function renderPlan() {
   const P = DEFAULTS, C = wallsOf(P.center.roof, P.overhang), N = wallsOf(P.north.roof, P.overhang);
   const S = wallsOf(P.south.roof, P.overhang), vd = vestibuleDepth(P);
@@ -499,9 +513,9 @@ function renderPlan() {
     ${line(SHOP.x0, N.z0, SHOP.x0, N.z1)}
     ${txt(cx(SHOP), cz(SHOP) - 3, 'SHOP', 'pl')}
     ${txt(cx(SHOP), cz(SHOP) + 4, `${i.shop.minF}° · ${i.shop.occF}° in use`, 'ps')}
-    ${txt(C.x1 - 26, -6, 'CENTER', 'pl')}
-    ${txt(C.x1 - 26, 1, `ground ${i.ground.minF}° · ${i.ground.occF}°`, 'ps')}
-    ${txt(C.x1 - 26, 7, `upper ${i.upper.heatF}°`, 'ps')}
+    ${txt(C.x1 - 22, 12, 'CENTER', 'pl')}
+    ${txt(C.x1 - 22, 19, `ground ${i.ground.minF}° · ${i.ground.occF}°`, 'ps')}
+    ${txt(C.x1 - 22, 25, `upper ${i.upper.heatF}°`, 'ps')}
     ${txt(cx(L) + 1.6, cz(L), 'LOGGIA · OPEN', 'ps', -90)}
     ${txt(cx(S), cz(S) + 6, 'SOUTH LEG', 'pl')}
     ${txt(cx(S), cz(S) + 13, 'unheated', 'ps')}
@@ -509,6 +523,7 @@ function renderPlan() {
     ${txt((C.x0 + N.x1) / 2, C.z0 - 3, `R-${i.party.shopCenterR}`, 'pr')}
     ${txt((C.x0 + S.x1) / 2, C.z1 + 6.5, `R-${i.party.garageCenterR}`, 'pr')}
     ${txt(SHOP.x0 + 3, N.z0 + 8, `R-${i.party.shopVestR}`, 'pr', 0, 'start')}
+    ${doorMarks(P, C, L)}
     <g transform="translate(${x1 - 9} ${z0 + 10})"><path d="M0 -6 L3 3 L0 1.2 L-3 3 Z" fill="currentColor"/><text y="9" text-anchor="middle" class="pl" style="font-size:4.6px">N</text></g>
     <g transform="translate(${x0 + 4} ${z1 - 4})"><line x1="0" x2="20" y1="0" y2="0" stroke="currentColor" stroke-width="0.6"/><line x1="0" x2="0" y1="-1.5" y2="1.5" stroke="currentColor" stroke-width="0.6"/><line x1="20" x2="20" y1="-1.5" y2="1.5" stroke="currentColor" stroke-width="0.6"/><text x="10" y="-2.5" text-anchor="middle" class="ps">20 ft</text></g>`;
 }
@@ -516,30 +531,31 @@ function renderPlan() {
 // ---------------------------------------------------------------- monthly chart
 function renderMonthly() {
   const el = $('#month-chart'), W = Math.max(300, el.clientWidth), H = 280;
-  const m = { l: 38, r: 6, t: 10, b: 24 };
-  const M = R.main, heat = HEATED.map(z => Array.from(M.heat[ZONES.indexOf(z)], v => v / 1e6));
-  const cool = Array.from(M.cool[ZONES.indexOf('upper')], v => v / 1e6);
+  const m = { l: 44, r: 6, t: 10, b: 24 };
+  const CM = R.cost.monthly;
+  const heat = HEATED.map(z => CM[z].map(x => x.gas + x.heatElec));
+  const cool = CM.upper.map(x => x.coolElec);
   const up = Math.max(...MON.map((_, k) => heat[0][k] + heat[1][k] + heat[2][k]), 1);
-  const down = Math.max(...cool, 0.5);
+  const down = Math.max(...cool, 1);
   const ticks = niceTicks(-down, up, 6);
   const lo = ticks[0], hi = ticks.at(-1);
   const y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
   const band = (W - m.l - m.r) / 12, bw = Math.min(24, band * 0.62);
   let g = '';
-  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 0 ? '--muted' : '--grid'})" stroke-width="1"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${nf(Math.abs(t))}</text>`;
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 0 ? '--muted' : '--grid'})" stroke-width="1"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">$${nf(Math.abs(t))}</text>`;
   for (let k = 0; k < 12; k++) {
     const x = m.l + band * k + (band - bw) / 2;
     let base = 0;
     const top = heat[0][k] + heat[1][k] + heat[2][k];
     heat.forEach((series, s) => {
       const v = series[k];
-      if (v <= 0.005) return;
+      if (v <= 0.05) return;
       const isTop = Math.abs(base + v - top) < 1e-9;
       const yb = y(base) - (base > 0 ? 2 : 0), yt = y(base + v);
       if (yb - yt > 0.5) g += `<path d="${isTop ? barPath(x, yb, yt, bw, true) : `M${x},${yb}V${yt}H${x + bw}V${yb}Z`}" fill="${ZCOLOR[HEATED[s]]}"/>`;
       base += v;
     });
-    if (cool[k] > 0.005) g += `<path d="${barPath(x, y(0) + 2, y(-cool[k]), bw, false)}" fill="${ZCOLOR.upper}" fill-opacity="0.45"/>`;
+    if (cool[k] > 0.05) g += `<path d="${barPath(x, y(0) + 2, y(-cool[k]), bw, false)}" fill="${ZCOLOR.upper}" fill-opacity="0.45"/>`;
     g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${MON[k][0]}</text>`;
     g += `<rect class="hit" data-k="${k}" x="${m.l + band * k}" y="${m.t}" width="${band}" height="${H - m.t - m.b}" fill="transparent"/>`;
   }
@@ -548,29 +564,84 @@ function renderMonthly() {
   el.querySelectorAll('.hit').forEach(h => {
     const k = +h.dataset.k;
     const rows = () => [
-      ...HEATED.map((z, s) => ({ color: ZCOLOR[z], value: `${nf(heat[s][k], 1)}`, label: `${SHORT[z]} heating` })),
-      { color: ZCOLOR.upper, value: `${nf(cool[k], 1)}`, label: 'Upper level cooling' },
+      ...HEATED.map((z, s) => ({ color: ZCOLOR[z], value: `$${nf(heat[s][k])}`, label: `${SHORT[z]} heating` })),
+      { color: ZCOLOR.upper, value: `$${nf(cool[k])}`, label: 'Upper level cooling' },
     ];
-    h.addEventListener('pointermove', e => showTip(e, `${MON[k]} · MMBtu`, rows()));
+    h.addEventListener('pointermove', e => showTip(e, MON[k], rows()));
     h.addEventListener('pointerleave', hideTip);
   });
   legend($('#month-legend'), [
     ...HEATED.map(z => ({ color: ZCOLOR[z], label: `${SHORT[z]} heating` })),
     { color: 'color-mix(in srgb, var(--z-upper) 45%, var(--sheet))', label: 'Upper level cooling' },
   ]);
-  // Table view.
+  // Table view: dollars, plus the energy behind them.
   const tbl = document.createElement('table');
-  tbl.innerHTML = `<thead><tr><th>Month</th>${HEATED.map(z => `<th class="num">${SHORT[z]} heat</th>`).join('')}<th class="num">Upper cool</th></tr></thead>`;
+  tbl.innerHTML = `<thead><tr><th>Month</th>${HEATED.map(z => `<th class="num">${SHORT[z]} heat $</th>`).join('')}<th class="num">Upper cool $</th><th class="num">Total $</th><th class="num">Therms</th><th class="num">kWh</th></tr></thead>`;
   const tb = tbl.createTBody();
+  const row = (label, vals, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls; tr.insertCell().textContent = label;
+    vals.forEach(([v, d]) => { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v, d); });
+  };
   MON.forEach((mo, k) => {
-    const tr = tb.insertRow(); tr.insertCell().textContent = mo;
-    for (const v of [...heat.map(s => s[k]), cool[k]]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v, 1); }
+    const therms = ZONES.reduce((s, z) => s + CM[z][k].therms, 0), kwh = ZONES.reduce((s, z) => s + CM[z][k].compKWh + CM[z][k].distKWh, 0);
+    const tot = heat[0][k] + heat[1][k] + heat[2][k] + cool[k];
+    row(mo, [...heat.map(sr => [sr[k], 0]), [cool[k], 0], [tot, 0], [therms, 0], [kwh, 0]]);
   });
-  const tr = tb.insertRow(); tr.className = 'total'; tr.insertCell().textContent = 'Year';
-  for (const v of [...heat.map(s => sum(s)), sum(cool)]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v, 1); }
+  const c = R.cost.totals;
+  row('Year', [...heat.map(sr => [sum(sr), 0]), [sum(cool), 0], [c.total, 0], [c.therms, 0], [c.kWh, 0]], 'total');
   $('#month-table').replaceChildren(tbl);
 }
 
+function renderCosts() {
+  const i = inputs, Z = R.cost.zones, c = R.cost.totals, distKW = (i.plant.fanW + i.plant.pumpW) / 1000;
+  const t = $('#cost-table');
+  t.innerHTML = `<thead><tr><th>For</th><th class="num">Energy<br>MMBtu</th><th class="num">Gas<br>therms</th><th class="num">Electric<br>kWh</th><th class="num">Cost<br>$/yr</th></tr></thead>`;
+  const tb = t.createTBody();
+  const row = (label, color, vals, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls;
+    const c0 = tr.insertCell(); const nm = document.createElement('span'); nm.className = 'zname';
+    if (color) { const sw = document.createElement('i'); sw.className = 'swatch'; sw.style.background = color; nm.append(sw); }
+    nm.append(document.createTextNode(label)); c0.append(nm);
+    vals.forEach(v => { const cc = tr.insertCell(); cc.className = 'num'; cc.textContent = v; });
+  };
+  for (const z of HEATED) {
+    const q = Z[z], kwh = q.heatHours * distKW;
+    row(`${SHORT[z]}, heating`, ZCOLOR[z], [nf(q.heat / 1e6, 1), nf(q.therms), nf(kwh), `$${nf(q.gas + q.heatElec)}`]);
+  }
+  const u = Z.upper;
+  row('Upper level, cooling', 'color-mix(in srgb, var(--z-upper) 45%, var(--sheet))', [nf(u.cool / 1e6, 1), '—', nf(u.compKWh + u.coolHours * distKW), `$${nf(u.coolElec)}`]);
+  row('All heating and cooling', null, [nf((c.heat + c.cool) / 1e6, 1), nf(c.therms), nf(c.kWh), `$${nf(c.total)}`], 'total');
+  const sep = tb.insertRow(); sep.className = 'sep'; const sc = sep.insertCell(); sc.colSpan = 5; sc.textContent = 'If the center is';
+  for (const [k, label] of [['low', 'tight'], ['high', 'leaky']]) {
+    const r = R.range[k].cost.totals;
+    row(`${label}, ACH50 ${R.range[k].ach50}`, null, [nf((r.heat + r.cool) / 1e6, 1), nf(r.therms), nf(r.kWh), `$${nf(r.total)}`]);
+  }
+
+  // What moves the bill.
+  const gasPerMMBtu = i.rates.gas / i.plant.boilerEff * 10;
+  const elecPerMMBtu = i.rates.elec / 3412 * 1e6;
+  const fanAll = i.plant.fanW / 1000 * R.main.hours * i.rates.elec;
+  const fanAuto = (c.heatHours + c.coolHours) * i.plant.fanW / 1000 * i.rates.elec;
+  const rec = R.main.recovery[ZONES.indexOf('shop')] || [];
+  const recAvg = rec.length ? rec.reduce((s, x) => s + x.h, 0) / rec.length : 0;
+  const recMiss = rec.filter(x => !x.met).length;
+  const mild = R.main.coolMild[ZONES.indexOf('upper')] / Math.max(1, R.main.coolTot[ZONES.indexOf('upper')]) * 100;
+  const items = [
+    [`$${gasPerMMBtu.toFixed(2)} per MMBtu`, `of heat from gas. The Apollo would need a heating COP above ${(elecPerMMBtu / gasPerMMBtu).toFixed(1)} to match it, so gas stays the cheaper heat at these rates.`],
+    [`$${elecPerMMBtu.toFixed(2)} per MMBtu`, `from the AHU's 10 kW resistance strips, ${(elecPerMMBtu / gasPerMMBtu).toFixed(1)}× the cost of gas heat. Keep them locked out.`],
+    [`+$${nf(fanAll - fanAuto)} a year`, `if the AHU fan runs around the clock instead of only when heating or cooling.`],
+    [`${nf(recAvg, 1)} h`, `for the shop to climb from ${i.shop.minF}°F to ${i.shop.occF}°F on average while the slab soaks up heat${recMiss ? `; ${recMiss} winter sessions never get there` : ''}. Start its heat about that much early.`],
+    [`${nf(mild)}% of cooling`, `happens while it is below ${i.upper.coolF - 3}°F outside. Opening windows then, or cooling to 72°F instead of ${i.upper.coolF}°F, trims the cooling bill.`],
+  ];
+  $('#cost-callouts').replaceChildren(...items.map(([big, small]) => {
+    const d = document.createElement('div'); d.className = 'callout';
+    const bb = document.createElement('b'); bb.textContent = big;
+    const sp = document.createElement('span'); sp.textContent = small;
+    d.append(bb, sp); return d;
+  }));
+  $('#rates-note').textContent =
+    `Rates are from your August 2026 bills, taxes included. Gas is $${i.rates.gas.toFixed(3)}/therm on Black Hills Energy RGS GCA: $0.2008 volumetric, $0.3398 commodity, riders −$0.0115, +$0.0203 and −$0.0007, and 5% sales tax. The commodity charge passes through gas costs and changes during the year. Electricity is $${i.rates.elec.toFixed(4)}/kWh on Rocky Mountain Power Schedule 25: $0.06467 energy, $0.02997 net power cost, −$0.00052 renewable adjustment, 2.84% efficiency and 0.05% carbon charges, and 5% sales tax. The bill shows no demand charge, so none is included. Monthly service charges of $${i.rates.gasMonthly.toFixed(2)} for gas and $${i.rates.elecMonthly.toFixed(2)} for electric are paid regardless and are not in the totals above.`;
+}
 // ---------------------------------------------------------------- balance table
 function renderBalance() {
   const M = R.main, idx = z => ZONES.indexOf(z);
@@ -665,12 +736,12 @@ function renderWind() {
   legend($('#wind-legend'), [{ color: 'var(--ink)', label: 'All three heated zones', line: true }, ...HEATED.map(z => ({ color: ZCOLOR[z], label: SHORT[z], line: true }))]);
 
   // Callouts.
-  const b = R.bill, calm = R.calm ? sum(R.calm.heatTot) / 1e6 : null, w = R.worst;
+  const heatMM = sum(R.main.heatTot) / 1e6, calm = R.calm ? sum(R.calm.heatTot) / 1e6 : null, w = R.worst;
   const dayOf = i => { const d = new Date(Date.UTC(2021, 0, 1) + Math.floor(i / 24) * 864e5); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${String(i % 24).padStart(2, '0')}:00`; };
   const items = [
     [`${nf(R.heatDesign.shop.load / 1000 + R.heatDesign.ground.load / 1000 + R.heatDesign.upper.load / 1000)} kBtu/h`, `ASHRAE 99.6% design: ${nf(Tdesign())}°F with its coincident ${nf(Vdesign(), 1)} mph wind`],
     [`${nf(w.total / 1000)} kBtu/h`, `worst hour in the TMY3 year: ${nf(w.T)}°F with ${nf(w.V)} mph wind (${dayOf(w.i)}). Size for the wind, not the cold alone.`],
-    calm != null ? [`+${nf(b.heatMMBtu - calm, 1)} MMBtu`, `a year of wind adds ${nf((b.heatMMBtu / calm - 1) * 100)}% to heating versus the same year in still air`] : ['off', 'turn wind on in Inputs to see its share'],
+    calm != null ? [`+$${nf((heatMM - calm) * 1e6 / inputs.plant.boilerEff / 1e5 * inputs.rates.gas)} a year`, `of gas goes to wind: it adds ${nf((heatMM / calm - 1) * 100)}% (${nf(heatMM - calm, 1)} MMBtu) to heating versus the same year in still air`] : ['off', 'turn wind on in Inputs to see its share'],
   ];
   $('#wind-callouts').replaceChildren(...items.map(([big, small]) => {
     const d = document.createElement('div'); d.className = 'callout';
@@ -775,12 +846,13 @@ function renderMethod() {
     ['Weather', `${R.station}, ${R.dataset}: 8,760 hours of temperature, sun and wind. Design points from the ASHRAE 2009 Handbook entries in the same file.`],
     ['Zones', `Floor areas from the massing model: shop ${nf(z.shop.A)} ft², ground level ${nf(z.ground.A)} ft² (the ${nf(R.env.loggiaArea)} ft² loggia is outdoors), upper level ${nf(z.upper.A)} ft², vestibule ${nf(z.vest.A)} ft², south leg ${nf(z.garage.A)} ft². Each zone has an air node and a mass node (4″ of slab, or finishes upstairs), stepped every 15 minutes.`],
     ['Walls and roofs', `Your R-values plus 12″ brick (R-${i.brickR}), drywall and air films. The outside film thickens or thins with the wind, and the windward faces see more of it. Sun heats opaque walls through sol-air temperatures and heats vented attics before it reaches the R-${i.shop.ceilingR} and R-${i.upper.roofR} ceilings.`],
-    ['Air leakage', `The LBL stack-and-wind model (ASHRAE Fundamentals) on hourly airport wind, shelter class ${i.site.shelter}. The blower-door tightness is an assumption, set fairly tight because every wall has foam: ACH50 ${i.shop.ach50} shop, ${i.ground.ach50} ground level, ${i.upper.ach50} upper level. That works out to an average of ${nf(ach(0), 2)}, ${nf(ach(2), 2)} and ${nf(ach(3), 2)} air changes per hour in shop, ground and upper.`],
-    ['Glass', `The 16 upper windows at 41″ × 67″ and the 72″ slider use U-${i.glass.windowU}, SHGC ${i.glass.windowSHGC}, with overhang shading and ${nf(i.glass.blinds * 100)}% of the sun passing blinds. The ground-level and shop windows come from the listing photos and are placeholders.`],
+    ['Air leakage', `The LBL stack-and-wind model (ASHRAE Fundamentals) on hourly airport wind, shelter class ${i.site.shelter}. Tightness is a blower-door ACH50: ${i.shop.ach50} for the super-airtight shop (no windows, no windward doors), and a best guess of ${i.center.ach50} for the center with ${i.center.achLow}–${i.center.achHigh} run as the range. That works out to an average of ${nf(ach(0), 2)}, ${nf(ach(2), 2)} and ${nf(ach(3), 2)} air changes per hour in the shop, ground level and upper level.`],
+    ['Openings', `The upper level's sixteen 41″ × 67″ windows and 72″ slider use U-${i.glass.windowU} and SHGC ${i.glass.windowSHGC}, with overhang shading and ${nf(i.glass.blinds * 100)}% of the sun getting past blinds. The shop and ground level have no windows. The 86″ walkthroughs to the shop and south leg count as insulated doors in the shared walls.`],
     ['Slabs', `Uninsulated slab edge, F-${i.slab.F} Btu/h·ft·°F against the day's mean outdoor air. Slab edge is the ground level's largest single loss, so its real insulation matters.`],
-    ['Schedules', `The in-use temperatures apply only on heating-degree days (daily mean below 65°F), as you described. Heaters are sized at ${nf(i.plant.oversize, 2)}× their zone's design load, so warm-ups take time while the slab soaks up heat. The upper level's 40 empty days are spread evenly through the year.`],
+    ['Schedules', `In-use temperatures apply only on heating-degree days (daily mean below 65°F), as you described: shop ${sessionText('shop')}, ground level ${sessionText('ground')}. Each zone can draw up to the AHU's ${nf(i.plant.ahuHeatBtuh)} Btu/h, so warm-ups take time while the slab soaks up heat. The upper level's ${i.upper.unoccDays} empty days are spread evenly through the year.`],
+    ['Equipment', `The Navien condensing combi-boiler heats at an assumed ${nf(i.plant.boilerEff * 100)}% seasonal efficiency. The AHU's large coil should allow low water temperatures, which keeps the boiler condensing. The ${i.plant.coolTons}-ton Apollo cools at COP ${i.plant.coolCOP}, covering the ${nf(R.coolDesign.upper.load / 12000, 1)}-ton design load. The AHU draws ${i.plant.fanW} W and the pumps an assumed ${i.plant.pumpW} W. They run for heat delivered ÷ ${nf(i.plant.ahuHeatBtuh)} Btu/h and for cooling ÷ the Apollo's capacity. Domestic hot water from the combi is not counted.`],
     ['Cooling', `With heat and cool both at ${i.upper.heatF}°F there is no deadband, so the upper level often heats at night and cools the next afternoon. ${nf(mild)}% of its cooling happens while it is below ${i.upper.coolF - 3}°F outside, which open windows or an economizer could cover.`],
-    ['Check first', 'Airtightness, slab-edge insulation, and the ground-level and shop windows move the answer most. Change them under Inputs and the page reruns.'],
+    ['Check first', 'The center\'s airtightness moves the cost most (a blower-door test runs a few hundred dollars), then slab-edge insulation, the boiler\'s real efficiency and the AHU\'s heat output. Change them under Inputs and the page reruns.'],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => {
     const li = document.createElement('li');
@@ -791,17 +863,22 @@ function renderMethod() {
 
 // ---------------------------------------------------------------- inputs form
 const SHELTER = ['1 · open, no obstructions', '2 · a few trees or sheds', '3 · some shelter nearby', '4 · suburban, heavy', '5 · downtown'];
-const FUELS = [['gas', 'Natural gas'], ['propane', 'Propane'], ['electric', 'Electric resistance'], ['heatpump', 'Heat pump']];
+const GROUP_NOTES = {
+  'Shop (north leg)': 'No windows. One door on the lee side and an 86″ walkthrough to the ground level.',
+  'Center, ground level': 'No windows. A 36″ walkout to the courtyard, and 86″ walkthroughs to the shop and the south leg.',
+  'Center, upper level': 'Sixteen 41″ × 67″ windows, a 36″ door and a 72″ door, from you, placed in the 3D model.',
+};
 function buildForm() {
   const form = $('#form');
   form.replaceChildren();
   SCHEMA.forEach((grp, gidx) => {
     const det = document.createElement('details');
-    if (gidx < 4) det.open = true;
+    if (gidx < 3) det.open = true;
     const sum = document.createElement('summary'); sum.textContent = grp.group; det.append(sum);
-    if (grp.group === 'Center, upper level') {
+    const noteText = grp.note || GROUP_NOTES[grp.group];
+    if (noteText) {
       const n = document.createElement('p'); n.className = 'groupnote';
-      n.textContent = 'Sixteen 41″ × 67″ windows, a 36″ door and a 72″ door, from you, placed in the 3D model.';
+      n.textContent = noteText;
       det.append(n);
     }
     for (const [path, label, unit, src, min, max, step] of grp.items) {
@@ -814,9 +891,9 @@ function buildForm() {
       if (unit && unit !== 'on/off') meta.append(document.createTextNode(unit));
       let ctl;
       const val = getIn(inputs, path);
-      if (path === 'plant.fuel' || path === 'site.shelter') {
+      if (path === 'site.shelter') {
         ctl = document.createElement('select');
-        const opts = path === 'plant.fuel' ? FUELS : SHELTER.map((t, k) => [k + 1, t]);
+        const opts = SHELTER.map((t, k) => [k + 1, t]);
         for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; ctl.append(o); }
         ctl.value = String(val);
       } else if (path === 'site.wind') {
@@ -838,7 +915,6 @@ function buildForm() {
 function onInput(path, ctl) {
   let v;
   if (ctl.type === 'checkbox') v = ctl.checked;
-  else if (path === 'plant.fuel') v = ctl.value;
   else {
     v = Number(ctl.value);
     if (!Number.isFinite(v)) return;
@@ -860,7 +936,7 @@ $('#reset').addEventListener('click', () => {
 // ---------------------------------------------------------------- render
 function renderAll() {
   if (!R) return;
-  renderKpis(); renderZoneTable(); renderPlan(); renderMonthly(); renderBalance(); renderWind();
+  renderKpis(); renderMonthly(); renderCosts(); renderZoneTable(); renderPlan(); renderBalance(); renderWind();
   fillWeeks(); renderWeek(); renderMethod();
 }
 let rz = 0;

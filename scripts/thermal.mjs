@@ -1,13 +1,13 @@
 // Runs the heating and cooling model and prints a report.
 // Usage: npm run thermal [-- --json]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { runModel, energyBill, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary } from '../model/thermal.js';
+import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary } from '../model/thermal.js';
 
 const wx = JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.meta.url), 'utf8'));
 const t0 = performance.now();
 const r = runModel(wx, INPUTS);
 const ms = performance.now() - t0;
-const bill = energyBill(r);
+const cost = r.cost.totals;
 const k = n => (n / 1000).toFixed(1);
 const mm = n => (n / 1e6).toFixed(1);
 const pad = (s, n) => String(s).padEnd(n);
@@ -47,10 +47,12 @@ for (const [kk, z] of ZONES.entries()) {
   const recStr = rec.length ? ` recovery avg ${(rec.reduce((s, x) => s + x.h, 0) / rec.length).toFixed(1)} h max ${Math.max(...rec.map(x => x.h)).toFixed(1)} h (${rec.filter(x => !x.met).length} unmet of ${rec.length})` : '';
   console.log(`  ${pad(ZONE_NAMES[z], 22)} heat ${lpad(mm(M.heatTot[kk]), 6)} MMBtu  cool ${lpad(mm(M.coolTot[kk]), 5)}  T ${M.Tmin[kk].toFixed(1)}–${M.Tmax[kk].toFixed(1)}°F  peakH ${k(M.peakHeat[kk])}  leak ${ach.toFixed(2)} ACH  unmet ${M.unmet[kk]} h${recStr}`);
 }
-console.log(`  total heat ${bill.heatMMBtu.toFixed(1)} MMBtu → ${bill.fuelQty.toFixed(0)} ${bill.fuelUnit} $${bill.heatCost.toFixed(0)}; cool ${bill.coolMMBtu.toFixed(1)} MMBtu → ${bill.coolKWh.toFixed(0)} kWh $${bill.coolCost.toFixed(0)}`);
+console.log(`  total heat ${mm(cost.heat)} MMBtu → ${cost.therms.toFixed(0)} therms; cool ${mm(cost.cool)} MMBtu → ${cost.compKWh.toFixed(0)} kWh compressor; AHU + pumps ${cost.distKWh.toFixed(0)} kWh (${cost.heatHours.toFixed(0)} h heating, ${cost.coolHours.toFixed(0)} h cooling)`);
+console.log(`  COST: heating $${cost.heating.toFixed(0)} (gas $${cost.gas.toFixed(0)} + fan/pumps $${cost.heatElec.toFixed(0)}), cooling $${cost.cooling.toFixed(0)}, total $${cost.total.toFixed(0)}/yr; fixed service charges $${cost.fixed.toFixed(0)}/yr`);
+for (const [k, v] of Object.entries(r.range)) console.log(`  center ACH50 ${v.ach50}: heat ${mm(v.cost.totals.heat)} MMBtu, cool ${mm(v.cost.totals.cool)}, total $${v.cost.totals.total.toFixed(0)}/yr (${k})`);
 if (r.calm) {
   const calmHeat = ZONES.reduce((s, z, kk) => s + r.calm.heatTot[kk], 0);
-  console.log(`  without wind: heat ${(calmHeat / 1e6).toFixed(1)} MMBtu → wind adds ${((bill.heatMMBtu * 1e6 - calmHeat) / 1e6).toFixed(1)} MMBtu (${((bill.heatMMBtu * 1e6 / calmHeat - 1) * 100).toFixed(0)}%)`);
+  console.log(`  without wind: heat ${(calmHeat / 1e6).toFixed(1)} MMBtu → wind adds ${((cost.heat - calmHeat) / 1e6).toFixed(1)} MMBtu (${((cost.heat / calmHeat - 1) * 100).toFixed(0)}%)`);
 }
 console.log('\nAnnual net heat flow out of each zone, MMBtu');
 console.log('  ' + pad('', 22) + GROUPS.map(([g]) => lpad(g, 8)).join('') + lpad('solar', 8) + lpad('intern', 8) + lpad('heat', 8) + lpad('cool', 8) + lpad('resid', 8));

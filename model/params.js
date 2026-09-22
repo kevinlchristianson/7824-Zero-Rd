@@ -73,8 +73,9 @@ export function centerPlate(p = DEFAULTS) {
 //   face   compass direction it faces
 //   kind   window | glassDoor | door | garageDoor | arch | open
 //   to     the space on the other side when that is another zone
-// Only the upper-level set is from the owner. The rest are read off the
-// listing photos and are placeholders until confirmed.
+// Upper level, ground level and shop openings are as the owner described;
+// exact positions and the vestibule and south-leg openings are read off the
+// listing photos.
 
 const rect = (x, sill, w, h) => ({ type: 'rect', x, w, sill, top: sill + h });
 const archAt = (x, w, top) => ({ type: 'arch', x, w, sill: 0, top });
@@ -100,43 +101,32 @@ export function openings(p = DEFAULTS) {
     add('center.W', 'loggia', 'W', 'open', archAt(x, 7, c.ground - 1));
     upWin('center.W', 'W', x);
   }
-  // Loggia back wall: the ground level's courtyard face, under the upper floor.
-  const m = (zB - zA) / 2;
-  add('loggia.W', 'ground', 'W', 'window', rect(m - 20, 3, 4, 5));
-  add('loggia.W', 'ground', 'W', 'door', rect(m - 8, 0, 3, 7));
-  add('loggia.W', 'ground', 'W', 'door', rect(m + 8, 0, 3, 7));
-  add('loggia.W', 'ground', 'W', 'window', rect(m + 20, 3, 4, 5));
+  // Ground level (owner): no windows; a 36" walkout to the courtyard through
+  // the loggia, and 86" walkthroughs into the shop and the south leg.
+  const m = (zB - zA) / 2, d86 = { w: 86 / 12, h: 80 / 12 };
+  add('loggia.W', 'ground', 'W', 'door', rect(m, 0, d36.w, d36.h));
+  add('center.N', 'ground', 'N', 'door', rect(cw.x1 - (cw.x0 + nw.x1) / 2, 0, d86.w, d86.h), { to: 'shop' });
+  add('center.S', 'ground', 'S', 'door', rect((sw.x1 - cw.x0) / 2, 0, d86.w, d86.h), { to: 'garage' });
 
-  // Center, east face. Upper door opens onto the exterior stair landing.
-  for (const x of [6, 17, 28, 46, 57, 68]) add('center.E', 'ground', 'E', 'window', rect(x, 3, 3, 5));
-  add('center.E', 'ground', 'E', 'door', rect(37, 0, 3, 7));
+  // Center, east face: upper windows; upper door opens onto the exterior stair.
   for (const x of [6, 17, 28, 39, 50, 61]) upWin('center.E', 'E', x);
   add('center.E', 'upper', 'E', 'door', rect(cD - 2 * t - 3.5, floor2, d36.w, d36.h));
 
   // Center, north face (exposed east of the north leg). The 72" door is a
   // glazed slider onto a small balcony.
-  for (const x of [6, 22]) add('center.N', 'ground', 'N', 'window', rect(x, 3, 3, 5));
   for (const x of [6, 22]) upWin('center.N', 'N', x);
   add('center.N', 'upper', 'N', 'glassDoor', rect(14, floor2, d72.w, d72.h));
 
   // Center, south face (exposed east of the south leg).
-  add('center.S', 'ground', 'S', 'window', rect(cW - 22, 3, 3, 5));
-  add('center.S', 'ground', 'S', 'door', rect(cW - 10, 0, 3, 7));
   for (const x of [cW - 22, cW - 10]) upWin('center.S', 'S', x);
 
   // North leg: four glazed arches across the vestibule front.
   const nD = nw.z1 - nw.z0 - 2 * t, vest = vestibuleDepth(p);
   for (let i = 0; i < 4; i++) add('north.W', 'vest', 'W', 'arch', archAt(nD / 4 * (i + 0.5), 8, 10.5));
-  // Shop's west wall = back of the vestibule: two pairs of doors.
-  add('north.inner', 'shop', 'W', 'door', rect(nD / 2 - 12, 0, 6, 8), { to: 'vest' });
-  add('north.inner', 'shop', 'W', 'door', rect(nD / 2 + 12, 0, 6, 8), { to: 'vest' });
   add('north.S', 'vest', 'S', 'window', rect(vest / 2, 4, 2.5, 5));
-  add('north.S', 'shop', 'S', 'window', rect(18, 4, 4, 5));
-  add('north.S', 'shop', 'S', 'window', rect(32, 4, 4, 5));
-  add('north.S', 'shop', 'S', 'door', rect(46, 0, 3, 7));
-  for (const x of [20, 40, 60]) add('north.N', 'shop', 'N', 'window', rect(x, 8, 4, 3));
+  // Shop (owner): super airtight, no windows, no doors on the prevailing
+  // (west/south-west) wind side. One door on the lee side, placement assumed.
   add('north.E', 'shop', 'E', 'door', rect(12, 0, 3, 7));
-  add('north.E', 'shop', 'E', 'window', rect(30, 4, 4, 5));
 
   // South leg (garage): overhead doors onto the drive.
   add('south.S', 'garage', 'S', 'garageDoor', rect(15, 0, 10, 9));

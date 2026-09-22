@@ -32,16 +32,19 @@ export const GROUPS = [
 export const INPUTS = {
   shop: {
     wallR: 15, ceilingR: 40, minF: 45, occF: 70, hoursPerWeek: 12,
-    sessionHours: 12, startHour: 7, ach50: 4, gainsOn: 0.5, gainsOff: 0,
+    sessionHours: 6, startHour: 8, ach50: 1.5, gainsOn: 0.5, gainsOff: 0,
   },
   vest: { wallR: 6.5, ceilingR: 40, ach50: 6 },
+  // Center block airtightness is unknown: a best guess for both levels,
+  // plus the tight and leaky ends of a plausible range.
+  center: { ach50: 3.5, achLow: 2, achHigh: 6 },
   ground: {
     wallR: 30, ceilingR: 20, minF: 60, occF: 70, hoursPerWeek: 28,
-    sessionHours: 7, startHour: 9, ach50: 3, gainsOn: 0.5, gainsOff: 0.05,
+    sessionHours: 7, startHour: 9, gainsOn: 0.5, gainsOff: 0.05,
   },
   upper: {
     wallR: 30, roofR: 60, heatF: 68, coolF: 68, unoccDays: 40, unoccMinF: 55,
-    ach50: 3, gainsOn: 0.35, gainsOff: 0.1,
+    gainsOn: 0.35, gainsOff: 0.1,
   },
   garage: { wallR: 0, ceilingR: 0, ach50: 15 },
   party: { shopCenterR: 15, garageCenterR: 30, shopVestR: 15 },
@@ -52,10 +55,19 @@ export const INPUTS = {
   slab: { F: 0.73 },
   brickR: 2.0,
   site: { shelter: 2, wind: true, groundRefl: 0.2 },
+  // Navien condensing combi-boiler heats; MBTEK Apollo 3.5-ton air-to-water
+  // heat pump cools; both through an MBTEK AP-AHU-6T air handler.
   plant: {
-    fuel: 'gas', heatEff: 0.95, hpCOP: 2.5, seer2: 14, oversize: 1.4,
-    gasPrice: 1.00, propanePrice: 2.50, elecPrice: 0.13,
+    boilerEff: 0.92, coolCOP: 4.6, coolTons: 3.5,
+    fanW: 460, pumpW: 150, ahuHeatBtuh: 90000,
   },
+  // Marginal rates from the owner's Aug-2026 bills, taxes and riders included.
+  // Gas, Black Hills Energy RGS GCA (WY103): 0.2008 volumetric - 0.0115
+  // revenue adj + 0.0203 integrity rider + 0.3398 commodity - 0.0007 EE,
+  // plus 5% sales tax. Electric, Rocky Mountain Power Schedule 25:
+  // 0.06467 energy + 0.02997 net power cost - 0.00052 renewable adj,
+  // plus 2.84% efficiency services, 0.05% carbon capture and 5% sales tax.
+  rates: { gas: 0.576, elec: 0.1017, gasMonthly: 34.65, elecMonthly: 37.46 },
 };
 
 // Input schema for forms and reports. src: 'given' = from the owner,
@@ -67,15 +79,15 @@ export const SCHEMA = [
     ['shop.minF', 'Minimum temperature', '°F', 'given', 32, 75, 1],
     ['shop.occF', 'In-use temperature', '°F', 'given', 50, 80, 1],
     ['shop.hoursPerWeek', 'Hours in use per week', 'h', 'given', 0, 168, 1],
-    ['shop.sessionHours', 'Hours per session', 'h', 'assumed', 1, 24, 1],
+    ['shop.sessionHours', 'Hours per session', 'h', 'given', 1, 24, 1],
     ['shop.startHour', 'Session start', 'hour', 'assumed', 0, 23, 1],
-    ['shop.ach50', 'Airtightness', 'ACH50', 'assumed', 0.5, 30, 0.5],
+    ['shop.ach50', 'Airtightness (“super airtight”)', 'ACH50', 'assumed', 0.3, 30, 0.1],
     ['shop.gainsOn', 'Lights, tools, people in use', 'W/ft²', 'assumed', 0, 5, 0.05],
   ] },
-  { group: 'Vestibule', items: [
-    ['vest.wallR', 'Wall foam (1″ CCF minimum)', 'R', 'assumed', 0, 60, 0.5],
-    ['vest.ceilingR', 'Attic insulation', 'R', 'assumed', 0, 100, 1],
-    ['vest.ach50', 'Airtightness', 'ACH50', 'assumed', 0.5, 40, 0.5],
+  { group: 'Center airtightness', note: 'Unknown, so costs are shown for a best guess and a tight-to-leaky range. A blower-door test would pin it down.', items: [
+    ['center.ach50', 'Best guess, both levels', 'ACH50', 'assumed', 0.3, 30, 0.1],
+    ['center.achLow', 'Tight end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
+    ['center.achHigh', 'Leaky end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
   ] },
   { group: 'Center, ground level', items: [
     ['ground.wallR', 'Wall insulation', 'R', 'given', 0, 60, 0.5],
@@ -85,7 +97,6 @@ export const SCHEMA = [
     ['ground.hoursPerWeek', 'Hours in use per week', 'h', 'given', 0, 168, 1],
     ['ground.sessionHours', 'Hours per session', 'h', 'assumed', 1, 24, 1],
     ['ground.startHour', 'Session start', 'hour', 'assumed', 0, 23, 1],
-    ['ground.ach50', 'Airtightness', 'ACH50', 'assumed', 0.5, 30, 0.5],
     ['ground.gainsOn', 'Lights, people in use', 'W/ft²', 'assumed', 0, 5, 0.05],
     ['ground.gainsOff', 'Standby loads', 'W/ft²', 'assumed', 0, 2, 0.01],
   ] },
@@ -96,14 +107,32 @@ export const SCHEMA = [
     ['upper.coolF', 'Cool to', '°F', 'given', 60, 85, 1],
     ['upper.unoccDays', 'Unoccupied days per year', 'd', 'given', 0, 365, 1],
     ['upper.unoccMinF', 'Minimum when unoccupied', '°F', 'given', 32, 75, 1],
-    ['upper.ach50', 'Airtightness', 'ACH50', 'assumed', 0.5, 30, 0.5],
     ['upper.gainsOn', 'Lights, appliances, people', 'W/ft²', 'assumed', 0, 5, 0.05],
     ['upper.gainsOff', 'Standby loads when away', 'W/ft²', 'assumed', 0, 2, 0.01],
+  ] },
+  { group: 'Equipment', items: [
+    ['plant.boilerEff', 'Navien seasonal efficiency', '×', 'assumed', 0.7, 0.99, 0.01],
+    ['plant.coolCOP', 'Apollo cooling COP', '×', 'given', 1.5, 8, 0.1],
+    ['plant.coolTons', 'Apollo capacity', 'tons', 'given', 1, 10, 0.5],
+    ['plant.fanW', 'AHU draw while running', 'W', 'given', 0, 2000, 10],
+    ['plant.pumpW', 'Circulators and controls', 'W', 'assumed', 0, 1000, 10],
+    ['plant.ahuHeatBtuh', 'AHU heat output, full fan', 'Btu/h', 'assumed', 10000, 400000, 1000],
+  ] },
+  { group: 'Rates (from your bills)', items: [
+    ['rates.gas', 'Gas, per therm, all-in', '$', 'given', 0, 5, 0.001],
+    ['rates.elec', 'Electricity, per kWh, all-in', '$', 'given', 0, 1, 0.0001],
+    ['rates.gasMonthly', 'Gas customer charge, per month', '$', 'given', 0, 200, 0.01],
+    ['rates.elecMonthly', 'Electric basic charge, per month', '$', 'given', 0, 200, 0.01],
+  ] },
+  { group: 'Vestibule', items: [
+    ['vest.wallR', 'Wall foam (1″ CCF minimum)', 'R', 'assumed', 0, 60, 0.5],
+    ['vest.ceilingR', 'Attic insulation', 'R', 'assumed', 0, 100, 1],
+    ['vest.ach50', 'Airtightness', 'ACH50', 'assumed', 0.3, 40, 0.1],
   ] },
   { group: 'South leg', items: [
     ['garage.wallR', 'Wall insulation (no foam)', 'R', 'given', 0, 60, 0.5],
     ['garage.ceilingR', 'Ceiling insulation', 'R', 'assumed', 0, 100, 1],
-    ['garage.ach50', 'Airtightness', 'ACH50', 'assumed', 0.5, 50, 0.5],
+    ['garage.ach50', 'Airtightness', 'ACH50', 'assumed', 0.3, 50, 0.1],
   ] },
   { group: 'Walls between zones', items: [
     ['party.shopCenterR', 'Shop ↔ center', 'R', 'assumed', 0, 60, 0.5],
@@ -127,16 +156,6 @@ export const SCHEMA = [
     ['site.wind', 'Hourly TMY3 wind', 'on/off', 'given', 0, 1, 1],
     ['site.shelter', 'Shelter class (1 open – 5 urban)', '', 'assumed', 1, 5, 1],
     ['site.groundRefl', 'Ground reflectance', '', 'assumed', 0, 0.9, 0.05],
-  ] },
-  { group: 'Equipment & rates', items: [
-    ['plant.fuel', 'Heating fuel', '', 'assumed'],
-    ['plant.heatEff', 'Heater efficiency', '×', 'assumed', 0.5, 1, 0.01],
-    ['plant.hpCOP', 'Heat pump seasonal COP', '×', 'assumed', 1, 5, 0.1],
-    ['plant.seer2', 'Cooling SEER2', 'Btu/Wh', 'assumed', 8, 30, 0.5],
-    ['plant.oversize', 'Heating capacity ÷ design load', '×', 'assumed', 1, 3, 0.05],
-    ['plant.gasPrice', 'Natural gas', '$/therm', 'assumed', 0, 5, 0.01],
-    ['plant.propanePrice', 'Propane', '$/gal', 'assumed', 0, 8, 0.01],
-    ['plant.elecPrice', 'Electricity', '$/kWh', 'assumed', 0, 1, 0.005],
   ] },
 ];
 
@@ -294,15 +313,16 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   // Zone-to-zone.
   const link = (a, b, group, A, R) => A > 0 && links.push({ a, b, group, A, G: A / R });
+  const doorA = (a, b) => (openA[key(a, b)] || 0) + (openA[key(b, a)] || 0);
   link('ground', 'upper', 'floor', zones.ground.A, floorR + R_CEIL_IN + R_FLOOR_IN);
   const pShop = partyLen(SHOP), pGar = partyLen(GAR);
   const hSG = Math.min(p.north.wall, c.ground + c.floor / 2);
   const shopParty = inp.party.shopCenterR + inp.brickR + 2 * GYP + 2 * R_IN;
-  link('shop', 'ground', 'walls', pShop * hSG, shopParty);
+  link('shop', 'ground', 'walls', pShop * hSG - doorA('shop', 'ground'), shopParty);
   link('shop', 'upper', 'walls', pShop * Math.max(0, p.north.wall - hSG), shopParty);
-  link('garage', 'ground', 'walls', pGar * Math.min(p.south.wall, c.ground + c.floor / 2),
+  link('garage', 'ground', 'walls', pGar * Math.min(p.south.wall, c.ground + c.floor / 2) - doorA('garage', 'ground'),
     inp.party.garageCenterR + inp.brickR + GYP + 2 * R_IN);
-  link('shop', 'vest', 'walls', faceLen(SHOP, 'W') * p.north.wall - (openA[key('shop', 'vest')] || 0),
+  link('shop', 'vest', 'walls', faceLen(SHOP, 'W') * p.north.wall - doorA('shop', 'vest'),
     inp.party.shopVestR + inp.brickR + GYP + 2 * R_IN);
   // Slab edge between shop and vestibule.
   links.push({ a: 'shop', b: 'vest', group: 'slab', A: 0, G: inp.slab.F * faceLen(SHOP, 'W') });
@@ -314,7 +334,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   // Air leakage: effective leakage area from ACH50 (ELA ≈ 0.055 in² per CFM50).
   for (const z of ZONES) {
-    const Z = zones[z], ach50 = inp[z].ach50;
+    const Z = zones[z], ach50 = z === 'ground' || z === 'upper' ? inp.center.ach50 : inp[z].ach50;
     Z.ELA = 0.055 * ach50 * Z.V / 60;
     Z.Cs = CS_STORY * Z.hStack / 8;
     Z.Cw = cwCoef(inp.site.shelter, Z.hWind / 8);
@@ -888,15 +908,26 @@ export function runModel(wxRaw, inp = INPUTS, p = DEFAULTS, { prepared } = {}) {
   const coolDesign = Object.fromEntries(ZONES.map((z, k) => [z, { load: coolDD.peakCool[k], hour: coolDD.peakCoolAt[k] }]));
 
   const capHeat = {}, capCool = {};
-  for (const z of ['shop', 'ground', 'upper']) capHeat[z] = inp.plant.oversize * heatDesign[z].load;
-  capCool.upper = 1.15 * coolDesign.upper.load;
+  // Heat reaches each zone through the AHU; its output caps a warm-up.
+  for (const z of ['shop', 'ground', 'upper']) capHeat[z] = inp.plant.ahuHeatBtuh;
+  capCool.upper = inp.plant.coolTons * 12000;
 
   const sched = schedules(wx, inp);
   const main = simulate(env, wx, inp, { capHeat, capCool, record: true, sched, windOn });
   const calm = windOn ? simulate(env, wx, inp, { capHeat, capCool, sched, windOn: false }) : null;
 
+  // The center's airtightness is unknown: rerun at the tight and leaky ends.
+  const range = {};
+  for (const [k, v] of [['low', inp.center.achLow], ['high', inp.center.achHigh]]) {
+    const i2 = JSON.parse(JSON.stringify(inp));
+    i2.center.ach50 = v;
+    const r2 = simulate(buildEnvelope(p, i2), wx, i2, { capHeat, capCool, sched, windOn });
+    range[k] = { ach50: v, heatTot: r2.heatTot, coolTot: r2.coolTot, cost: costs(r2, i2) };
+  }
+
   return {
-    wx, env, ua, heatDesign, windCurve, worst, coolDesign, coolDD, capHeat, capCool, main, calm, sched, inp,
+    wx, env, ua, heatDesign, windCurve, worst, coolDesign, coolDD, capHeat, capCool, main, calm, range, sched, inp,
+    cost: costs(main, inp),
     design: dsn, periods: wxRaw.periods, station: wxRaw.station, dataset: wxRaw.dataset,
   };
 }
@@ -909,22 +940,49 @@ export function slimResult(r) {
     coolDesign: r.coolDesign, capHeat: r.capHeat, capCool: r.capCool, design: r.design,
     periods: r.periods, station: r.station, dataset: r.dataset,
     main: r.main, calm: r.calm ? { heatTot: r.calm.heatTot, coolTot: r.calm.coolTot } : null,
+    range: r.range, cost: r.cost,
     wx: { T: Float32Array.from(r.wx.T), V: Float32Array.from(r.wx.V), month: r.wx.month, dayMeanF: r.wx.dayMeanF },
-    inp: r.inp, bill: energyBill(r),
+    inp: r.inp,
     coolDesignDay: { T: Array.from(r.coolDD.T[3]), Qc: Array.from(r.coolDD.Qc[3]) },
   };
 }
 
-// Energy and cost by fuel.
-export function energyBill(result, inp = result.inp) {
-  const pl = inp.plant;
-  const heat = ZONES.reduce((s, z, k) => s + result.main.heatTot[k], 0);
-  const cool = ZONES.reduce((s, z, k) => s + result.main.coolTot[k], 0);
-  let fuelQty, fuelUnit, heatCost, heatKWh = 0;
-  if (pl.fuel === 'gas') { fuelQty = heat / pl.heatEff / 1e5; fuelUnit = 'therms'; heatCost = fuelQty * pl.gasPrice; }
-  else if (pl.fuel === 'propane') { fuelQty = heat / pl.heatEff / 91500; fuelUnit = 'gal propane'; heatCost = fuelQty * pl.propanePrice; }
-  else if (pl.fuel === 'heatpump') { heatKWh = heat / pl.hpCOP / 3412; fuelQty = heatKWh; fuelUnit = 'kWh'; heatCost = heatKWh * pl.elecPrice; }
-  else { heatKWh = heat / 3412; fuelQty = heatKWh; fuelUnit = 'kWh'; heatCost = heatKWh * pl.elecPrice; }
-  const coolKWh = cool / (pl.seer2 * 1000);
-  return { heatMMBtu: heat / MMBTU, coolMMBtu: cool / MMBTU, fuelQty, fuelUnit, heatCost, coolKWh, coolCost: coolKWh * pl.elecPrice, tonHours: cool / 12000 };
+// Annual and monthly energy and cost of a simulate() result.
+// Gas: heat delivered / boiler efficiency. Electric: Apollo compressor at its
+// COP, plus the AHU fan and circulators for as long as the AHU runs, taken
+// as heat delivered / AHU heating output and cooling / Apollo capacity.
+export function costs(res, inp) {
+  const pl = inp.plant, rt = inp.rates;
+  const coolCap = pl.coolTons * 12000, distKW = (pl.fanW + pl.pumpW) / 1000;
+  const zone = (heat, cool) => {
+    const therms = heat / pl.boilerEff / 1e5;
+    const heatHours = heat / pl.ahuHeatBtuh, coolHours = cool / coolCap;
+    const compKWh = cool / (pl.coolCOP * 3412);
+    const distKWh = (heatHours + coolHours) * distKW;
+    const heatDistKWh = heatHours * distKW, coolDistKWh = coolHours * distKW;
+    return {
+      heat, cool, therms, compKWh, distKWh, heatHours, coolHours,
+      gas: therms * rt.gas,
+      heatElec: heatDistKWh * rt.elec,
+      coolElec: (compKWh + coolDistKWh) * rt.elec,
+    };
+  };
+  const zones = {}, monthly = {};
+  ZONES.forEach((z, k) => {
+    zones[z] = zone(res.heatTot[k], res.coolTot[k]);
+    monthly[z] = Array.from({ length: 12 }, (_, m) => zone(res.heat[k][m], res.cool[k][m]));
+  });
+  const sum = f => ZONES.reduce((s, z) => s + f(zones[z]), 0);
+  const t = {
+    heat: sum(z => z.heat), cool: sum(z => z.cool), therms: sum(z => z.therms),
+    compKWh: sum(z => z.compKWh), distKWh: sum(z => z.distKWh),
+    heatHours: sum(z => z.heatHours), coolHours: sum(z => z.coolHours),
+    gas: sum(z => z.gas), heatElec: sum(z => z.heatElec), coolElec: sum(z => z.coolElec),
+  };
+  t.kWh = t.compKWh + t.distKWh;
+  t.heating = t.gas + t.heatElec;
+  t.cooling = t.coolElec;
+  t.total = t.heating + t.cooling;
+  t.fixed = 12 * (rt.gasMonthly + rt.elecMonthly);
+  return { zones, monthly, totals: t };
 }
