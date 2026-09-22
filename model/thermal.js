@@ -216,19 +216,23 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   const ov = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
   const within = (v, a0, a1) => v > a0 + 1e-9 && v < a1 - 1e-9;
   const faceLen = (R, f) => (f === 'N' || f === 'S') ? R.x1 - R.x0 : R.z1 - R.z0;
-  // Length of R's f edge that lies inside Q.
+  // Length of R's f edge that lies inside Q or against Q's opposite face
+  // (buildings that butt together share that stretch of wall).
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
   const edgeIn = (R, f, Q) => {
-    if (f === 'N') return within(R.z0, Q.z0, Q.z1) ? ov(R.x0, R.x1, Q.x0, Q.x1) : 0;
-    if (f === 'S') return within(R.z1, Q.z0, Q.z1) ? ov(R.x0, R.x1, Q.x0, Q.x1) : 0;
-    if (f === 'W') return within(R.x0, Q.x0, Q.x1) ? ov(R.z0, R.z1, Q.z0, Q.z1) : 0;
-    return within(R.x1, Q.x0, Q.x1) ? ov(R.z0, R.z1, Q.z0, Q.z1) : 0;
+    if (f === 'N') return within(R.z0, Q.z0, Q.z1) || near(R.z0, Q.z1) ? ov(R.x0, R.x1, Q.x0, Q.x1) : 0;
+    if (f === 'S') return within(R.z1, Q.z0, Q.z1) || near(R.z1, Q.z0) ? ov(R.x0, R.x1, Q.x0, Q.x1) : 0;
+    if (f === 'W') return within(R.x0, Q.x0, Q.x1) || near(R.x0, Q.x1) ? ov(R.z0, R.z1, Q.z0, Q.z1) : 0;
+    return within(R.x1, Q.x0, Q.x1) || near(R.x1, Q.x0) ? ov(R.z0, R.z1, Q.z0, Q.z1) : 0;
   };
-  const area = R => (R.x1 - R.x0) * (R.z1 - R.z0);
+  // Floors, ceilings and volumes use inside dimensions; walls use outside.
+  const t = p.wallT;
+  const area = R => Math.max(0, R.x1 - R.x0 - 2 * t) * Math.max(0, R.z1 - R.z0 - 2 * t);
   const overlap = (A, B) => ov(A.x0, A.x1, B.x0, B.x1) * ov(A.z0, A.z1, B.z0, B.z1);
   const partyLen = R => FACES.reduce((s, f) => s + edgeIn(C, f, R), 0);
 
   const loggiaLen = faceLen(C, 'W') - edgeIn(C, 'W', SHOP) - edgeIn(C, 'W', GAR);
-  const loggiaArea = loggiaLen * c.loggiaDepth;
+  const loggiaArea = Math.max(0, loggiaLen - 2 * t) * c.loggiaDepth;
 
   const zones = {
     shop: { A: area(SHOP) - overlap(SHOP, C), H: p.north.wall, hStack: p.north.wall, hWind: p.north.wall, slabMass: true, furnish: 1.0 },

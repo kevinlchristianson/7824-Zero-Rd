@@ -4,40 +4,59 @@
 // Units are feet. Axes: +x = east, +y = up, +z = south. Origin is the
 // centre of the two-story block's roof outline at grade.
 //
-// Plan dimensions come from Google Earth (ruler: 82.33 ft across the north
-// leg's north roof edge = 251 px, ~0.328 ft/px) cross-checked against the
-// listing's overhead drone photo. Roof outlines are what was measured; walls
-// sit one overhang inside them.
+// Plan positions come from Google Earth (ruler: 82.33 ft across the north
+// leg's north roof edge = 251 px, ~0.328 ft/px); the two big blocks use the
+// owner's 48' x 68' inside dimensions.
 
 export const FT_PER_PX = 82.33 / 251;
 
+// The owner's inside dimensions: the center block and the shop are each
+// 48' x 68' inside, 12" brick plus foam (about 16") all round. The buildings
+// are plain rectangles that butt together; the insets seen from above are
+// the eaves overlapping.
+const WALL = 16 / 12;
+const IN_W = 48, IN_D = 68;
+const EXT_W = IN_W + 2 * WALL, EXT_D = IN_D + 2 * WALL;   // 50'-8" x 70'-8"
+
+// Wall footprints (outer faces). Center sits on the origin; the shop's south
+// wall is the center's north wall line, its east end at the measured roof
+// edge; the vestibule runs west to the measured 82.33' roof line; the south
+// leg's north wall is the center's south wall line.
+const OVERHANG = 1.5;
+const W = {
+  center: { x0: -EXT_W / 2, x1: EXT_W / 2, z0: -EXT_D / 2, z1: EXT_D / 2 },
+  north: { x0: -82.8 + OVERHANG, x1: -0.5 - OVERHANG, z0: -EXT_D / 2 - EXT_W, z1: -EXT_D / 2 },
+  south: { x0: -61, x1: -9.5, z0: EXT_D / 2, z1: EXT_D / 2 + 46 },
+};
+const roofOf = w => ({ x0: w.x0 - OVERHANG, x1: w.x1 + OVERHANG, z0: w.z0 - OVERHANG, z1: w.z1 + OVERHANG });
+
 export const DEFAULTS = {
   pitch: 5 / 12,        // hip roofs, rise per foot of run
-  overhang: 1.5,        // eave overhang past the wall face
+  overhang: OVERHANG,   // eave overhang past the wall face
   roofThick: 0.7,       // fascia depth
-  wallT: 1.0,           // brick wall thickness
+  wallT: WALL,          // brick + foam wall thickness
+  insideW: IN_W, insideD: IN_D,
 
   // Two-story block on the east side of the U.
   // Wall stack: 11' ground level + 2' floor structure + 9' upper level.
   center: {
     name: 'Center (two-story)',
-    roof: { x0: -28.75, x1: 28.75, z0: -38.5, z1: 38.5 },
+    roof: roofOf(W.center),
     ground: 11, floor: 2, upper: 9,
     loggiaDepth: 8,
   },
-  // Legs of the U: single-volume, one tall story each.
-  // Main block has the center's footprint turned 90 deg (walls 74' E-W x
-  // 54'-6" N-S). A vestibule across the west end, behind the four arches,
-  // runs out to the measured 82.33' roof edge under the same hip roof.
+  // Legs of the U: single-volume, one tall story each. The north leg's main
+  // block (the shop) is the center's footprint turned 90 deg; a vestibule
+  // across its west end, behind the four arches, runs to the measured roof.
   north: {
     name: 'North leg',
-    roof: { x0: -82.8, x1: -0.5, z0: -88.0, z1: -30.5 },
+    roof: roofOf(W.north),
     wall: 14,
-    mainLength: 74,
+    mainLength: EXT_D,
   },
   south: {
     name: 'South leg (garage)',
-    roof: { x0: -62.5, x1: -8.0, z0: 30.5, z1: 79.5 },
+    roof: roofOf(W.south),
     wall: 12,
   },
 

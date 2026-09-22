@@ -14,7 +14,7 @@ Both read `model/params.js`: the plan dimensions, heights and the full door/wind
 - **South leg**: one tall volume (garage), with overhead doors onto the south drive. Unheated.
 - Hip roofs throughout.
 
-Plan dimensions are scaled from Google Earth. The ruler reads 82.33 ft along the north leg's north roof edge, about 0.328 ft/px. The upper-level openings come from the owner: sixteen 41″ × 67″ windows, a 36″ door and a 72″ door. Everything else not listed under *Heating & cooling model* is estimated from the listing photos.
+The center block and the shop are 48′ × 68′ inside (owner), with about 16″ of brick and foam; the buildings are rectangles butted together (the overlap seen from above is the eaves). Positions are scaled from Google Earth. The ruler reads 82.33 ft along the north leg's north roof edge, about 0.328 ft/px. The upper-level openings come from the owner: sixteen 41″ × 67″ windows, a 36″ door and a 72″ door. Everything else not listed under *Heating & cooling model* is estimated from the listing photos.
 
 ## Heating & cooling model (`model/thermal.js`)
 
