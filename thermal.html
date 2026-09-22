@@ -1,0 +1,879 @@
+<title>Zero Rd Thermal Model</title>
+<meta name="description" content="Hour-by-hour heating and cooling model of 7824 Zero Rd on the Casper TMY3 year, with Wyoming wind driving air leakage.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f1eee8;
+    --sheet: #fbfaf7;
+    --ink: #23201d;
+    --ink-2: #4a4540;
+    --muted: #6d675f;
+    --rule: #d9d3c9;
+    --grid: #e8e3da;
+    --accent: #8a4f35;
+    --accent-wash: rgba(138, 79, 53, 0.10);
+    --bar: #b9b1a5;
+    --z-shop: #2a78d6;
+    --z-ground: #eb6834;
+    --z-upper: #1baf7a;
+    --outdoor: #8c857b;
+    --focus: #2f6f8f;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #141210;
+      --sheet: #1d1a17;
+      --ink: #ece6dd;
+      --ink-2: #cfc7bb;
+      --muted: #a39b90;
+      --rule: #3a342e;
+      --grid: #2c2824;
+      --accent: #d39473;
+      --accent-wash: rgba(211, 148, 115, 0.14);
+      --bar: #6a625a;
+      --z-shop: #3987e5;
+      --z-ground: #d95926;
+      --z-upper: #199e70;
+      --outdoor: #8f877c;
+      --focus: #7fb7d1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #141210;
+    --sheet: #1d1a17;
+    --ink: #ece6dd;
+    --ink-2: #cfc7bb;
+    --muted: #a39b90;
+    --rule: #3a342e;
+    --grid: #2c2824;
+    --accent: #d39473;
+    --accent-wash: rgba(211, 148, 115, 0.14);
+    --bar: #6a625a;
+    --z-shop: #3987e5;
+    --z-ground: #d95926;
+    --z-upper: #199e70;
+    --outdoor: #8f877c;
+    --focus: #7fb7d1;
+  }
+
+  body {
+    margin: 0;
+    background: var(--sheet);
+    color: var(--ink);
+    font: 14px/1.5 var(--body);
+  }
+  .page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* Masthead */
+  .masthead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+  .eyebrow { font: 600 12px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  h1 { font: 700 44px/0.95 var(--display); margin: 0; letter-spacing: 0.01em; }
+  .lede { color: var(--muted); margin: 8px 0 0; max-width: 62ch; text-wrap: pretty; }
+  .status { margin: 0; font: 500 12px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status.busy::before { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+  .status.error::before { background: #d03b3b; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-bottom: 1px solid var(--rule); overflow: hidden; margin-inline: -16px; }
+  .kpi { padding: 16px; display: grid; gap: 2px; align-content: start; box-shadow: -1px 0 0 var(--rule); }
+  .kpi-label { font: 600 12px/1.2 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .kpi-value { font: 600 28px/1.15 var(--body); letter-spacing: -0.01em; }
+  .kpi-value small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+  .kpi-sub { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+  /* Two-column layout */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 0 32px; align-items: start; }
+  .results { min-width: 0; transition: opacity 150ms; }
+  .results.stale { opacity: 0.55; }
+  section { padding-block: 24px 8px; border-bottom: 1px solid var(--rule); }
+  section:last-child { border-bottom: 0; }
+  h2 { font: 700 24px/1.1 var(--display); margin: 0 0 4px; letter-spacing: 0.01em; }
+  .sub { color: var(--muted); margin: 0 0 14px; max-width: 72ch; text-wrap: pretty; }
+  .sub strong { color: var(--ink); font-weight: 600; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); vertical-align: baseline; }
+  th { font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--rule); white-space: nowrap; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.num { font-size: 12.5px; }
+  .zname { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .swatch.buffer { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .sched { color: var(--ink-2); font-size: 12.5px; min-width: 16ch; }
+  .dim { color: var(--muted); }
+  tr.sep td { border-bottom: 0; padding-top: 14px; font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  tr.total td { font-weight: 600; border-bottom: 1px solid var(--rule); }
+  .cellbar { display: grid; grid-template-columns: 1fr 44px; align-items: center; gap: 8px; min-width: 110px; }
+  .cellbar .track { height: 6px; }
+  .cellbar .fill { height: 6px; border-radius: 0 3px 3px 0; background: var(--bar); }
+  .cellbar .fill.hot { background: var(--accent); }
+
+  /* Zones */
+  .zones-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 8px 28px; align-items: start; }
+  .warm { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  figure { margin: 0; }
+  .plan svg { width: 100%; height: auto; display: block; color: var(--ink); }
+  .plan .pl { font: 600 6px var(--display); letter-spacing: 0.06em; fill: currentColor; }
+  .plan .ps { font: 400 4.8px var(--body); fill: var(--muted); }
+  .plan .pr { font: 500 4.6px var(--mono); fill: var(--accent); }
+  figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* Charts */
+  .chart { position: relative; width: 100%; margin-bottom: 6px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+  .chart .lbl { font-family: var(--body); font-size: 11.5px; fill: var(--ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .legend i.line { width: 16px; height: 2px; border-radius: 1px; }
+  details.tv { margin: 4px 0 16px; }
+  details.tv summary { cursor: pointer; font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px 24px; margin: 0 0 16px; }
+  .callout { border-left: 2px solid var(--accent); padding-left: 12px; }
+  .callout b { display: block; font: 600 20px/1.2 var(--body); }
+  .callout span { font-size: 12.5px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+  select, input, button { font: inherit; color: var(--ink); }
+  select { background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 8px; }
+  .strip-label { font: 600 11px var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 6px 0 0; }
+
+  .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 140px; max-width: 260px; }
+  .tip .t-head { font: 600 11px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .tip .t-row { display: flex; align-items: center; gap: 8px; line-height: 1.6; }
+  .tip .t-row i { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+  .tip .t-row b { font: 600 12px var(--mono); font-variant-numeric: tabular-nums; }
+  .tip .t-row span { color: var(--muted); }
+
+  /* Method */
+  .notes { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); max-width: 78ch; font-size: 13px; }
+  .notes b { color: var(--ink); }
+  code { font-family: var(--mono); font-size: 12px; }
+
+  /* Inputs panel */
+  .inputs { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; overflow-y: auto; background: var(--paper); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); padding-inline: 16px; padding-block: 20px 28px; }
+  .inputs-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .inputs-head h2 { font-size: 22px; }
+  .btn { background: transparent; border: 1px solid var(--rule); border-radius: 3px; padding: 4px 10px; font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
+  .btn:hover { border-color: var(--muted); color: var(--ink); }
+  .key { font-size: 12px; color: var(--muted); margin: 6px 0 12px; }
+  .badge { display: inline-block; font: 600 10px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 5px 2px; border-radius: 2px; vertical-align: 1px; }
+  .badge.given { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--rule); }
+  .badge.assumed { color: var(--accent); background: var(--accent-wash); }
+  .inputs details { border-top: 1px solid var(--rule); }
+  .inputs summary { cursor: pointer; padding: 10px 0; font: 600 14px var(--display); letter-spacing: 0.04em; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+  .inputs summary::-webkit-details-marker { display: none; }
+  .inputs summary::after { content: "+"; color: var(--muted); font-family: var(--mono); }
+  .inputs details[open] summary::after { content: "−"; }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 2px 8px; align-items: center; padding: 5px 0; }
+  .field label { font-size: 12.5px; color: var(--ink-2); line-height: 1.3; }
+  .field .meta { grid-column: 1; display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+  .field input[type="number"], .field select { grid-column: 2; grid-row: 1 / span 2; width: 100%; box-sizing: border-box; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; font: 500 13px var(--mono); text-align: right; }
+  .field select { text-align: left; font-family: var(--body); font-size: 12.5px; }
+  .field input[type="checkbox"] { grid-column: 2; grid-row: 1 / span 2; justify-self: end; width: 18px; height: 18px; accent-color: var(--accent); }
+  .field.changed label { color: var(--ink); font-weight: 600; }
+  .field.changed input, .field.changed select { border-color: var(--accent); }
+  .groupnote { font-size: 11.5px; color: var(--muted); margin: -4px 0 8px; }
+
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    .inputs { position: static; max-height: none; border: 1px solid var(--rule); margin-top: 24px; order: 2; }
+  }
+  @media (max-width: 640px) {
+    .page { padding-inline: 16px; }
+    h1 { font-size: 36px; }
+    .zones-grid { grid-template-columns: 1fr; }
+    .plan { max-width: 280px; }
+    .kpi { padding: 12px 16px; }
+    .kpi-value { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status.busy::before { animation: none; }
+    .results { transition: none; }
+  }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Heating &amp; cooling model · Casper, WY</p>
+      <h1>7824 Zero Rd</h1>
+      <p class="lede">Every hour of a typical Casper year (TMY3), in 15-minute steps, for the shop, both levels of the center block and the two unheated spaces. Hourly wind drives the air leakage.</p>
+    </div>
+    <p class="status busy" id="status" role="status">Calculating…</p>
+  </header>
+
+  <div class="kpis" id="kpis" aria-label="Headline results"></div>
+
+  <div class="layout">
+    <main class="results" id="results">
+      <section id="sec-zones">
+        <h2>Zones</h2>
+        <p class="sub">What each space is held at, the heat it needs on a design day, and a year's heating and cooling.</p>
+        <div class="zones-grid">
+          <figure class="plan">
+            <svg id="plan" role="img" aria-label="Ground-level plan of the thermal zones: shop, vestibule, center block with its open loggia, and the south leg, with shared walls highlighted"></svg>
+            <figcaption>Ground-level plan, north up, to scale. Heavy lines are walls shared between zones. The upper level covers the whole center block, loggia included.</figcaption>
+          </figure>
+          <div class="table-wrap"><table id="zone-table"></table></div>
+        </div>
+      </section>
+
+      <section id="sec-month">
+        <h2>Energy by month</h2>
+        <p class="sub">Heating delivered to each zone above the line; cooling removed from the upper level below it. MMBtu.</p>
+        <div class="legend" id="month-legend"></div>
+        <div class="chart" id="month-chart" role="img" aria-label="Monthly heating by zone and upper-level cooling"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="month-table"></div></details>
+      </section>
+
+      <section id="sec-balance">
+        <h2>Where the heat goes</h2>
+        <p class="sub" id="balance-sub">Net heat leaving each zone over the year, by path, and what covers it. MMBtu per year.</p>
+        <div class="table-wrap"><table id="balance"></table></div>
+      </section>
+
+      <section id="sec-wind">
+        <h2>Wyoming wind</h2>
+        <p class="sub" id="wind-sub">Steady heat loss at the design temperature as wind rises, with no sun and nothing running inside. kBtu/h.</p>
+        <div class="callouts" id="wind-callouts"></div>
+        <div class="legend" id="wind-legend"></div>
+        <div class="chart" id="wind-chart" role="img" aria-label="Design heating load versus wind speed"></div>
+      </section>
+
+      <section id="sec-week">
+        <h2>A week in the model</h2>
+        <div class="row">
+          <label for="week">Week</label>
+          <select id="week"></select>
+        </div>
+        <div class="legend" id="week-legend"></div>
+        <div class="chart" id="week-chart" role="img" aria-label="Zone and outdoor temperatures over the selected week"></div>
+        <p class="strip-label">Wind at the airport, mph</p>
+        <div class="chart" id="wind-strip" role="img" aria-label="Wind speed over the selected week"></div>
+      </section>
+
+      <section id="sec-method">
+        <h2>How it works</h2>
+        <ul class="notes" id="method"></ul>
+      </section>
+    </main>
+
+    <aside class="inputs" aria-label="Model inputs">
+      <div class="inputs-head">
+        <h2>Inputs</h2>
+        <button type="button" class="btn" id="reset">Reset</button>
+      </div>
+      <p class="key"><span class="badge given">given</span> from you · <span class="badge assumed">assumed</span> placeholder to confirm</p>
+      <form id="form" autocomplete="off"></form>
+    </aside>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script type="module">
+import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, getIn, setIn, sessionSummary } from './model/thermal.js';
+import { DEFAULTS, wallsOf, vestibuleDepth } from './model/params.js';
+
+const $ = s => document.querySelector(s);
+const clone = o => JSON.parse(JSON.stringify(o));
+const sum = a => Array.from(a).reduce((s, v) => s + v, 0);
+const nf = (v, d = 0) => Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const F = c => c * 1.8 + 32;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const HEATED = ['shop', 'ground', 'upper'];
+const ZCOLOR = { shop: 'var(--z-shop)', ground: 'var(--z-ground)', upper: 'var(--z-upper)', outdoor: 'var(--outdoor)' };
+const SHORT = { shop: 'Shop', ground: 'Ground level', upper: 'Upper level', vest: 'Vestibule', garage: 'South leg' };
+const STORE = 'zero-rd-thermal-inputs-v1';
+
+// ---------------------------------------------------------------- inputs state
+function merge(base, over) {
+  for (const k of Object.keys(over || {})) {
+    if (!(k in base)) continue;
+    if (base[k] && typeof base[k] === 'object') merge(base[k], over[k]);
+    else base[k] = over[k];
+  }
+  return base;
+}
+let inputs = clone(INPUTS);
+try { const s = localStorage.getItem(STORE); if (s) inputs = merge(clone(INPUTS), JSON.parse(s)); } catch { /* storage unavailable */ }
+const saveInputs = () => { try { localStorage.setItem(STORE, JSON.stringify(inputs)); } catch { /* ignore */ } };
+const atDefaults = () => JSON.stringify(inputs) === JSON.stringify(INPUTS);
+
+// ---------------------------------------------------------------- run orchestration
+let R = null, reqId = 0, worker = null, inlineMod = null, wxCache = null;
+const statusEl = $('#status'), resultsEl = $('#results');
+function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status' + (cls ? ' ' + cls : ''); }
+
+function startWorker() {
+  try {
+    worker = new Worker(new URL('./model/thermal-worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = ({ data }) => onResult(data);
+    worker.onerror = e => { e.preventDefault?.(); worker = null; runInline(reqId); };
+  } catch { worker = null; }
+}
+async function runInline(id) {
+  try {
+    inlineMod ||= await import('./model/thermal.js');
+    wxCache ||= await (await fetch(new URL('./data/casper-tmy3.json', import.meta.url))).json();
+    const r = inlineMod.runModel(wxCache, inputs);
+    onResult({ id, result: inlineMod.slimResult(r) });
+  } catch (err) { onResult({ id, error: String(err.message || err) }); }
+}
+let timer = 0;
+function scheduleRun(delay = 350) {
+  clearTimeout(timer);
+  resultsEl.classList.add('stale');
+  setStatus('Calculating…', 'busy');
+  timer = setTimeout(() => {
+    const id = ++reqId;
+    if (worker) worker.postMessage({ id, inputs }); else runInline(id);
+  }, delay);
+}
+function onResult({ id, result, error }) {
+  if (id !== reqId) return;
+  if (error) { setStatus(`Model error: ${error}`, 'error'); return; }
+  R = result;
+  resultsEl.classList.remove('stale');
+  setStatus('Up to date');
+  renderAll();
+}
+
+// ---------------------------------------------------------------- helpers
+const tip = $('#tip');
+function showTip(evt, head, rows) {
+  tip.replaceChildren();
+  const h = document.createElement('div'); h.className = 't-head'; h.textContent = head; tip.append(h);
+  for (const r of rows) {
+    const row = document.createElement('div'); row.className = 't-row';
+    const key = document.createElement('i'); key.style.background = r.color || 'transparent';
+    const b = document.createElement('b'); b.textContent = r.value;
+    const s = document.createElement('span'); s.textContent = r.label;
+    row.append(key, b, s); tip.append(row);
+  }
+  tip.hidden = false;
+  const pad = 14, w = tip.offsetWidth, hgt = tip.offsetHeight;
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + w > innerWidth - 8) x = evt.clientX - w - pad;
+  if (y + hgt > innerHeight - 8) y = evt.clientY - hgt - pad;
+  tip.style.left = `${Math.max(8, x)}px`; tip.style.top = `${Math.max(8, y)}px`;
+}
+const hideTip = () => { tip.hidden = true; };
+
+function niceTicks(lo, hi, count = 5) {
+  const span = hi - lo || 1, raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= count) || 10 * mag;
+  const t0 = Math.floor(lo / step) * step, t1 = Math.ceil(hi / step) * step, out = [];
+  for (let v = t0; v <= t1 + step / 2; v += step) out.push(Math.round(v / step) * step);
+  return out;
+}
+// Bar path with a 4px rounded data end (top when up, bottom when down).
+function barPath(x, y0, y1, w, up, r = 4) {
+  const h = Math.abs(y1 - y0);
+  if (h < 0.5) return '';
+  r = Math.min(r, h, w / 2);
+  if (up) { const t = y1; return `M${x},${y0}V${t + r}Q${x},${t} ${x + r},${t}H${x + w - r}Q${x + w},${t} ${x + w},${t + r}V${y0}Z`; }
+  const b = y1; return `M${x},${y0}V${b - r}Q${x},${b} ${x + r},${b}H${x + w - r}Q${x + w},${b} ${x + w},${b - r}V${y0}Z`;
+}
+function legend(el, items) {
+  el.replaceChildren(...items.map(it => {
+    const s = document.createElement('span');
+    const i = document.createElement('i'); if (it.line) i.className = 'line'; i.style.background = it.color;
+    s.append(i, document.createTextNode(it.label)); return s;
+  }));
+}
+const Tdesign = () => F(R.design.heating.db996C);
+const Vdesign = () => R.design.heating.wsDb996Ms * 2.23694;
+
+// ---------------------------------------------------------------- KPIs
+function fuelLine(b) {
+  const f = inputs.plant.fuel;
+  if (f === 'gas') return `${nf(b.fuelQty)} therms of natural gas at ${nf(inputs.plant.heatEff * 100)}%`;
+  if (f === 'propane') return `${nf(b.fuelQty)} gallons of propane at ${nf(inputs.plant.heatEff * 100)}%`;
+  if (f === 'heatpump') return `${nf(b.fuelQty)} kWh by heat pump`;
+  return `${nf(b.fuelQty)} kWh of electric resistance`;
+}
+function renderKpis() {
+  const b = R.bill, hd = R.heatDesign;
+  const heatDes = hd.shop.load + hd.ground.load + hd.upper.load;
+  const calm = R.calm ? sum(R.calm.heatTot) : null;
+  const windPct = calm ? (b.heatMMBtu * 1e6 / calm - 1) * 100 : null;
+  const tiles = [
+    ['Heating per year', nf(b.heatMMBtu), 'MMBtu', fuelLine(b)],
+    ['Cooling per year', nf(b.coolKWh), 'kWh', `${nf(b.coolMMBtu)} MMBtu removed from the upper level, SEER2 ${nf(inputs.plant.seer2, 1)}`],
+    ['Energy cost per year', `$${nf(b.heatCost + b.coolCost)}`, '', `$${nf(b.heatCost)} heating + $${nf(b.coolCost)} cooling at the example rates in Inputs`],
+    ['Heating design load', nf(heatDes / 1000), 'kBtu/h', `${nf(Tdesign())}°F with ${nf(Vdesign(), 1)} mph wind. The worst windy hour needs ${nf(R.worst.total / 1000)}.`],
+    ['Cooling design load', nf(R.coolDesign.upper.load / 12000, 1), 'tons', `${nf(R.coolDesign.upper.load / 1000, 1)} kBtu/h for the upper level on a ${nf(F(R.design.cooling.db004C))}°F clear July day`],
+    ['Wind adds', windPct == null ? 'off' : `+${nf(windPct)}%`, '', windPct == null ? 'Wind is switched off in Inputs' : `to heating, against the same year with still air (${nf(b.heatMMBtu - calm / 1e6)} MMBtu)`],
+  ];
+  $('#kpis').replaceChildren(...tiles.map(([label, value, unit, subText]) => {
+    const d = document.createElement('div'); d.className = 'kpi';
+    const l = document.createElement('div'); l.className = 'kpi-label'; l.textContent = label;
+    const v = document.createElement('div'); v.className = 'kpi-value'; v.textContent = value;
+    if (unit) { const u = document.createElement('small'); u.textContent = unit; v.append(' ', u); }
+    const s = document.createElement('div'); s.className = 'kpi-sub'; s.textContent = subText;
+    d.append(l, v, s); return d;
+  }));
+}
+
+// ---------------------------------------------------------------- zones
+function sessionText(z) {
+  const blocks = sessionSummary(inputs, z);
+  if (!blocks.length) return 'never';
+  const h = x => `${String(x % 24).padStart(2, '0')}:00`;
+  const same = blocks.every(b => b.start === blocks[0].start && b.end === blocks[0].end);
+  return same ? `${blocks.map(b => b.day).join(', ')} ${h(blocks[0].start)}–${h(blocks[0].end)}` : blocks.map(b => `${b.day} ${h(b.start)}–${h(b.end)}`).join(', ');
+}
+function renderZoneTable() {
+  const M = R.main, zi = z => ZONES.indexOf(z), i = inputs;
+  const rec = z => {
+    const r = M.recovery[zi(z)];
+    if (!r || !r.length) return '—';
+    const avg = r.reduce((s, x) => s + x.h, 0) / r.length, miss = r.filter(x => !x.met).length;
+    return `${nf(avg, 1)} h on average${miss ? `; ${miss} of ${r.length} sessions never get there` : ''}`;
+  };
+  const rows = [
+    ['shop', `${i.shop.minF}° always; ${i.shop.occF}° ${sessionText('shop')} on heating days`],
+    ['ground', `${i.ground.minF}° always; ${i.ground.occF}° ${sessionText('ground')} on heating days`],
+    ['upper', `${i.upper.heatF}° heat and ${i.upper.coolF}° cool; ${i.upper.unoccMinF}° on ${i.upper.unoccDays} empty days a year`],
+    ['vest', 'Unheated buffer behind the arches'],
+    ['garage', 'Unheated, uncooled'],
+  ];
+  const t = $('#zone-table');
+  t.innerHTML = `<thead><tr><th>Zone</th><th>Held at</th><th class="num">Design heat<br>kBtu/h</th><th class="num">Heating<br>MMBtu/yr</th><th class="num">Cooling<br>MMBtu/yr</th><th class="num">Range<br>°F</th></tr></thead><tbody></tbody>`;
+  const tb = t.tBodies[0];
+  for (const [z, sched] of rows) {
+    const k = zi(z), heated = HEATED.includes(z);
+    const tr = tb.insertRow();
+    const c0 = tr.insertCell(); const name = document.createElement('span'); name.className = 'zname';
+    const sw = document.createElement('i'); sw.className = 'swatch' + (heated ? '' : ' buffer'); if (heated) sw.style.background = ZCOLOR[z];
+    name.append(sw, document.createTextNode(SHORT[z])); c0.append(name);
+    const c1 = tr.insertCell(); c1.className = 'sched'; c1.textContent = sched;
+    if (z === 'shop' || z === 'ground') {
+      const w = document.createElement('span'); w.className = 'warm';
+      w.textContent = `Warm-up to ${i[z].occF}°: ${rec(z)}`;
+      c1.append(w);
+    }
+    const num = (v, dim) => { const c = tr.insertCell(); c.className = 'num' + (dim ? ' dim' : ''); c.textContent = v; };
+    num(heated ? nf(R.heatDesign[z].load / 1000, 1) : '—', !heated);
+    num(heated ? nf(M.heatTot[k] / 1e6, 1) : '—', !heated);
+    num(z === 'upper' ? nf(M.coolTot[k] / 1e6, 1) : '—', z !== 'upper');
+    num(`${nf(M.Tmin[k])}–${nf(M.Tmax[k])}`);
+  }
+}
+
+function renderPlan() {
+  const P = DEFAULTS, C = wallsOf(P.center.roof, P.overhang), N = wallsOf(P.north.roof, P.overhang);
+  const S = wallsOf(P.south.roof, P.overhang), vd = vestibuleDepth(P);
+  const SHOP = { ...N, x0: N.x0 + vd }, VEST = { ...N, x1: N.x0 + vd };
+  const L = { x0: C.x0, x1: C.x0 + P.center.loggiaDepth, z0: N.z1, z1: S.z0 };
+  const x0 = N.x0 - 12, x1 = C.x1 + 6, z0 = N.z0 - 12, z1 = S.z1 + 6;
+  const rect = (r, fill, op, extra = '') => `<rect x="${r.x0}" y="${r.z0}" width="${r.x1 - r.x0}" height="${r.z1 - r.z0}" fill="${fill}" fill-opacity="${op}" stroke="currentColor" stroke-width="0.5" ${extra}/>`;
+  const line = (a, b, c, d) => `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="square"/>`;
+  const txt = (x, y, s, cls = '', rot = 0, anchor = 'middle') => `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}" ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${s}</text>`;
+  const cx = r => (r.x0 + r.x1) / 2, cz = r => (r.z0 + r.z1) / 2;
+  const i = inputs;
+  const svg = $('#plan');
+  svg.setAttribute('viewBox', `${x0} ${z0} ${x1 - x0} ${z1 - z0}`);
+  svg.innerHTML = `
+    ${rect(S, 'var(--muted)', 0.08)}
+    ${rect(VEST, 'var(--muted)', 0.08)}
+    ${rect(SHOP, 'var(--z-shop)', 0.16)}
+    ${rect(C, 'var(--z-ground)', 0.16)}
+    ${rect(L, 'var(--sheet)', 1)}
+    ${line(C.x0, C.z0, N.x1, C.z0)}${line(C.x0, C.z0, C.x0, N.z1)}
+    ${line(C.x0, C.z1, S.x1, C.z1)}${line(C.x0, S.z0, C.x0, C.z1)}
+    ${line(SHOP.x0, N.z0, SHOP.x0, N.z1)}
+    ${txt(cx(SHOP), cz(SHOP) - 3, 'SHOP', 'pl')}
+    ${txt(cx(SHOP), cz(SHOP) + 4, `${i.shop.minF}° · ${i.shop.occF}° in use`, 'ps')}
+    ${txt(C.x1 - 26, -6, 'CENTER', 'pl')}
+    ${txt(C.x1 - 26, 1, `ground ${i.ground.minF}° · ${i.ground.occF}°`, 'ps')}
+    ${txt(C.x1 - 26, 7, `upper ${i.upper.heatF}°`, 'ps')}
+    ${txt(cx(L) + 1.6, cz(L), 'LOGGIA · OPEN', 'ps', -90)}
+    ${txt(cx(S), cz(S) + 6, 'SOUTH LEG', 'pl')}
+    ${txt(cx(S), cz(S) + 13, 'unheated', 'ps')}
+    ${txt(VEST.x0 - 3, cz(VEST), 'VESTIBULE · UNHEATED', 'ps', -90)}
+    ${txt((C.x0 + N.x1) / 2, C.z0 - 3, `R-${i.party.shopCenterR}`, 'pr')}
+    ${txt((C.x0 + S.x1) / 2, C.z1 + 6.5, `R-${i.party.garageCenterR}`, 'pr')}
+    ${txt(SHOP.x0 + 3, N.z0 + 8, `R-${i.party.shopVestR}`, 'pr', 0, 'start')}
+    <g transform="translate(${x1 - 9} ${z0 + 10})"><path d="M0 -6 L3 3 L0 1.2 L-3 3 Z" fill="currentColor"/><text y="9" text-anchor="middle" class="pl" style="font-size:4.6px">N</text></g>
+    <g transform="translate(${x0 + 4} ${z1 - 4})"><line x1="0" x2="20" y1="0" y2="0" stroke="currentColor" stroke-width="0.6"/><line x1="0" x2="0" y1="-1.5" y2="1.5" stroke="currentColor" stroke-width="0.6"/><line x1="20" x2="20" y1="-1.5" y2="1.5" stroke="currentColor" stroke-width="0.6"/><text x="10" y="-2.5" text-anchor="middle" class="ps">20 ft</text></g>`;
+}
+
+// ---------------------------------------------------------------- monthly chart
+function renderMonthly() {
+  const el = $('#month-chart'), W = Math.max(300, el.clientWidth), H = 280;
+  const m = { l: 38, r: 6, t: 10, b: 24 };
+  const M = R.main, heat = HEATED.map(z => Array.from(M.heat[ZONES.indexOf(z)], v => v / 1e6));
+  const cool = Array.from(M.cool[ZONES.indexOf('upper')], v => v / 1e6);
+  const up = Math.max(...MON.map((_, k) => heat[0][k] + heat[1][k] + heat[2][k]), 1);
+  const down = Math.max(...cool, 0.5);
+  const ticks = niceTicks(-down, up, 6);
+  const lo = ticks[0], hi = ticks.at(-1);
+  const y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  const band = (W - m.l - m.r) / 12, bw = Math.min(24, band * 0.62);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 0 ? '--muted' : '--grid'})" stroke-width="1"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${nf(Math.abs(t))}</text>`;
+  for (let k = 0; k < 12; k++) {
+    const x = m.l + band * k + (band - bw) / 2;
+    let base = 0;
+    const top = heat[0][k] + heat[1][k] + heat[2][k];
+    heat.forEach((series, s) => {
+      const v = series[k];
+      if (v <= 0.005) return;
+      const isTop = Math.abs(base + v - top) < 1e-9;
+      const yb = y(base) - (base > 0 ? 2 : 0), yt = y(base + v);
+      if (yb - yt > 0.5) g += `<path d="${isTop ? barPath(x, yb, yt, bw, true) : `M${x},${yb}V${yt}H${x + bw}V${yb}Z`}" fill="${ZCOLOR[HEATED[s]]}"/>`;
+      base += v;
+    });
+    if (cool[k] > 0.005) g += `<path d="${barPath(x, y(0) + 2, y(-cool[k]), bw, false)}" fill="${ZCOLOR.upper}" fill-opacity="0.45"/>`;
+    g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${MON[k][0]}</text>`;
+    g += `<rect class="hit" data-k="${k}" x="${m.l + band * k}" y="${m.t}" width="${band}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  }
+  g += `<text x="${W - m.r}" y="${y(hi) + 12}" text-anchor="end">heating ↑</text><text x="${W - m.r}" y="${y(lo) - 4}" text-anchor="end">cooling ↓</text>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  el.querySelectorAll('.hit').forEach(h => {
+    const k = +h.dataset.k;
+    const rows = () => [
+      ...HEATED.map((z, s) => ({ color: ZCOLOR[z], value: `${nf(heat[s][k], 1)}`, label: `${SHORT[z]} heating` })),
+      { color: ZCOLOR.upper, value: `${nf(cool[k], 1)}`, label: 'Upper level cooling' },
+    ];
+    h.addEventListener('pointermove', e => showTip(e, `${MON[k]} · MMBtu`, rows()));
+    h.addEventListener('pointerleave', hideTip);
+  });
+  legend($('#month-legend'), [
+    ...HEATED.map(z => ({ color: ZCOLOR[z], label: `${SHORT[z]} heating` })),
+    { color: 'color-mix(in srgb, var(--z-upper) 45%, var(--sheet))', label: 'Upper level cooling' },
+  ]);
+  // Table view.
+  const tbl = document.createElement('table');
+  tbl.innerHTML = `<thead><tr><th>Month</th>${HEATED.map(z => `<th class="num">${SHORT[z]} heat</th>`).join('')}<th class="num">Upper cool</th></tr></thead>`;
+  const tb = tbl.createTBody();
+  MON.forEach((mo, k) => {
+    const tr = tb.insertRow(); tr.insertCell().textContent = mo;
+    for (const v of [...heat.map(s => s[k]), cool[k]]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v, 1); }
+  });
+  const tr = tb.insertRow(); tr.className = 'total'; tr.insertCell().textContent = 'Year';
+  for (const v of [...heat.map(s => sum(s)), sum(cool)]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v, 1); }
+  $('#month-table').replaceChildren(tbl);
+}
+
+// ---------------------------------------------------------------- balance table
+function renderBalance() {
+  const M = R.main, idx = z => ZONES.indexOf(z);
+  const rows = GROUPS.filter(([g]) => HEATED.some(z => Math.abs(M.flows[idx(z)][GROUPS.findIndex(x => x[0] === g)]) > 5e4));
+  const gi = g => GROUPS.findIndex(x => x[0] === g);
+  const lossTotal = z => GROUPS.reduce((s, [g]) => s + Math.max(0, M.flows[idx(z)][gi(g)]), 0);
+  const t = $('#balance');
+  t.innerHTML = `<thead><tr><th>Path</th>${HEATED.map(z => `<th class="num">${SHORT[z]}</th>`).join('')}</tr></thead>`;
+  const tb = t.createTBody();
+  const sep = label => { const tr = tb.insertRow(); tr.className = 'sep'; const c = tr.insertCell(); c.colSpan = 4; c.textContent = label; };
+  sep('Heat lost');
+  for (const [g, label] of rows) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = g === 'air' ? 'Air leakage (wind + stack)' : g === 'zones' ? 'To neighbouring zones (net)' : label;
+    for (const z of HEATED) {
+      const v = M.flows[idx(z)][gi(g)], c = tr.insertCell(); c.className = 'num';
+      const wrap = document.createElement('div'); wrap.className = 'cellbar';
+      const track = document.createElement('div'); track.className = 'track';
+      const fill = document.createElement('div'); fill.className = 'fill' + (g === 'air' ? ' hot' : '');
+      fill.style.width = `${Math.max(0, v) / lossTotal(z) * 100}%`;
+      track.append(fill);
+      const num = document.createElement('span'); num.textContent = nf(v / 1e6, 1);
+      wrap.append(track, num); c.append(wrap);
+    }
+  }
+  sep('Covered by');
+  const line = (label, f, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls; tr.insertCell().textContent = label;
+    for (const z of HEATED) { const c = tr.insertCell(); c.className = 'num'; c.textContent = f(idx(z)); }
+  };
+  line('Sun through glass', k => nf(M.solar[k] / 1e6, 1));
+  line('People, lights, equipment', k => nf(M.internal[k] / 1e6, 1));
+  line('Heating delivered', k => nf(M.heatTot[k] / 1e6, 1), 'total');
+  line('Cooling removed (subtract)', k => (M.coolTot[k] > 0 ? nf(M.coolTot[k] / 1e6, 1) : '—'));
+  const air = HEATED.reduce((s, z) => s + Math.max(0, M.flows[idx(z)][gi('air')]), 0);
+  const all = HEATED.reduce((s, z) => s + lossTotal(z), 0);
+  $('#balance-sub').innerHTML = '';
+  $('#balance-sub').append(
+    'Net heat leaving each heated zone over the year, by path, and what covers it. MMBtu per year. ',
+    Object.assign(document.createElement('strong'), { textContent: `Air leakage is ${nf(air / all * 100)}% of the total` }),
+    ', the largest single path, and most of it is wind-driven.');
+}
+
+// ---------------------------------------------------------------- wind chart
+function renderWind() {
+  const el = $('#wind-chart'), W = Math.max(300, el.clientWidth), H = 260;
+  const m = { l: 40, r: 96, t: 12, b: 30 };
+  const data = R.windCurve.map(d => ({ ...d, total: d.shop + d.ground + d.upper }));
+  const series = [...HEATED, 'total'];
+  const maxV = Math.max(...data.map(d => d.total)) / 1000;
+  const ticks = niceTicks(0, maxV, 5), hi = ticks.at(-1);
+  const x = v => m.l + v / 40 * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+  const color = s => (s === 'total' ? 'var(--ink)' : ZCOLOR[s]);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${nf(t)}</text>`;
+  for (let v = 0; v <= 40; v += 10) g += `<text x="${x(v)}" y="${H - 12}" text-anchor="middle">${v}</text>`;
+  g += `<text x="${(m.l + W - m.r) / 2}" y="${H}" text-anchor="middle">wind speed at the airport, mph</text>`;
+  // Design wind marker.
+  const vd = Vdesign();
+  g += `<line x1="${x(vd)}" x2="${x(vd)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--rule)"/>`;
+  for (const s of series) {
+    const pts = data.map(d => `${x(d.mph)},${y(d[s] / 1000)}`).join(' ');
+    g += `<polyline points="${pts}" fill="none" stroke="${color(s)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  const at = (s, v) => { const a = data.find(d => d.mph >= v) || data.at(-1), b = data[Math.max(0, data.indexOf(a) - 1)]; const f = a.mph === b.mph ? 0 : (v - b.mph) / (a.mph - b.mph); return (b[s] + f * (a[s] - b[s])) / 1000; };
+  const dv = at('total', vd);
+  g += `<circle cx="${x(vd)}" cy="${y(dv)}" r="4" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/>`;
+  g += `<text class="lbl" x="${x(vd) + 7}" y="${y(dv) - 8}">${nf(dv)} at the ${nf(vd, 1)} mph design wind</text>`;
+  // Direct labels at the right end, spread with leader lines.
+  const ends = series.map(s => ({ s, y: y(data.at(-1)[s] / 1000) })).sort((a, b) => a.y - b.y);
+  let prev = -Infinity;
+  for (const e of ends) { e.ly = Math.max(e.y, prev + 13); prev = e.ly; }
+  for (const e of ends) {
+    const x0 = x(40);
+    g += `<line x1="${x0 + 2}" y1="${e.y}" x2="${x0 + 10}" y2="${e.ly}" stroke="var(--rule)"/>`;
+    g += `<text class="lbl" x="${x0 + 13}" y="${e.ly + 4}">${e.s === 'total' ? 'All three' : SHORT[e.s]}</text>`;
+  }
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/>`;
+  g += `<rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  const xh = el.querySelector('.xh'), hit = el.querySelector('.hit');
+  hit.addEventListener('pointermove', e => {
+    const box = el.getBoundingClientRect(), v = (e.clientX - box.left - m.l) / (W - m.l - m.r) * 40;
+    const d = data.reduce((a, b) => (Math.abs(b.mph - v) < Math.abs(a.mph - v) ? b : a));
+    xh.setAttribute('x1', x(d.mph)); xh.setAttribute('x2', x(d.mph)); xh.setAttribute('visibility', 'visible');
+    showTip(e, `${d.mph} mph · ${nf(Tdesign())}°F · kBtu/h`, [
+      { color: 'var(--ink)', value: nf(d.total / 1000, 1), label: 'All three' },
+      ...HEATED.map(z => ({ color: ZCOLOR[z], value: nf(d[z] / 1000, 1), label: SHORT[z] })),
+    ]);
+  });
+  hit.addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  legend($('#wind-legend'), [{ color: 'var(--ink)', label: 'All three heated zones', line: true }, ...HEATED.map(z => ({ color: ZCOLOR[z], label: SHORT[z], line: true }))]);
+
+  // Callouts.
+  const b = R.bill, calm = R.calm ? sum(R.calm.heatTot) / 1e6 : null, w = R.worst;
+  const dayOf = i => { const d = new Date(Date.UTC(2021, 0, 1) + Math.floor(i / 24) * 864e5); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${String(i % 24).padStart(2, '0')}:00`; };
+  const items = [
+    [`${nf(R.heatDesign.shop.load / 1000 + R.heatDesign.ground.load / 1000 + R.heatDesign.upper.load / 1000)} kBtu/h`, `ASHRAE 99.6% design: ${nf(Tdesign())}°F with its coincident ${nf(Vdesign(), 1)} mph wind`],
+    [`${nf(w.total / 1000)} kBtu/h`, `worst hour in the TMY3 year: ${nf(w.T)}°F with ${nf(w.V)} mph wind (${dayOf(w.i)}). Size for the wind, not the cold alone.`],
+    calm != null ? [`+${nf(b.heatMMBtu - calm, 1)} MMBtu`, `a year of wind adds ${nf((b.heatMMBtu / calm - 1) * 100)}% to heating versus the same year in still air`] : ['off', 'turn wind on in Inputs to see its share'],
+  ];
+  $('#wind-callouts').replaceChildren(...items.map(([big, small]) => {
+    const d = document.createElement('div'); d.className = 'callout';
+    const bb = document.createElement('b'); bb.textContent = big;
+    const s = document.createElement('span'); s.textContent = small;
+    d.append(bb, s); return d;
+  }));
+}
+
+// ---------------------------------------------------------------- week chart
+const WEEKS = [
+  ['Winter - Week Nearest Min Temperature For Period', 'Coldest week'],
+  ['Winter - Week Nearest Average Temperature For Period', 'Typical winter week'],
+  ['Spring - Week Nearest Average Temperature For Period', 'Typical spring week'],
+  ['Summer - Week Nearest Average Temperature For Period', 'Typical summer week'],
+  ['Summer - Week Nearest Max Temperature For Period', 'Hottest week'],
+  ['Autumn - Week Nearest Average Temperature For Period', 'Typical autumn week'],
+];
+const dayIndex = md => { const [mo, d] = md.split('/').map(s => parseInt(s, 10)); return Math.round((Date.UTC(2021, mo - 1, d) - Date.UTC(2021, 0, 1)) / 864e5); };
+function fillWeeks() {
+  const sel = $('#week');
+  if (sel.options.length || !R.periods) return;
+  for (const [key, label] of WEEKS) {
+    const p = R.periods[key]; if (!p) continue;
+    const o = document.createElement('option'); o.value = key;
+    o.textContent = `${label} (${p.start.replace(/\s/g, '')}–${p.end.replace(/\s/g, '')})`;
+    sel.append(o);
+  }
+  sel.addEventListener('change', renderWeek);
+}
+function renderWeek() {
+  const el = $('#week-chart'), strip = $('#wind-strip');
+  if (!R.main.T || !R.wx) {
+    el.innerHTML = `<p class="sub" style="padding:40px 0">Hourly traces load with the first full run…</p>`;
+    strip.replaceChildren(); legend($('#week-legend'), []); return;
+  }
+  const p = R.periods[$('#week').value], d0 = dayIndex(p.start), n = 168, i0 = d0 * 24;
+  const W = Math.max(300, el.clientWidth), H = 280, m = { l: 36, r: 84, t: 10, b: 26 };
+  const idx = z => ZONES.indexOf(z);
+  const seriesT = { outdoor: Array.from({ length: n }, (_, k) => R.wx.T[i0 + k]) };
+  for (const z of HEATED) seriesT[z] = Array.from({ length: n }, (_, k) => R.main.T[idx(z)][i0 + k]);
+  const all = Object.values(seriesT).flat();
+  const ticks = niceTicks(Math.min(...all), Math.max(...all), 6), lo = ticks[0], hi = ticks.at(-1);
+  const x = k => m.l + k / (n - 1) * (W - m.l - m.r), y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 32 ? '--rule' : '--grid'})"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${t}°</text>`;
+  for (let d = 0; d < 7; d++) {
+    const di = d0 + d, dt = new Date(Date.UTC(2021, 0, 1) + di * 864e5);
+    g += `<line x1="${x(d * 24)}" x2="${x(d * 24)}" y1="${H - m.b}" y2="${H - m.b + 4}" stroke="var(--rule)"/>`;
+    g += `<text x="${x(d * 24 + 12)}" y="${H - 8}" text-anchor="middle">${DOW[di % 7]} ${dt.getUTCDate()}</text>`;
+  }
+  const order = ['outdoor', ...HEATED];
+  for (const s of order) {
+    const pts = seriesT[s].map((v, k) => `${x(k).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    g += `<polyline points="${pts}" fill="none" stroke="${ZCOLOR[s]}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  const ends = order.map(s => ({ s, y: y(seriesT[s][n - 1]) })).sort((a, b) => a.y - b.y);
+  let prev = -Infinity;
+  for (const e of ends) { e.ly = Math.max(e.y, prev + 13); prev = e.ly; }
+  for (const e of ends) {
+    const x0 = x(n - 1);
+    g += `<line x1="${x0 + 2}" y1="${e.y}" x2="${x0 + 9}" y2="${e.ly}" stroke="var(--rule)"/>`;
+    g += `<text class="lbl" x="${x0 + 12}" y="${e.ly + 4}">${e.s === 'outdoor' ? 'Outdoors' : SHORT[e.s]}</text>`;
+  }
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+
+  // Wind strip, same x scale.
+  const wind = Array.from({ length: n }, (_, k) => R.wx.V[i0 + k]);
+  const Hs = 84, wt = niceTicks(0, Math.max(...wind, 10), 2), wh = wt.at(-1);
+  const ys = v => 6 + (wh - v) / wh * (Hs - 12);
+  let gs = '';
+  for (const t of wt) gs += `<line x1="${m.l}" x2="${W - m.r}" y1="${ys(t)}" y2="${ys(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${ys(t) + 3.5}" text-anchor="end">${t}</text>`;
+  const wpts = wind.map((v, k) => `${x(k).toFixed(1)},${ys(v).toFixed(1)}`);
+  gs += `<polygon points="${x(0)},${ys(0)} ${wpts.join(' ')} ${x(n - 1)},${ys(0)}" fill="var(--accent)" fill-opacity="0.12"/>`;
+  gs += `<polyline points="${wpts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>`;
+  gs += `<line class="xh" x1="0" x2="0" y1="4" y2="${Hs - 4}" stroke="var(--muted)" visibility="hidden"/>`;
+  strip.innerHTML = `<svg width="${W}" height="${Hs}" viewBox="0 0 ${W} ${Hs}">${gs}</svg>`;
+
+  const xhs = [el.querySelector('.xh'), strip.querySelector('.xh')];
+  const hit = el.querySelector('.hit');
+  hit.addEventListener('pointermove', e => {
+    const box = el.getBoundingClientRect();
+    const k = Math.max(0, Math.min(n - 1, Math.round((e.clientX - box.left - m.l) / (W - m.l - m.r) * (n - 1))));
+    for (const xh of xhs) { xh.setAttribute('x1', x(k)); xh.setAttribute('x2', x(k)); xh.setAttribute('visibility', 'visible'); }
+    const di = d0 + Math.floor(k / 24), dt = new Date(Date.UTC(2021, 0, 1) + di * 864e5);
+    showTip(e, `${DOW[di % 7]} ${MON[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${String(k % 24).padStart(2, '0')}:00`, [
+      ...order.map(s => ({ color: ZCOLOR[s], value: `${nf(seriesT[s][k], 1)}°F`, label: s === 'outdoor' ? 'Outdoors' : SHORT[s] })),
+      { color: 'var(--accent)', value: `${nf(wind[k])} mph`, label: 'Wind' },
+    ]);
+  });
+  hit.addEventListener('pointerleave', () => { for (const xh of xhs) xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  legend($('#week-legend'), order.map(s => ({ color: ZCOLOR[s], label: s === 'outdoor' ? 'Outdoors' : SHORT[s], line: true })));
+}
+
+// ---------------------------------------------------------------- method
+function renderMethod() {
+  const z = R.env.zones, i = inputs, M = R.main;
+  const ach = k => M.infilCfmH[k] / M.infilHours * 60 / z[ZONES[k]].V;
+  const mild = M.coolMild[ZONES.indexOf('upper')] / Math.max(1, M.coolTot[ZONES.indexOf('upper')]) * 100;
+  const items = [
+    ['Weather', `${R.station}, ${R.dataset}: 8,760 hours of temperature, sun and wind. Design points from the ASHRAE 2009 Handbook entries in the same file.`],
+    ['Zones', `Floor areas from the massing model: shop ${nf(z.shop.A)} ft², ground level ${nf(z.ground.A)} ft² (the ${nf(R.env.loggiaArea)} ft² loggia is outdoors), upper level ${nf(z.upper.A)} ft², vestibule ${nf(z.vest.A)} ft², south leg ${nf(z.garage.A)} ft². Each zone has an air node and a mass node (4″ of slab, or finishes upstairs), stepped every 15 minutes.`],
+    ['Walls and roofs', `Your R-values plus 12″ brick (R-${i.brickR}), drywall and air films. The outside film thickens or thins with the wind, and the windward faces see more of it. Sun heats opaque walls through sol-air temperatures and heats vented attics before it reaches the R-${i.shop.ceilingR} and R-${i.upper.roofR} ceilings.`],
+    ['Air leakage', `The LBL stack-and-wind model (ASHRAE Fundamentals) on hourly airport wind, shelter class ${i.site.shelter}. The blower-door tightness is an assumption, set fairly tight because every wall has foam: ACH50 ${i.shop.ach50} shop, ${i.ground.ach50} ground level, ${i.upper.ach50} upper level. That works out to an average of ${nf(ach(0), 2)}, ${nf(ach(2), 2)} and ${nf(ach(3), 2)} air changes per hour in shop, ground and upper.`],
+    ['Glass', `The 16 upper windows at 41″ × 67″ and the 72″ slider use U-${i.glass.windowU}, SHGC ${i.glass.windowSHGC}, with overhang shading and ${nf(i.glass.blinds * 100)}% of the sun passing blinds. The ground-level and shop windows come from the listing photos and are placeholders.`],
+    ['Slabs', `Uninsulated slab edge, F-${i.slab.F} Btu/h·ft·°F against the day's mean outdoor air. Slab edge is the ground level's largest single loss, so its real insulation matters.`],
+    ['Schedules', `The in-use temperatures apply only on heating-degree days (daily mean below 65°F), as you described. Heaters are sized at ${nf(i.plant.oversize, 2)}× their zone's design load, so warm-ups take time while the slab soaks up heat. The upper level's 40 empty days are spread evenly through the year.`],
+    ['Cooling', `With heat and cool both at ${i.upper.heatF}°F there is no deadband, so the upper level often heats at night and cools the next afternoon. ${nf(mild)}% of its cooling happens while it is below ${i.upper.coolF - 3}°F outside, which open windows or an economizer could cover.`],
+    ['Check first', 'Airtightness, slab-edge insulation, and the ground-level and shop windows move the answer most. Change them under Inputs and the page reruns.'],
+  ];
+  $('#method').replaceChildren(...items.map(([k, v]) => {
+    const li = document.createElement('li');
+    const b = document.createElement('b'); b.textContent = `${k}. `;
+    li.append(b, document.createTextNode(v)); return li;
+  }));
+}
+
+// ---------------------------------------------------------------- inputs form
+const SHELTER = ['1 · open, no obstructions', '2 · a few trees or sheds', '3 · some shelter nearby', '4 · suburban, heavy', '5 · downtown'];
+const FUELS = [['gas', 'Natural gas'], ['propane', 'Propane'], ['electric', 'Electric resistance'], ['heatpump', 'Heat pump']];
+function buildForm() {
+  const form = $('#form');
+  form.replaceChildren();
+  SCHEMA.forEach((grp, gidx) => {
+    const det = document.createElement('details');
+    if (gidx < 4) det.open = true;
+    const sum = document.createElement('summary'); sum.textContent = grp.group; det.append(sum);
+    if (grp.group === 'Center, upper level') {
+      const n = document.createElement('p'); n.className = 'groupnote';
+      n.textContent = 'Sixteen 41″ × 67″ windows, a 36″ door and a 72″ door, from you, placed in the 3D model.';
+      det.append(n);
+    }
+    for (const [path, label, unit, src, min, max, step] of grp.items) {
+      const id = 'in-' + path.replace(/\./g, '-');
+      const f = document.createElement('div'); f.className = 'field'; f.dataset.path = path;
+      const l = document.createElement('label'); l.htmlFor = id; l.textContent = label;
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const bdg = document.createElement('span'); bdg.className = `badge ${src}`; bdg.textContent = src;
+      meta.append(bdg);
+      if (unit && unit !== 'on/off') meta.append(document.createTextNode(unit));
+      let ctl;
+      const val = getIn(inputs, path);
+      if (path === 'plant.fuel' || path === 'site.shelter') {
+        ctl = document.createElement('select');
+        const opts = path === 'plant.fuel' ? FUELS : SHELTER.map((t, k) => [k + 1, t]);
+        for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; ctl.append(o); }
+        ctl.value = String(val);
+      } else if (path === 'site.wind') {
+        ctl = document.createElement('input'); ctl.type = 'checkbox'; ctl.checked = !!val;
+      } else {
+        ctl = document.createElement('input'); ctl.type = 'number'; ctl.inputMode = 'decimal';
+        ctl.min = min; ctl.max = max; ctl.step = step; ctl.value = val;
+      }
+      ctl.id = id;
+      ctl.addEventListener('change', () => onInput(path, ctl));
+      if (ctl.type === 'number') ctl.addEventListener('input', () => { if (ctl.validity.valid && ctl.value !== '') onInput(path, ctl); });
+      f.append(l, ctl, meta);
+      det.append(f);
+    }
+    form.append(det);
+  });
+  markChanged();
+}
+function onInput(path, ctl) {
+  let v;
+  if (ctl.type === 'checkbox') v = ctl.checked;
+  else if (path === 'plant.fuel') v = ctl.value;
+  else {
+    v = Number(ctl.value);
+    if (!Number.isFinite(v)) return;
+    const lo = ctl.min === '' ? -Infinity : Number(ctl.min), hi = ctl.max === '' ? Infinity : Number(ctl.max);
+    v = Math.min(hi, Math.max(lo, v));
+    if (path === 'site.shelter') v = Math.round(v);
+  }
+  if (getIn(inputs, path) === v) return;
+  setIn(inputs, path, v);
+  saveInputs(); markChanged(); scheduleRun();
+}
+function markChanged() {
+  document.querySelectorAll('.field').forEach(f => f.classList.toggle('changed', getIn(inputs, f.dataset.path) !== getIn(INPUTS, f.dataset.path)));
+}
+$('#reset').addEventListener('click', () => {
+  inputs = clone(INPUTS); saveInputs(); buildForm(); scheduleRun(0);
+});
+
+// ---------------------------------------------------------------- render
+function renderAll() {
+  if (!R) return;
+  renderKpis(); renderZoneTable(); renderPlan(); renderMonthly(); renderBalance(); renderWind();
+  fillWeeks(); renderWeek(); renderMethod();
+}
+let rz = 0;
+new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (R) { renderMonthly(); renderWind(); renderWeek(); } }); }).observe(resultsEl);
+
+buildForm();
+renderPlan();
+startWorker();
+// Precomputed default results paint the page at once; the live run replaces them.
+if (atDefaults()) {
+  fetch(new URL('./data/thermal-defaults.json', import.meta.url)).then(r => r.json()).then(d => {
+    if (!R) { R = d; renderAll(); resultsEl.classList.add('stale'); }
+  }).catch(() => {});
+}
+scheduleRun(0);
+</script>

@@ -1,63 +1,11 @@
-// Parametric massing model of 7824 Zero Rd.
-//
-// Units are feet. Axes: +x = east, +y = up, +z = south. Origin is the
-// centre of the two-story block's roof outline at grade.
-//
-// Plan dimensions come from Google Earth (ruler: 82.33 ft across the north
-// leg's north roof edge = 251 px, ~0.328 ft/px) cross-checked against the
-// listing's overhead drone photo. Roof outlines are what was measured; walls
-// sit one overhang inside them.
+// Parametric massing model of 7824 Zero Rd (three.js).
+// Geometry inputs and the opening inventory live in params.js, shared with
+// the heating and cooling model.
 
 import * as THREE from 'three';
+import { DEFAULTS, wallsOf, vestibuleDepth, centerPlate, openings } from './params.js';
 
-export const FT_PER_PX = 82.33 / 251;
-
-export const DEFAULTS = {
-  pitch: 5 / 12,        // hip roofs, rise per foot of run
-  overhang: 1.5,        // eave overhang past the wall face
-  roofThick: 0.7,       // fascia depth
-  wallT: 1.0,           // brick wall thickness
-
-  // Two-story block on the east side of the U.
-  // Wall stack: 11' ground level + 2' floor structure + 9' upper level.
-  center: {
-    name: 'Center (two-story)',
-    roof: { x0: -28.75, x1: 28.75, z0: -38.5, z1: 38.5 },
-    ground: 11, floor: 2, upper: 9,
-    loggiaDepth: 8,
-  },
-  // Legs of the U: single-volume, one tall story each.
-  // Main block has the center's footprint turned 90 deg (walls 74' E-W x
-  // 54'-6" N-S). A vestibule across the west end, behind the four arches,
-  // runs out to the measured 82.33' roof edge under the same hip roof.
-  north: {
-    name: 'North leg',
-    roof: { x0: -82.8, x1: -0.5, z0: -88.0, z1: -30.5 },
-    wall: 14,
-    mainLength: 74,
-  },
-  south: {
-    name: 'South leg (garage)',
-    roof: { x0: -62.5, x1: -8.0, z0: 30.5, z1: 79.5 },
-    wall: 12,
-  },
-};
-
-export function wallsOf(roof, overhang) {
-  return {
-    x0: roof.x0 + overhang, x1: roof.x1 - overhang,
-    z0: roof.z0 + overhang, z1: roof.z1 - overhang,
-  };
-}
-
-export function vestibuleDepth(p = DEFAULTS) {
-  const w = wallsOf(p.north.roof, p.overhang);
-  return (w.x1 - w.x0) - p.north.mainLength;
-}
-
-export function centerPlate(p = DEFAULTS) {
-  return p.center.ground + p.center.floor + p.center.upper;
-}
+export { DEFAULTS, FT_PER_PX, wallsOf, vestibuleDepth, centerPlate, openings } from './params.js';
 
 // ---------------------------------------------------------------- materials
 
@@ -228,10 +176,7 @@ export function hipRoof(r, eaveY, pitch, thick, mat) {
   return m;
 }
 
-const arch = (x, w, top, fill = 'glass') => ({ type: 'arch', x, w, sill: 0, top, fill });
-const win = (x, sill, w = 3, h = 4.5) => ({ type: 'rect', x, w, sill, top: sill + h, fill: 'glass' });
-const door = (x, sill = 0, w = 3.5, h = 7.5) => ({ type: 'rect', x, w, sill, top: sill + h, fill: 'door' });
-const ohDoor = (x, w = 10, h = 9) => ({ type: 'rect', x, w, sill: 0, top: h, fill: 'garage' });
+const FILL = { window: 'glass', glassDoor: 'glass', arch: 'glass', door: 'door', garageDoor: 'garage', open: 'open' };
 
 // ---------------------------------------------------------------- build
 
@@ -249,49 +194,56 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
   // ---- Center: two-story, 11' + 2' + 9'
   const c = p.center;
   const cw = wallsOf(c.roof, p.overhang);
-  const plate = c.ground + c.floor + c.upper;
-  const upSill = c.ground + c.floor + 3;       // upper-floor window sill
+  const plate = centerPlate(p);
+  const floor2 = c.ground + c.floor;
   const cW = cw.x1 - cw.x0, cD = cw.z1 - cw.z0;
   const nw = wallsOf(p.north.roof, p.overhang);
   const sw = wallsOf(p.south.roof, p.overhang);
+  const ops = openings(p);
+  const on = panel => ops.filter(o => o.panel === panel).map(o => ({ ...o, fill: FILL[o.kind] }));
 
   // West face = courtyard: open arcade on the ground floor between the legs.
   {
     const zA = nw.z1, zB = sw.z0;                // exposed span between legs
-    const n = 6, bay = (zB - zA) / n;
-    const ops = [];
-    for (let i = 0; i < n; i++) {
-      const lx = (zA + bay * (i + 0.5)) - (cw.z0 + t);
-      ops.push(arch(lx, 7, c.ground - 1, 'open'));
-      ops.push(win(lx, upSill));
-    }
     const cc = new THREE.Group(); cc.name = 'center';
-    cc.add(placeWall('W', cw, t, plate, ops, mats));
+    cc.add(placeWall('W', cw, t, plate, on('center.W'), mats));
 
     // Loggia: recessed inner wall behind the arches.
     const lw = { x0: cw.x0 + c.loggiaDepth, x1: cw.x0 + c.loggiaDepth + t + 1, z0: zA, z1: zB };
-    const L = zB - zA, m = L / 2;
-    cc.add(placeWall('W', { ...lw, z0: zA - t, z1: zB + t }, t, c.ground,
-      [win(m - 20, 3, 4, 5), door(m - 8), door(m + 8), win(m + 20, 3, 4, 5)], mats));
+    const L = zB - zA;
+    cc.add(placeWall('W', { ...lw, z0: zA - t, z1: zB + t }, t, c.ground, on('loggia.W'), mats));
     const lf = box(c.loggiaDepth, 0.3, L, mats.concrete, 'loggia_floor');
     lf.position.set(cw.x0 + c.loggiaDepth / 2, 0.15, (zA + zB) / 2);
     cc.add(lf);
 
-    // East face: windows on both levels, upper door to the exterior stair.
-    const eOps = [];
-    for (const lx of [6, 17, 28, 46, 57, 68]) eOps.push(win(lx, 3, 3, 5));
-    eOps.push(door(37));
-    for (const lx of [6, 17, 28, 39, 50, 61]) eOps.push(win(lx, upSill));
-    eOps.push(door(cD - 2 * t - 3.5, c.ground + c.floor, 3, 7));
-    cc.add(placeWall('E', cw, t, plate, eOps, mats));
+    // East, north and south faces. The upper east door opens onto the
+    // exterior stair; the 72" north door onto a small balcony.
+    cc.add(placeWall('E', cw, t, plate, on('center.E'), mats));
+    cc.add(placeWall('N', cw, t, plate, on('center.N'), mats));
+    cc.add(placeWall('S', cw, t, plate, on('center.S'), mats));
 
-    // North face: exposed east of the north leg.
-    cc.add(placeWall('N', cw, t, plate,
-      [win(8, 3, 3, 5), win(20, 3, 3, 5), win(8, upSill), win(20, upSill)], mats));
-
-    // South face: exposed east of the south leg.
-    cc.add(placeWall('S', cw, t, plate,
-      [win(cW - 22, 3, 3, 5), door(cW - 10), win(cW - 22, upSill), win(cW - 10, upSill)], mats));
+    const slider = ops.find(o => o.panel === 'center.N' && o.kind === 'glassDoor');
+    if (slider) {
+      const bal = new THREE.Group(); bal.name = 'balcony';
+      const bw = slider.w + 2, bd = 4, bx = cw.x1 - slider.x, bz = cw.z0 - bd / 2;
+      const deck = box(bw, 0.3, bd, mats.steel, 'balcony_deck');
+      deck.position.set(bx, floor2 - 0.15, bz);
+      bal.add(deck);
+      const rail = (w, d, x, z) => {
+        const r = box(w, 0.15, d, mats.steel, 'handrail');
+        r.position.set(x, floor2 + 3.5, z);
+        bal.add(r);
+      };
+      rail(bw, 0.15, bx, cw.z0 - bd);
+      rail(0.15, bd, bx - bw / 2, bz);
+      rail(0.15, bd, bx + bw / 2, bz);
+      for (const sx of [-1, 1]) {
+        const post = box(0.3, floor2 + 3.5, 0.3, mats.steel, 'post');
+        post.position.set(bx + sx * (bw / 2 - 0.15), (floor2 + 3.5) / 2, cw.z0 - bd + 0.15);
+        bal.add(post);
+      }
+      walls.add(bal);
+    }
 
     // Exterior floor band marking the 2' floor structure.
     const band = new THREE.Group(); band.name = 'floor_band';
@@ -347,15 +299,14 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
   {
     const L = p.north, w = nw, h = L.wall;
     const g = new THREE.Group(); g.name = 'north_leg';
-    const D = w.z1 - w.z0 - 2 * t, bay = D / 4;
     const vest = vestibuleDepth(p);
-    g.add(placeWall('W', w, t, h, [0, 1, 2, 3].map(i => arch(bay * (i + 0.5), 8, 10.5)), mats));
+    g.add(placeWall('W', w, t, h, on('north.W'), mats));
     // West wall of the main block = back wall of the vestibule.
     const iw = { x0: w.x0 + vest, x1: w.x0 + vest + 2 * t, z0: w.z0, z1: w.z1 };
-    g.add(placeWall('W', iw, t, h, [door(D / 2 - 12, 0, 6, 8), door(D / 2 + 12, 0, 6, 8)], mats));
-    g.add(placeWall('S', w, t, h, [win(vest / 2, 4, 2.5, 5), win(18, 4, 4, 5), win(32, 4, 4, 5), door(46)], mats));
-    g.add(placeWall('N', w, t, h, [20, 40, 60].map(x => win(x, 8, 4, 3)), mats));
-    g.add(placeWall('E', w, t, h, [door(12), win(30, 4, 4, 5)], mats));
+    g.add(placeWall('W', iw, t, h, on('north.inner'), mats));
+    g.add(placeWall('S', w, t, h, on('north.S'), mats));
+    g.add(placeWall('N', w, t, h, on('north.N'), mats));
+    g.add(placeWall('E', w, t, h, on('north.E'), mats));
     walls.add(g);
     roofs.add(hipRoof(L.roof, h, p.pitch, p.roofThick, mats.roof));
   }
@@ -364,10 +315,7 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
   {
     const L = p.south, w = sw, h = L.wall;
     const g = new THREE.Group(); g.name = 'south_leg';
-    g.add(placeWall('S', w, t, h, [ohDoor(15), ohDoor(33), door(45)], mats));
-    g.add(placeWall('W', w, t, h, [win(22, 4, 4, 4)], mats));
-    g.add(placeWall('N', w, t, h, [door(28), win(40, 4, 4, 5)], mats));
-    g.add(placeWall('E', w, t, h, [win(10, 4, 4, 4), win(25, 4, 4, 4)], mats));
+    for (const f of ['S', 'W', 'N', 'E']) g.add(placeWall(f, w, t, h, on(`south.${f}`), mats));
     walls.add(g);
     roofs.add(hipRoof(L.roof, h, p.pitch, p.roofThick, mats.roof));
   }
