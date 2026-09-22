@@ -1,0 +1,13 @@
+{
+  "name": "7824-zero-rd",
+  "private": true,
+  "type": "module",
+  "description": "Parametric 3D massing model of 7824 Zero Rd",
+  "scripts": {
+    "export": "node scripts/export.mjs",
+    "serve": "npx http-server -c-1 ."
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  }
+}

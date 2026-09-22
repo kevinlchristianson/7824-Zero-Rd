@@ -1,0 +1,62 @@
+newmtl brick
+Kd 0.7991 0.7454 0.6514
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl glass
+Kd 0.0252 0.0356 0.0437
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl door
+Kd 0.1441 0.0865 0.0578
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl concrete
+Kd 0.5029 0.4735 0.4179
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl floor_band
+Kd 0.6514 0.5711 0.4508
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl steel
+Kd 0.0437 0.0423 0.0395
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl garage_door
+Kd 0.8632 0.8308 0.7758
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl roof_shingle
+Kd 0.1022 0.0612 0.0513
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2
+
+newmtl floor_slab
+Kd 0.5841 0.5210 0.4233
+Ka 0 0 0
+Ks 0.05 0.05 0.05
+d 1
+illum 2

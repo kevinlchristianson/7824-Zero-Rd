@@ -1,0 +1,407 @@
+<title>7824 Zero Rd</title>
+<meta name="description" content="Parametric 3D massing model of the U-shaped brick building at 7824 Zero Rd.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f3f1ec;
+    --sheet: #fbfaf7;
+    --ink: #23201d;
+    --muted: #6d675f;
+    --rule: #d9d3c9;
+    --accent: #8a4f35;
+    --brick: #e7e0d3;
+    --band: #c9bfae;
+    --roof: #5a4640;
+    --sky: #dfe6ea;
+    --focus: #2f6f8f;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #161412;
+      --sheet: #1d1a17;
+      --ink: #ece6dd;
+      --muted: #a39b90;
+      --rule: #3a342e;
+      --accent: #d39473;
+      --brick: #cfc7b8;
+      --band: #8d8475;
+      --roof: #7a625a;
+      --sky: #1f2629;
+      --focus: #7fb7d1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #161412;
+    --sheet: #1d1a17;
+    --ink: #ece6dd;
+    --muted: #a39b90;
+    --rule: #3a342e;
+    --accent: #d39473;
+    --brick: #cfc7b8;
+    --band: #8d8475;
+    --roof: #7a625a;
+    --sky: #1f2629;
+    --focus: #7fb7d1;
+  }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 14px/1.5 var(--body);
+  }
+  .app {
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  .stage {
+    position: relative;
+    min-height: 0;
+    background: var(--sky);
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .stage:focus-within canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+  .toolbar {
+    position: absolute;
+    left: 16px; right: 16px; top: 16px;
+    display: flex; flex-wrap: wrap; gap: 8px;
+    pointer-events: none;
+  }
+  .seg {
+    display: flex; flex-wrap: wrap;
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    pointer-events: auto;
+  }
+  .seg button, .seg label {
+    font: 600 13px/1 var(--display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    padding: 9px 11px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .seg > * + * { border-left: 1px solid var(--rule); }
+  .seg button[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+  .seg button:hover, .seg label:hover { color: var(--ink); }
+  .seg button:focus-visible, .seg input:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .seg input { accent-color: var(--accent); margin: 0; }
+
+  .compass {
+    position: absolute; right: 16px; bottom: 16px;
+    width: 44px; height: 44px;
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+    display: grid; place-items: center;
+  }
+  .compass svg { transition: transform 60ms linear; }
+  .hint {
+    position: absolute; left: 16px; bottom: 16px;
+    font: 12px var(--mono);
+    color: var(--muted);
+    background: color-mix(in srgb, var(--sheet) 85%, transparent);
+    padding: 4px 8px;
+    border-radius: 3px;
+  }
+
+  /* Title-block sheet */
+  .sheet {
+    background: var(--sheet);
+    border-left: 1px solid var(--rule);
+    overflow-y: auto;
+    padding-inline: 20px;
+    padding-block: 20px 28px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .eyebrow {
+    font: 600 12px/1 var(--display);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 6px;
+  }
+  h1 {
+    font: 700 40px/0.95 var(--display);
+    letter-spacing: 0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede { color: var(--muted); margin: 8px 0 0; max-width: 38ch; }
+  h2 {
+    font: 600 13px/1 var(--display);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .vol { display: grid; gap: 12px; }
+  .vol-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; }
+  .vol-name { font-weight: 600; }
+  .vol-dim { font: 500 13px var(--mono); font-variant-numeric: tabular-nums; }
+  .vol-sub { grid-column: 1 / -1; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .totals { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; }
+  .totals dt { color: var(--muted); }
+  .totals dd { margin: 0; font: 500 13px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .section-svg { width: 100%; height: auto; display: block; }
+  .section-svg text { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+  .section-svg .lbl { font-family: var(--display); font-weight: 600; letter-spacing: 0.08em; font-size: 10.5px; fill: var(--ink); }
+  .notes { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 16px; display: grid; gap: 6px; }
+  .notes code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+
+  @media (max-width: 800px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 62vh auto; height: auto; }
+    .sheet { border-left: 0; border-top: 1px solid var(--rule); overflow: visible; padding-inline: 16px; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .compass svg { transition: none; }
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Camera view" id="views">
+        <button type="button" data-view="courtyard" aria-pressed="true">Courtyard</button>
+        <button type="button" data-view="southwest">SW aerial</button>
+        <button type="button" data-view="northeast">NE aerial</button>
+        <button type="button" data-view="plan">Plan</button>
+      </div>
+      <div class="seg" role="group" aria-label="Layers">
+        <label for="tgl-roofs"><input type="checkbox" id="tgl-roofs" checked> Roofs</label>
+        <label for="tgl-site"><input type="checkbox" id="tgl-site" checked> Site</label>
+      </div>
+    </div>
+    <div class="compass" aria-label="North arrow">
+      <svg id="north" width="30" height="30" viewBox="-15 -15 30 30" aria-hidden="true">
+        <path d="M0 -11 L5 5 L0 2 L-5 5 Z" fill="var(--accent)"></path>
+        <text x="0" y="13" text-anchor="middle" font-family="var(--display)" font-weight="700" font-size="8" fill="var(--ink)">N</text>
+      </svg>
+    </div>
+    <div class="hint">drag to orbit · right-drag to pan · scroll to zoom</div>
+  </div>
+
+  <aside class="sheet">
+    <header>
+      <p class="eyebrow">Massing model · Casper, WY</p>
+      <h1>7824 Zero Rd</h1>
+      <p class="lede">A U-shaped brick building that opens west onto a courtyard. The center block is two stories. Each leg is one tall volume. The north leg has the same footprint as the center block, plus a vestibule across its west end. Every roof is hipped.</p>
+    </header>
+
+    <section>
+      <h2>Volumes, wall to wall</h2>
+      <div class="vol" id="volumes"></div>
+    </section>
+
+    <section>
+      <h2>Wall heights to scale</h2>
+      <svg class="section-svg" id="section" viewBox="0 0 300 170" role="img" aria-label="Wall heights of the three volumes drawn to scale"></svg>
+    </section>
+
+    <section>
+      <h2>Totals</h2>
+      <dl class="totals" id="totals"></dl>
+    </section>
+
+    <section>
+      <h2>Sources &amp; assumptions</h2>
+      <ul class="notes">
+        <li>Plan is scaled from Google Earth. The ruler reads 82.33&nbsp;ft along the north leg's north roof edge, which is about 0.33&nbsp;ft per pixel. Overall proportions were checked against the listing's overhead drone shot.</li>
+        <li>The north leg's main block has the center's footprint turned 90°. The extra length to the measured roof edge is a vestibule behind the four west arches.</li>
+        <li>The center wall stack is 11′ ground level, then 2′ of floor structure, then 9′ upper level, for a 22′ plate.</li>
+        <li>Leg wall heights, the 5:12 roof pitch, the 1′‑6″ overhang, and door and window placement are estimates from the listing photos.</li>
+        <li>All inputs live in <code>model/building.js</code>. <code>npm run export</code> writes OBJ and GLB files to <code>export/</code>.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildHouse, summary, DEFAULTS, wallsOf, centerPlate } from './model/building.js';
+
+const P = DEFAULTS;
+const stage = document.getElementById('stage');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ftin = v => {
+  const f = Math.floor(v + 1e-6), i = Math.round((v - f) * 12);
+  return i === 12 ? `${f + 1}′` : i ? `${f}′‑${i}″` : `${f}′`;
+};
+
+// ---------------- sheet
+const rows = summary(P);
+document.getElementById('volumes').innerHTML = rows.map(r => `
+  <div class="vol-row">
+    <span class="vol-name">${r.name}</span>
+    <span class="vol-dim">${ftin(r.ew)} × ${ftin(r.ns)}</span>
+    <span class="vol-sub">${r.heights.map(([k, v]) => `${k} ${ftin(v)}`).join(' · ')}</span>
+    ${(r.parts || []).map(([k, a, b]) => `<span class="vol-sub">${k} ${ftin(a)} × ${ftin(b)}</span>`).join('')}
+    <span class="vol-sub">roof ${ftin(r.roofEW)} × ${ftin(r.roofNS)} E–W × N–S</span>
+  </div>`).join('');
+
+{
+  // Footprint union: legs overlap the center at its NW and SW corners.
+  const cw = wallsOf(P.center.roof, P.overhang);
+  const area = w => (w.x1 - w.x0) * (w.z1 - w.z0);
+  const overlap = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) *
+                            Math.max(0, Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0));
+  const nw = wallsOf(P.north.roof, P.overhang), sw = wallsOf(P.south.roof, P.overhang);
+  const foot = area(cw) + area(nw) + area(sw) - overlap(cw, nw) - overlap(cw, sw);
+  const gross = foot + area(cw);
+  const fmt = n => Math.round(n).toLocaleString('en-US');
+  const all = [cw, nw, sw];
+  const ext = { x: Math.max(...all.map(w => w.x1)) - Math.min(...all.map(w => w.x0)),
+                z: Math.max(...all.map(w => w.z1)) - Math.min(...all.map(w => w.z0)) };
+  document.getElementById('totals').innerHTML = `
+    <dt>Footprint</dt><dd>${fmt(foot)} sq ft</dd>
+    <dt>Gross, with upper level</dt><dd>${fmt(gross)} sq ft</dd>
+    <dt>Overall E–W × N–S</dt><dd>${ftin(ext.x)} × ${ftin(ext.z)}</dd>
+    <dt>Center plate / ridge</dt><dd>${ftin(centerPlate(P))} / ${ftin(centerPlate(P) + P.roofThick + (P.center.roof.x1 - P.center.roof.x0) / 2 * P.pitch)}</dd>`;
+}
+
+{
+  // Heights to scale: 1 ft = 5 px, grade at y = 150.
+  const s = 5, g = 150, c = P.center;
+  const bars = [
+    { x: 20, w: 70, name: 'CENTER', parts: [[c.ground, 'var(--brick)'], [c.floor, 'var(--band)'], [c.upper, 'var(--brick)']] },
+    { x: 125, w: 60, name: 'NORTH LEG', parts: [[P.north.wall, 'var(--brick)']] },
+    { x: 215, w: 60, name: 'SOUTH LEG', parts: [[P.south.wall, 'var(--brick)']] },
+  ];
+  let out = `<line x1="8" x2="292" y1="${g}" y2="${g}" stroke="var(--ink)" stroke-width="1.2"/>`;
+  for (const b of bars) {
+    let y = g;
+    for (const [h, fill] of b.parts) {
+      out += `<rect x="${b.x}" y="${y - h * s}" width="${b.w}" height="${h * s}" fill="${fill}" stroke="var(--ink)" stroke-width="0.8"/>`;
+      if (b.parts.length > 1) out += `<text x="${b.x + b.w + 5}" y="${y - h * s / 2 + 3.5}">${ftin(h)}</text>`;
+      y -= h * s;
+    }
+    const top = g - b.parts.reduce((a, [h]) => a + h, 0) * s;
+    out += `<path d="M${b.x - 4} ${top} L${b.x + b.w / 2} ${top - 16} L${b.x + b.w + 4} ${top} Z" fill="var(--roof)"/>`;
+    out += `<text class="lbl" x="${b.x + b.w / 2}" y="${g + 14}" text-anchor="middle">${b.name}</text>`;
+    if (b.parts.length === 1) out += `<text x="${b.x + b.w / 2}" y="${top + 14}" text-anchor="middle">${ftin(b.parts[0][0])}</text>`;
+  }
+  out += `<text x="${bars[0].x + bars[0].w / 2}" y="${g - centerPlate(P) * s + 14}" text-anchor="middle">${ftin(centerPlate(P))} plate</text>`;
+  document.getElementById('section').innerHTML = out;
+}
+
+// ---------------- scene
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.domElement.tabIndex = 0;
+renderer.domElement.setAttribute('aria-label', '3D model viewport');
+stage.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const applyTheme = () => {
+  const sky = new THREE.Color(css('--sky') || '#dfe6ea');
+  scene.background = sky;
+  scene.fog = new THREE.Fog(sky, 420, 900);
+};
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 3000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;
+controls.minDistance = 20;
+controls.maxDistance = 900;
+
+scene.add(new THREE.HemisphereLight(0xf2f5ff, 0x8a7a5c, 1.1));
+const sun = new THREE.DirectionalLight(0xfff3e0, 2.4);
+sun.position.set(-120, 200, 140);   // summer afternoon, from the southwest
+sun.target.position.set(-25, 0, 0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 10, far: 600 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.3;
+scene.add(sun, sun.target);
+
+const house = buildHouse(P);
+scene.add(house);
+const layer = n => house.getObjectByName(n);
+
+document.getElementById('tgl-roofs').addEventListener('change', e => { layer('roofs').visible = e.target.checked; });
+document.getElementById('tgl-site').addEventListener('change', e => { layer('site').visible = e.target.checked; });
+
+// ---------------- views
+const VIEWS = {
+  courtyard: { pos: [-205, 62, 38], target: [-12, 9, 0] },
+  southwest: { pos: [-190, 120, 205], target: [-25, 6, 0] },
+  northeast: { pos: [135, 85, -175], target: [-25, 8, -5] },
+  plan:      { pos: [-26, 380, 0.5], target: [-26, 0, 0] },
+};
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let tween = null;
+function go(name, instant) {
+  const v = VIEWS[name];
+  document.querySelectorAll('#views button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  const to = { pos: new THREE.Vector3(...v.pos), target: new THREE.Vector3(...v.target) };
+  if (instant || reduce) {
+    camera.position.copy(to.pos); controls.target.copy(to.target); controls.update();
+    tween = null; return;
+  }
+  tween = { t0: performance.now(), dur: 700, from: { pos: camera.position.clone(), target: controls.target.clone() }, to };
+}
+document.getElementById('views').addEventListener('click', e => {
+  const b = e.target.closest('button[data-view]');
+  if (b) go(b.dataset.view);
+});
+controls.addEventListener('start', () => { tween = null; });
+go('courtyard', true);
+
+// ---------------- loop
+const north = document.getElementById('north');
+function resize() {
+  const { width, height } = stage.getBoundingClientRect();
+  renderer.setSize(width, height, false);
+  camera.aspect = width / Math.max(height, 1);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+renderer.setAnimationLoop(now => {
+  if (tween) {
+    const k = Math.min(1, (now - tween.t0) / tween.dur), e = k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
+    camera.position.lerpVectors(tween.from.pos, tween.to.pos, e);
+    controls.target.lerpVectors(tween.from.target, tween.to.target, e);
+    if (k === 1) tween = null;
+  }
+  controls.update();
+  north.style.transform = `rotate(${THREE.MathUtils.radToDeg(controls.getAzimuthalAngle())}deg)`;
+  renderer.render(scene, camera);
+});
+</script>
