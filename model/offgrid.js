@@ -13,7 +13,10 @@
 //   C  B with an outdoor wood boiler feeding the buffer: it covers whatever
 //      the heat pumps can't, and takes over the heat when the batteries run
 //      low or it's cold enough, so the batteries carry only the house.
-//   B and C run in conservation mode year-round (see conservation()).
+//   B and C live normally and drop into conservation mode (see
+//   conservation()) only when the batteries run low, for at most maxConsH
+//   hours a year: the worst weeks and cold snaps. Set ctx.cons to the
+//   conservation context to enable it.
 
 import { buildContext, loadsFor, SOLAR_INPUTS } from './solar.js';
 import { INPUTS as THERMAL } from './thermal.js';
@@ -47,6 +50,8 @@ export const OFFGRID_INPUTS = {
   resBase: 1500, resPerKw: 100,                               // assumed: electric boiler in the buffer
   resOptions: [0, 10, 20, 30, 45],
   maxBehindH: 6,                                              // B: the house may run behind up to 6 h at a stretch (warm-ups)
+  maxConsH: 336,                                              // owner: conservation only in the worst stretches, at most two weeks a year
+  consRules: [null, { on: 0.15, off: 0.5 }, { on: 0.3, off: 0.6 }, { on: 0.5, off: 0.8 }],  // enter below `on`, leave at `off` battery charge
   // C: outdoor wood boiler (assumed: Central Boiler-class unit, 150k Btu/h)
   owb: 18000, owbBtuh: 150000, owbEff: 0.65, owbPumpKw: 0.15, // installed with buried lines and a buffer exchanger; efficiency at full burn
   owbIdleBtuh: 20000,                                         // assumed: wood burned while the fire idles, held back below full output
@@ -193,15 +198,19 @@ export function outageKit(ctx, O = OFFGRID_INPUTS) {
 export function simulateB(ctx, design, O = OFFGRID_INPUTS, trace = false) {
   const s = ctx.s, f = s.finance, { kw, nb, tons, resKw } = design;
   const L = (ctx._ae ??= {})[`${tons}/${resKw}`] ??= ctx.allElectric(O.tons[tons].tons, resKw);
+  const rule = design.cons, Lc = rule && ctx.cons ? ((ctx.cons._ae ??= {})[`${tons}/${resKw}`] ??= ctx.cons.allElectric(O.tons[tons].tons, resKw)) : null;
   const ni = Math.max(2, Math.ceil(kw / O.invDC), Math.ceil(L.peak / O.invAC));
   const ac = ni * O.invAC, cap = nb * O.battKwh * O.dod, bkw = Math.min(nb * O.battKw, ac), rt = Math.sqrt(O.rte);
   let soc = cap, st;
   for (let pass = 0; pass < 2; pass++) {
-    st = { unserved: 0, unH: 0, spill: 0, prod: 0, load: 0 };
+    st = { unserved: 0, unH: 0, spill: 0, prod: 0, load: 0, consH: 0 };
     const mon = trace ? { prod: Array(12).fill(0), load: Array(12).fill(0), spill: Array(12).fill(0) } : null;
-    const daySoc = trace ? Array(365).fill(1) : null;
+    const daySoc = trace ? Array(365).fill(1) : null, dayCons = trace ? Array(365).fill(0) : null;
+    let conserving = false;
     for (let i = 0; i < ctx.n; i++) {
-      const m = ctx.month[i], p = Math.min(kw * ctx.pvDC[i] * O.eff, ac), load = L.e[i] + ni * O.idleW / 1000;
+      if (Lc) { const fr = cap ? soc / cap : 0; if (fr < rule.on) conserving = true; else if (fr >= rule.off) conserving = false; }
+      if (conserving) { st.consH++; if (dayCons) dayCons[Math.floor(i / 24)] = 1; }
+      const m = ctx.month[i], p = Math.min(kw * ctx.pvDC[i] * O.eff, ac), load = (conserving ? Lc.e[i] : L.e[i]) + ni * O.idleW / 1000;
       const net = p - load;
       if (net >= 0) { const ch = Math.min(net, bkw, (cap - soc) / rt); soc += ch * rt; st.spill += net - ch; if (mon) mon.spill[m] += net - ch; }
       else { let need = -net; const dis = Math.min(need, bkw, soc * rt); soc -= dis / rt; need -= dis; if (need > 1e-6) { st.unserved += need; st.unH++; } }
@@ -209,7 +218,7 @@ export function simulateB(ctx, design, O = OFFGRID_INPUTS, trace = false) {
       if (mon) { mon.prod[m] += p; mon.load[m] += load; }
       if (daySoc) { const d = Math.floor(i / 24); daySoc[d] = Math.min(daySoc[d], cap ? soc / cap : 0); }
     }
-    if (trace) { st.mon = mon; st.daySoc = daySoc; }
+    if (trace) { st.mon = mon; st.daySoc = daySoc; st.dayCons = dayCons; }
   }
   const capex = kw * s.capex.pvPerKw + s.capex.fixed + ni * O.inv + nb * O.batt + O.tons[tons].cost + s.hp.buffer + s.hp.controls
     + (resKw ? O.resBase + O.resPerKw * resKw : 0);
@@ -224,15 +233,16 @@ export function optimizeB(ctx, O = OFFGRID_INPUTS) {
   const kws = Array.from({ length: 36 }, (_, k) => 24 + 6 * k);
   const nbs = [4, 6, 8, 10, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46, 49, 52, 55, 58, 61, 64, 70, 76];
   const rows = [];
+  const holds = x => x.unserved <= 1 && x.consH <= O.maxConsH;
   for (const tons of Object.keys(O.tons)) for (const resKw of O.resOptions) {
     const L = (ctx._ae ??= {})[`${tons}/${resKw}`] ??= ctx.allElectric(O.tons[tons].tons, resKw);
     const row = { tons, resKw, label: O.tons[tons].label, longestBehind: L.longest, behindH: L.behindH, resKwh: L.resKwh, design: null };
     rows.push(row);
     if (L.longest > O.maxBehindH) continue;
-    for (const nb of nbs) {
-      if (simulateB(ctx, { kw: kws.at(-1), nb, tons, resKw }, O).unserved > 1) continue;
+    for (const cons of ctx.cons ? O.consRules : [null]) for (const nb of nbs) {
+      if (!holds(simulateB(ctx, { kw: kws.at(-1), nb, tons, resKw, cons }, O))) continue;
       let lo = 0, hi = kws.length - 1, hit = null;
-      while (lo <= hi) { const mid = (lo + hi) >> 1, x = simulateB(ctx, { kw: kws[mid], nb, tons, resKw }, O); if (x.unserved <= 1) { hit = x; hi = mid - 1; } else lo = mid + 1; }
+      while (lo <= hi) { const mid = (lo + hi) >> 1, x = simulateB(ctx, { kw: kws[mid], nb, tons, resKw, cons }, O); if (holds(x)) { hit = x; hi = mid - 1; } else lo = mid + 1; }
       if (hit && (!row.design || hit.life < row.design.life)) row.design = hit;
     }
   }
@@ -245,10 +255,13 @@ export function optimizeB(ctx, O = OFFGRID_INPUTS) {
 export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
   const s = ctx.s, f = s.finance, r = s.rates, { kw, nb, tons, policy } = design;
   const W = (ctx._wp ??= {})[tons] ??= ctx.woodParts(O.tons[tons].tons);
+  const rule = design.cons, Wc = rule && ctx.cons ? ((ctx.cons._wp ??= {})[tons] ??= ctx.cons.woodParts(O.tons[tons].tons)) : null;
   const ni = Math.max(2, Math.ceil(kw / O.invDC)), ac = ni * O.invAC, cap = nb * O.battKwh * O.dod, bkw = Math.min(nb * O.battKw, ac), rt = Math.sqrt(O.rte);
   let soc = cap, st;
   for (let pass = 0; pass < 2; pass++) {
-    st = { unserved: 0, unH: 0, spill: 0, prod: 0, load: 0, woodBtu: 0, woodFuel: 0, hpBtu: 0, unmetHeat: 0, burnH: 0 };
+    st = { unserved: 0, unH: 0, spill: 0, prod: 0, load: 0, woodBtu: 0, woodFuel: 0, hpBtu: 0, unmetHeat: 0, burnH: 0, consH: 0 };
+    let conserving = false;
+    const dayCons = trace ? Array(365).fill(0) : null;
     const mon = trace ? { prod: Array(12).fill(0), load: Array(12).fill(0), spill: Array(12).fill(0), wood: Array(12).fill(0), hp: Array(12).fill(0) } : null;
     const daySoc = trace ? Array(365).fill(1) : null;
     // The buffer as a heat store: E is Btu held above the hour's reset
@@ -258,13 +271,16 @@ export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
     let burning = false, E = 0;
     for (let i = 0; i < ctx.n; i++) {
       const m = ctx.month[i], p = Math.min(kw * ctx.pvDC[i] * O.eff, ac);
+      if (Wc) { const fr = cap ? soc / cap : 0; if (fr < rule.on) conserving = true; else if (fr >= rule.off) conserving = false; }
+      if (conserving) { st.consH++; if (dayCons) dayCons[Math.floor(i / 24)] = 1; }
+      const X = conserving ? Wc : W;
       const Tw = W.tw[i], room = Math.max(0, lbPerF * (maxF - Tw));
       E = Math.min(E, room);
       // Hot water: the lower coil preheats toward the tank's temperature; the
       // electric tankless makes up the rest.
       const tank = Tw + E / lbPerF, dhw = W.dhw[i];
       const pre = W.chilled[i] ? 0 : dhw * clamp((Math.min(W.setF, tank - 10) - W.tin[i]) / (W.setF - W.tin[i]), 0, 1);
-      const H = W.space[i] + pre;
+      const H = X.space[i] + pre;
       const frac = cap ? soc / cap : 0;
       if (frac < policy.socOn) burning = true; else if (frac >= policy.socOff) burning = false;
       const cold = policy.tF != null && ctx.T[i] < policy.tF;
@@ -277,7 +293,7 @@ export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
       }
       hpq = Math.min(need, W.cap[i]); need -= hpq;
       if (need > 0) { const w2 = Math.min(need, O.owbBtuh - wood); wood += w2; need -= w2; st.unmetHeat += need; }
-      const load = W.base[i] + (dhw - pre) / BTU + hpq / (W.cop[i] * BTU) + (wood > 0 ? O.owbPumpKw : 0) + ni * O.idleW / 1000;
+      const load = X.base[i] + (dhw - pre) / BTU + hpq / (W.cop[i] * BTU) + (wood > 0 ? O.owbPumpKw : 0) + ni * O.idleW / 1000;
       const lit = burning || cold || wood > 0;
       if (lit) { st.burnH++; st.woodFuel += wood / O.owbEff + O.owbIdleBtuh * Math.max(0, 1 - wood / O.owbBtuh); }
       st.woodBtu += wood; st.hpBtu += hpq;
@@ -288,7 +304,7 @@ export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
       if (mon) { mon.prod[m] += p; mon.load[m] += load; mon.wood[m] += wood; mon.hp[m] += hpq; }
       if (daySoc) { const d = Math.floor(i / 24); daySoc[d] = Math.min(daySoc[d], cap ? soc / cap : 0); }
     }
-    if (trace) { st.mon = mon; st.daySoc = daySoc; }
+    if (trace) { st.mon = mon; st.daySoc = daySoc; st.dayCons = dayCons; }
   }
   const cords = st.woodFuel / (O.cordMMBtu * 1e6);
   const capex = kw * s.capex.pvPerKw + s.capex.fixed + ni * O.inv + nb * O.batt + O.tons[tons].cost + s.hp.buffer + s.hp.controls + O.owb;
@@ -304,13 +320,14 @@ export function optimizeC(ctx, O = OFFGRID_INPUTS) {
   const kws = Array.from({ length: 30 }, (_, k) => 12 + 6 * k);
   const nbs = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 19, 22, 25, 28, 31, 34, 37, 40];
   const rows = [];
+  const holds = x => x.unserved <= 1 && x.consH <= O.maxConsH;
   for (const tons of ['3.5', '6', '9.5', '12']) for (const policy of O.woodPolicies) {
     const row = { tons, label: O.tons[tons].label, policy, design: null };
     rows.push(row);
-    for (const nb of nbs) {
-      if (simulateC(ctx, { kw: kws.at(-1), nb, tons, policy }, O).unserved > 1) continue;
+    for (const cons of ctx.cons ? O.consRules : [null]) for (const nb of nbs) {
+      if (!holds(simulateC(ctx, { kw: kws.at(-1), nb, tons, policy, cons }, O))) continue;
       let lo = 0, hi = kws.length - 1, hit = null;
-      while (lo <= hi) { const mid = (lo + hi) >> 1, x = simulateC(ctx, { kw: kws[mid], nb, tons, policy }, O); if (x.unserved <= 1) { hit = x; hi = mid - 1; } else lo = mid + 1; }
+      while (lo <= hi) { const mid = (lo + hi) >> 1, x = simulateC(ctx, { kw: kws[mid], nb, tons, policy, cons }, O); if (holds(x)) { hit = x; hi = mid - 1; } else lo = mid + 1; }
       if (hit && hit.unmetHeat < 1e5 && (!row.design || hit.life < row.design.life)) row.design = hit;
     }
   }
