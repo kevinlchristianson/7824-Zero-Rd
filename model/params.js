@@ -30,8 +30,11 @@ const W = {
 };
 const roofOf = w => ({ x0: w.x0 - OVERHANG, x1: w.x1 + OVERHANG, z0: w.z0 - OVERHANG, z1: w.z1 + OVERHANG });
 
+// Every roof is a gable with two slopes (owner). Ridges run the long way
+// (assumed): north-south on the center, east-west on both legs. `ridge`
+// names the axis the ridge runs along: 'x' east-west, 'z' north-south.
 export const DEFAULTS = {
-  pitch: 5 / 12,        // hip roofs, rise per foot of run
+  pitch: 5 / 12,        // gable roofs, rise per foot of run
   overhang: OVERHANG,   // eave overhang past the wall face
   roofThick: 0.7,       // fascia depth
   wallT: WALL,          // brick + foam wall thickness
@@ -42,6 +45,7 @@ export const DEFAULTS = {
   center: {
     name: 'Center (two-story)',
     roof: roofOf(W.center),
+    ridge: 'z',
     ground: 11, floor: 2, upper: 9,
     loggiaDepth: 8,
   },
@@ -51,12 +55,14 @@ export const DEFAULTS = {
   north: {
     name: 'North leg',
     roof: roofOf(W.north),
+    ridge: 'x',
     wall: 14,
     mainLength: EXT_D,
   },
   south: {
     name: 'South leg (garage)',
     roof: roofOf(W.south),
+    ridge: 'x',
     wall: 12,
   },
 
@@ -80,6 +86,21 @@ export function vestibuleDepth(p = DEFAULTS) {
 
 export function centerPlate(p = DEFAULTS) {
   return p.center.ground + p.center.floor + p.center.upper;
+}
+
+// Wall plate height of a block: 'center', 'north' or 'south'.
+export function plateOf(p, key) {
+  return key === 'center' ? centerPlate(p) : p[key].wall;
+}
+
+// The gable over a block. Across the ridge, `mid` is the ridge line and
+// `half` the run from it to the outer eave edge. The roof's top surface is
+// at `eaveTop` at the eave edge and `ridgeY` at the ridge.
+export function gableOf(p, key) {
+  const v = p[key], r = v.roof, alongX = v.ridge === 'x';
+  const [a0, a1] = alongX ? [r.z0, r.z1] : [r.x0, r.x1];
+  const plate = plateOf(p, key), eaveTop = plate + p.roofThick, half = (a1 - a0) / 2;
+  return { alongX, mid: (a0 + a1) / 2, half, plate, eaveTop, ridgeY: eaveTop + p.pitch * half };
 }
 
 // ---------------------------------------------------------------- openings

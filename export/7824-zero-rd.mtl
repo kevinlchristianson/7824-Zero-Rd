@@ -74,31 +74,3 @@ Ka 0 0 0
 Ks 0.05 0.05 0.05
 d 1
 illum 2
-
-newmtl trunk
-Kd 0.1046 0.0612 0.0369
-Ka 0 0 0
-Ks 0.05 0.05 0.05
-d 1
-illum 2
-
-newmtl conifer
-Kd 0.0482 0.0976 0.0395
-Ka 0 0 0
-Ks 0.05 0.05 0.05
-d 1
-illum 2
-
-newmtl deciduous
-Kd 0.1812 0.2789 0.1022
-Ka 0 0 0
-Ks 0.05 0.05 0.05
-d 1
-illum 2
-
-newmtl russian_olive
-Kd 0.3813 0.4508 0.3515
-Ka 0 0 0
-Ks 0.05 0.05 0.05
-d 1
-illum 2

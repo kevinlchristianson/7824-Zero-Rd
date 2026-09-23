@@ -1,5 +1,5 @@
 <title>7824 Zero Rd</title>
-<meta name="description" content="Parametric 3D massing model of the U-shaped brick building at 7824 Zero Rd.">
+<meta name="description" content="Parametric 3D massing model of the U-shaped brick building at 7824 Zero Rd, with solar panels laid out on its south roof slopes.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -16,6 +16,8 @@
     --roof: #5a4640;
     --sky: #dfe6ea;
     --focus: #2f6f8f;
+    --pv: #1f2a3c;
+    --pv-shade: #c4553a;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -34,6 +36,8 @@
       --roof: #7a625a;
       --sky: #1f2629;
       --focus: #7fb7d1;
+      --pv: #3a4c69;
+      --pv-shade: #d9745b;
     }
   }
   :root[data-theme="dark"] {
@@ -49,6 +53,8 @@
     --roof: #7a625a;
     --sky: #1f2629;
     --focus: #7fb7d1;
+    --pv: #3a4c69;
+    --pv-shade: #d9745b;
   }
 
   html, body { height: 100%; }
@@ -162,6 +168,10 @@
   .section-svg { width: 100%; height: auto; display: block; }
   .section-svg text { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
   .section-svg .lbl { font-family: var(--display); font-weight: 600; letter-spacing: 0.08em; font-size: 10.5px; fill: var(--ink); }
+  .pv-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+  .pv-key span { display: inline-flex; align-items: center; gap: 6px; }
+  .pv-key i { width: 14px; height: 10px; border-radius: 1px; background: var(--pv); }
+  .pv-key i.shade { background: var(--pv-shade); opacity: 0.7; }
   .notes { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 16px; display: grid; gap: 6px; }
   .notes code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
 
@@ -188,7 +198,8 @@
   <div class="stage" id="stage">
     <div class="toolbar">
       <div class="seg" role="group" aria-label="Camera view" id="views">
-        <button type="button" data-view="courtyard" aria-pressed="true">Courtyard</button>
+        <button type="button" data-view="solar" aria-pressed="true">South roofs</button>
+        <button type="button" data-view="courtyard">Courtyard</button>
         <button type="button" data-view="southwest">SW aerial</button>
         <button type="button" data-view="northeast">NE aerial</button>
         <button type="button" data-view="plan">Plan</button>
@@ -196,6 +207,7 @@
       <div class="seg" role="group" aria-label="Layers">
         <label for="tgl-roofs"><input type="checkbox" id="tgl-roofs" checked> Roofs</label>
         <label for="tgl-site"><input type="checkbox" id="tgl-site" checked> Site</label>
+        <label for="tgl-pv"><input type="checkbox" id="tgl-pv" checked> Panels</label>
       </div>
     </div>
     <div class="compass" aria-label="North arrow">
@@ -211,8 +223,15 @@
     <header>
       <p class="eyebrow">Massing model · Casper, WY</p>
       <h1>7824 Zero Rd</h1>
-      <p class="lede">A U-shaped brick building that opens west onto a courtyard. The center block is two stories. Each leg is one tall volume. The buildings are plain rectangles butted together; the center block and the shop are each 48′ × 68′ inside. The north leg adds a vestibule across its west end. Every roof is hipped.</p>
+      <p class="lede">A U-shaped brick building that opens west onto a courtyard. The center block is two stories. Each leg is one tall volume. The buildings are plain rectangles butted together; the center block and the shop are each 48′ × 68′ inside. The north leg adds a vestibule across its west end. Every roof is a two-slope gable, and the panels show what fits on the south-facing slopes.</p>
     </header>
+
+    <section>
+      <h2>Solar on the south roofs</h2>
+      <div class="vol" id="pv"></div>
+      <dl class="totals" id="pv-totals" style="margin-top: 12px"></dl>
+      <p class="pv-key"><span><i></i>Panel</span><span><i class="shade"></i>Left off: shade costs it over 10% of its sun</span></p>
+    </section>
 
     <section>
       <h2>Volumes, wall to wall</h2>
@@ -238,6 +257,8 @@
         <li>Upper-level openings are yours: sixteen 41″ × 67″ windows, a 36″ door at the stair and a 72″ door, drawn as a slider onto a small north balcony (placement assumed).</li>
         <li>The ground level has no windows: a 36″ walkout to the courtyard and 86″ walkthroughs into the shop and south leg. The shop has no windows and no doors on the windward side (yours).</li>
         <li>Leg wall heights, the 5:12 roof pitch, the 1′‑6″ overhang, exact door positions, and the vestibule and south-leg openings are estimates from the listing photos.</li>
+        <li>All three roofs are gables (yours). The ridges are assumed to run the long way, north–south on the center and east–west on the legs, so only the legs have south slopes.</li>
+        <li>Panels are 440&nbsp;W, 69″ × 45″, 1″ apart, kept 12″ clear of eaves and gable ends and 18″ off ridges. Shade from the other buildings is worked out hour by hour on the Casper weather year; trees are left out. <code>npm run roofpv</code> rebuilds the layout in <code>data/roofpv.json</code>.</li>
         <li>All inputs live in <code>model/params.js</code>, shared with the heating and cooling model. <code>npm run export</code> writes OBJ and GLB files to <code>export/</code>.</li>
       </ul>
     </section>
@@ -247,7 +268,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildHouse, summary, DEFAULTS, wallsOf, centerPlate } from './model/building.js';
+import { buildHouse, pvPanels, summary, DEFAULTS, wallsOf, centerPlate, gableOf } from './model/building.js';
 
 const P = DEFAULTS;
 const stage = document.getElementById('stage');
@@ -285,7 +306,7 @@ document.getElementById('volumes').innerHTML = rows.map(r => `
     <dt>Footprint</dt><dd>${fmt(foot)} sq ft</dd>
     <dt>Gross, with upper level</dt><dd>${fmt(gross)} sq ft</dd>
     <dt>Overall E–W × N–S</dt><dd>${ftin(ext.x)} × ${ftin(ext.z)}</dd>
-    <dt>Center plate / ridge</dt><dd>${ftin(centerPlate(P))} / ${ftin(centerPlate(P) + P.roofThick + (P.center.roof.x1 - P.center.roof.x0) / 2 * P.pitch)}</dd>`;
+    <dt>Center plate / ridge</dt><dd>${ftin(centerPlate(P))} / ${ftin(gableOf(P, 'center').ridgeY)}</dd>`;
 }
 
 {
@@ -358,8 +379,37 @@ const layer = n => house.getObjectByName(n);
 document.getElementById('tgl-roofs').addEventListener('change', e => { layer('roofs').visible = e.target.checked; });
 document.getElementById('tgl-site').addEventListener('change', e => { layer('site').visible = e.target.checked; });
 
+// ---------------- solar layout (data/roofpv.json)
+const pvBox = document.getElementById('pv');
+fetch(new URL('./data/roofpv.json', import.meta.url)).then(r => r.json()).then(L => {
+  const pv = pvPanels(L);
+  pv.visible = document.getElementById('tgl-pv').checked;
+  house.add(pv);
+  document.getElementById('tgl-pv').addEventListener('change', e => { pv.visible = e.target.checked; });
+  const n = v => Math.round(v).toLocaleString('en-US'), kw = v => v.toFixed(1);
+  pvBox.innerHTML = L.slopes.map(s => s.south ? `
+    <div class="vol-row">
+      <span class="vol-name">${s.name}</span>
+      <span class="vol-dim">${s.n} panels · ${kw(s.kw)} kW</span>
+      <span class="vol-sub">south slope ${ftin(s.widthFt)} × ${ftin(s.lengthFt)}, ${s.rows} rows × ${s.cols} ${s.orient}</span>
+      <span class="vol-sub">${n(s.kwh)} kWh a year${s.panels.length > s.n ? ` · ${s.panels.length - s.n} spots too shaded` : ''}</span>
+    </div>` : `
+    <div class="vol-row">
+      <span class="vol-name">${s.name}</span>
+      <span class="vol-dim">—</span>
+      <span class="vol-sub">ridge runs north–south: its slopes face east and west</span>
+    </div>`).join('');
+  const T = L.totals;
+  document.getElementById('pv-totals').innerHTML = `
+    <dt>Panels</dt><dd>${T.panels}</dd>
+    <dt>Size</dt><dd>${kw(T.kw)} kW DC</dd>
+    <dt>Output a year</dt><dd>${n(T.kwh)} kWh</dd>
+    <dt>Per kW, on a ${(L.pitch * 12).toFixed(0)}:12 roof</dt><dd>${n(T.kwh / T.kw)} kWh</dd>`;
+}).catch(() => { pvBox.textContent = 'The panel layout didn’t load. Reload the page to try again.'; });
+
 // ---------------- views
 const VIEWS = {
+  solar:     { pos: [-45, 165, 245], target: [-38, 8, -12] },
   courtyard: { pos: [-205, 62, 38], target: [-12, 9, 0] },
   southwest: { pos: [-190, 120, 205], target: [-25, 6, 0] },
   northeast: { pos: [135, 85, -175], target: [-25, 8, -5] },
@@ -382,7 +432,7 @@ document.getElementById('views').addEventListener('click', e => {
   if (b) go(b.dataset.view);
 });
 controls.addEventListener('start', () => { tween = null; });
-go('courtyard', true);
+go('solar', true);
 
 // ---------------- loop
 const north = document.getElementById('north');
