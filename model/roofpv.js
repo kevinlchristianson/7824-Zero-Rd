@@ -7,16 +7,16 @@ import { DEFAULTS, wallsOf, gableOf } from './params.js';
 import { pvPerKw, SOLAR_INPUTS } from './solar.js';
 
 export const ROOFPV_INPUTS = {
-  panel: { watts: 440, longIn: 1722 / 25.4, shortIn: 1134 / 25.4 },   // owner's Indepwr 440 W bifacial, two pallets of 31; 1722 x 1134 mm
+  panel: { watts: 440, longIn: 1722 / 25.4, shortIn: 1134 / 25.4 },   // ZnShine ZXM7-UHLDD108 440 W bifacial, two pallets of 36 (owner); 1722 x 1134 mm
   gapIn: 0.5,        // between panels (IronRidge UFO clamps)
   edgeFt: 1,         // clear of the eaves and gable ends
   ridgeFt: 1.5,      // off the ridge: the fire-code setback while panels cover under a third of the roof
   maxLoss: 0.10,     // a spot pays when shade costs it at most this share of its sun
   // The owner's arrays: panels per row from the eave up, landscape, from the
-  // west end. The shop has the owner's IronRidge layout (57 panels, rows of
-  // 10, 10, 9, 8, 7, 7, 6 from the ridge down) plus five more on its shorter
-  // rows; the garage has none yet. A roof not listed gets every spot that pays.
-  rows: { north: [7, 8, 8, 9, 10, 10, 10], south: [] },
+  // west end. The shop has 72: the owner's IronRidge layout (57 panels, rows
+  // of 10, 10, 9, 8, 7, 7, 6 from the ridge down) carried east as far as shade
+  // allows. The garage has none yet. A roof not listed gets every spot that pays.
+  rows: { north: [7, 8, 9, 10, 11, 13, 14], south: [] },
 };
 
 const KEYS = ['center', 'north', 'south'];
