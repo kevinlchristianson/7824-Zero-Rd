@@ -29,10 +29,12 @@ export const SOLAR_INPUTS = {
     cop47: 3.8, cop17: 2.5, cop5: 1.9, derate: 0.9, minT: -13,   // sheet (Apollo 6T)
     cap47: 72000, cap10: 39200,                                  // sheet, 6-ton, Btu/h
     // Water temperature: the sheet's COPs are taken as rated at 95 °F supply
-    // water; hotter water costs COP and capacity.
+    // water; hotter water costs COP and capacity. The buffer tank follows the
+    // hydronic pack's outdoor reset (sheet M-4), capped at 120 °F for the floor.
     ratedWaterF: 95,                 // assumed
     copPerF: 0.012, capPerF: 0.006,  // assumed: share lost per °F above rated
-    waterF: { ahu: 115, floor: 135, dhw: 130 },   // assumed supply water each load needs
+    reset: { lowF: 85, lowAtF: 60, highF: 120, highAtF: -10 },   // owner: schematic M-4
+    preheatApproachF: 10,            // assumed: buffer lower coil to cold water
     units: {
       t35: { name: '3.5-ton', tons: 3.5, cost: 5172, coolCop: 4.6 },   // MBTEK listing; owner cooling COP
       t60: { name: '6-ton', tons: 6, cost: 7270, coolCop: 3.8 },       // MBTEK listing; sheet EER 13
@@ -42,11 +44,13 @@ export const SOLAR_INPUTS = {
     heat: 'auto',                    // a key of HP_MODES, or 'auto' for the cheapest
     ahus: 'auto',                    // 1, 2, or 'auto'
   },
-  // Upper-level hydronic floor (owner: "pretty inefficient"). With one AHU it
-  // carries this share of the upper level's heat, needs hot water, and loses
-  // some heat down into the ground level. A second AHU takes the upper level
-  // over by air and the floor is left off.
-  floor: { share: 0.6, downLoss: 0.15 },          // assumed
+  // Upper-level radiant floor (schematic M-1): PEX suspended in the truss
+  // bays on aluminum plates, R-19 below. It carries the upper level up to
+  // what it can put out at the tank temperature; the AHU's upstairs damper
+  // covers the rest. With a second AHU the upper level is heated by air and
+  // the floor is left off.
+  floor: { areaFt2: 3168, btuPerFt2F: 0.35, downLoss: 0.08 },   // area from M-1; output and loss assumed
+  boilerEff: 0.93,                   // assumed: Navien condensing on ≤120 °F return
   ahu2: { cost: 3200, install: 3000 },             // MBTEK 3.5-ton AHU listing; ducts and install assumed
   dhw: { galPerDay: 60, setF: 120, eff: 0.90 },  // assumed: four people, about 15 gal each
   domestic: { kWhPerDay: 47, indoor: 0.7 },       // sheet
@@ -154,16 +158,16 @@ export function thermalLoads(wxRaw, thermalInputs, s, prepared) {
 // hourly household electricity, hot water, space heat and cooling demand.
 export function buildContext(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prepared = prepareWeather(wxRaw), th = thermalLoads(wxRaw, thermalInputs, s, prepared)) {
   const wx = prepared, n = wx.n;
-  const dom = new Float64Array(n), dhw = new Float64Array(n);
+  const dom = new Float64Array(n), dhw = new Float64Array(n), tin = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const d = Math.floor(i / 24), h = i % 24;
     dom[i] = s.domestic.kWhPerDay * DOMESTIC_SHAPE[h];
     // Hot water: inlet water follows the season (≈ 42–58 °F in Casper).
-    const tin = 50 + 8 * Math.cos(2 * Math.PI * (d - 240) / 365);
-    dhw[i] = s.dhw.galPerDay * DHW_SHAPE[h] * 8.34 * (s.dhw.setF - tin);          // Btu this hour
+    tin[i] = 50 + 8 * Math.cos(2 * Math.PI * (d - 240) / 365);
+    dhw[i] = s.dhw.galPerDay * DHW_SHAPE[h] * 8.34 * (s.dhw.setF - tin[i]);       // Btu this hour
   }
   return {
-    n, month: wx.month, T: wx.T, dom, dhw, space: th.heat, cool: th.cool, zone: th.zone, plant: th.plant,
+    n, month: wx.month, T: wx.T, dom, dhw, tin, space: th.heat, cool: th.cool, zone: th.zone, plant: th.plant,
     pvDC: pvPerKw(wx, s.pv), s, m: pickInverter(s), thermal: th, cache: {},
   };
 }
@@ -173,14 +177,15 @@ export function buildContext(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, p
 // '<option>.<mode>.<ahus>'.
 export function loadsFor(ctx, key) {
   if (ctx.cache[key]) return ctx.cache[key];
-  const s = ctx.s, hp = s.hp, pl = ctx.plant, n = ctx.n, W = hp.waterF;
+  const s = ctx.s, hp = s.hp, pl = ctx.plant, n = ctx.n, R0 = hp.reset, bEff = s.boilerEff ?? pl.boilerEff;
+  const tankF = T => clamp(R0.lowF + (R0.lowAtF - T) * (R0.highF - R0.lowF) / (R0.lowAtF - R0.highAtF), R0.lowF, R0.highF);
   const [opt, mode, ahuS] = key === 'today' ? [null, 'cool', '1'] : key.split('.');
   const ahus = Number(ahuS);
   const units = opt ? HP_OPTIONS[opt].units.map(u => hp.units[u]) : [];
   const tons = units.reduce((a, u) => a + u.tons, 0);
   const coolUnits = [...units].sort((a, b) => b.coolCop - a.coolCop);
   const coolRate = Math.min(tons * 12000, AHU_BTUH[ahus]), distKW = (pl.fanW + pl.pumpW) / 1000;
-  const fShare = ahus === 1 ? s.floor.share : 0, down = s.floor.downLoss;
+  const floorOn = ahus === 1, down = s.floor.downLoss, fK = s.floor.btuPerFt2F * s.floor.areaFt2;
   const copF = Tw => Math.max(0.3, 1 - hp.copPerF * (Tw - hp.ratedWaterF));
   const capF = Tw => Math.max(0.3, 1 - hp.capPerF * (Tw - hp.ratedWaterF));
   const heatHp = mode === 'hp', smart = mode === 'smart' && tons > 0;
@@ -188,15 +193,20 @@ export function loadsFor(ctx, key) {
   const cand = smart ? Array.from({ length: 12 }, () => []) : null;
   let alwaysHeat = 0;
   const elec = new Float64Array(n), gas = new Float64Array(n);
-  let heatTot = 0, hpHeat = 0, backupElec = 0, unmet = 0, coolTot = 0, coolUnmet = 0, coolUnmetHrs = 0, floorLoss = 0;
+  let heatTot = 0, hpHeat = 0, backupElec = 0, unmet = 0, coolTot = 0, coolUnmet = 0, coolUnmetHrs = 0, floorLoss = 0, floorBtu = 0;
   for (let i = 0; i < n; i++) {
-    const T = ctx.T[i], dhw = ctx.dhw[i], cool = ctx.cool[i];
-    // Where the heat goes: the floor carries its share of the upper level
-    // and leaks some down, which the ground level uses when it needs heat.
-    const upFloor = fShare * ctx.zone.upper[i], floorOut = upFloor / (1 - down), leak = floorOut - upFloor;
+    const T = ctx.T[i], dhw = ctx.dhw[i], cool = ctx.cool[i], Tw = tankF(T);
+    // Where the heat goes: the floor carries the upper level up to what it
+    // puts out at the tank temperature, and leaks some down, which the
+    // ground level uses when it needs heat.
+    const upFloor = floorOn ? Math.min(ctx.zone.upper[i], fK * Math.max(0, Tw - 5 - 68)) : 0;
+    const floorOut = upFloor / (1 - down), leak = floorOut - upFloor;
     const groundAir = Math.max(0, ctx.zone.ground[i] - leak);
     floorLoss += Math.max(0, leak - ctx.zone.ground[i]);
-    const air = ctx.zone.shop[i] + groundAir + (1 - fShare) * ctx.zone.upper[i];
+    const air = ctx.zone.shop[i] + groundAir + ctx.zone.upper[i] - upFloor;
+    // Hot water: the combi heats it, from cold water the buffer's lower coil
+    // has preheated whenever the tank is warm (not while it's chilled).
+    const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - hp.preheatApproachF) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
     // Cooling: the most efficient unit first, up to what the AHUs can move.
     const served = Math.min(cool, coolRate);
     coolTot += cool;
@@ -207,17 +217,19 @@ export function loadsFor(ctx, key) {
     e += air / pl.ahuHeatBtuh * distKW;
     // Heating: the heat pumps take the loads they serve, coolest water first,
     // sharing the hour; the rest falls to the backup.
-    const loads = [['air', air, W.ahu], ['dhw', dhw, W.dhw], ['floor', floorOut, W.floor]];
-    let frac = T >= hp.minT && (heatHp || smart) && tons > 0 ? 1 : 0, left = { air, dhw, floor: floorOut };
+    // Everything the heat pumps make goes through the buffer at one
+    // temperature: the tank's.
+    const loads = [['air', air], ['floor', floorOut], ['pre', pre]];
+    let frac = T >= hp.minT && (heatHp || smart) && tons > 0 ? 1 : 0, left = { air, floor: floorOut, pre, dhw: dhw - pre };
     const cap0 = capAt(hp, T) * tons / 6, cop0 = copAt(hp, T);
-    for (const [k, q, Tw] of loads) {
+    for (const [k, q] of loads) {
       if (frac <= 0 || q <= 0) continue;
       const cap = cap0 * capF(Tw), got = Math.min(q, frac * cap);
       const kwh = got / (Math.max(1, cop0 * copF(Tw)) * BTU_KWH);
       frac -= got / cap;
       if (smart) {
         // A candidate: this much heat pump electricity in place of this much gas.
-        const th = got / (k === 'dhw' ? s.dhw.eff : pl.boilerEff) / 1e5;
+        const th = got / (k === 'pre' ? s.dhw.eff : bEff) / 1e5;
         if (th / kwh >= beGas) { left[k] -= got; hpHeat += got; e += kwh; alwaysHeat += got; }
         else cand[ctx.month[i]].push([th / kwh, kwh, th, got]);
         continue;
@@ -226,10 +238,10 @@ export function loadsFor(ctx, key) {
     }
     let g = 0;
     if (heatHp && s.backup === 'strips') {
-      const r2 = left.air + left.dhw + left.floor, strip = Math.min(r2, 10 * BTU_KWH * ahus);
+      const r2 = left.air + left.floor + left.pre + left.dhw, strip = Math.min(r2, 10 * BTU_KWH * ahus);
       e += strip / BTU_KWH; backupElec += strip / BTU_KWH; unmet += r2 - strip;
-    } else g = ((left.air + left.floor) / pl.boilerEff + left.dhw / s.dhw.eff) / 1e5;
-    heatTot += air + floorOut + dhw;
+    } else g = ((left.air + left.floor) / bEff + (left.pre + left.dhw) / s.dhw.eff) / 1e5;
+    heatTot += air + floorOut + dhw; floorBtu += upFloor;
     elec[i] = e; gas[i] = g;
   }
   const cost = units.reduce((a, u) => a + u.cost + hp.install, 0) + (ahus === 2 && opt ? s.ahu2.cost + s.ahu2.install : 0);
@@ -244,7 +256,7 @@ export function loadsFor(ctx, key) {
   });
   return (ctx.cache[key] = {
     key, opt, mode, ahus, elec, gas, tons, cost, hpShare: hpHeat / heatTot, heatTot, backupElec, unmet,
-    coolTot, coolUnmet, coolUnmetHrs, floorLoss, flex,
+    coolTot, coolUnmet, coolUnmetHrs, floorLoss, floorShare: floorBtu / Math.max(1, ctx.zone.upper.reduce((a, b) => a + b, 0)), flex,
   });
 }
 
@@ -560,7 +572,7 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   const Lw = loadsFor(ctx, load);
   return {
     inputs: s,
-    setup: { opt: win.opt, mode: win.mode, ahus: win.ahus, label: setupLabel(win.opt, win.ahus), hpLabel: HP_OPTIONS[win.opt].label, tons: Lw.tons, hpCost: Lw.cost, hpShare: rec.hpShare, coolUnmetHrs: Lw.coolUnmetHrs, floorLoss: Lw.floorLoss, auto: !(s.hp.option in HP_OPTIONS) },
+    setup: { opt: win.opt, mode: win.mode, ahus: win.ahus, label: setupLabel(win.opt, win.ahus), hpLabel: HP_OPTIONS[win.opt].label, tons: Lw.tons, hpCost: Lw.cost, hpShare: rec.hpShare, coolUnmetHrs: Lw.coolUnmetHrs, floorLoss: Lw.floorLoss, floorShare: Lw.floorShare, auto: !(s.hp.option in HP_OPTIONS) },
     lines: lines.map(r => ({ opt: r.opt, ahus: r.ahus, mode: r.mode, label: r.label })),
     setups: setupRows,
     inverter: { id: ctx.m, ...M, dcMax, maxUnits: nMax, auto: autoInv },
