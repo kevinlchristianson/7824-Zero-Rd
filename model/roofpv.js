@@ -7,7 +7,7 @@ import { DEFAULTS, wallsOf, gableOf } from './params.js';
 import { pvPerKw, SOLAR_INPUTS } from './solar.js';
 
 export const ROOFPV_INPUTS = {
-  panel: { watts: 440, longIn: 1762 / 25.4, shortIn: 1134 / 25.4 },   // a typical 440 W residential panel, 1762 x 1134 mm
+  panel: { watts: 600, longIn: 2279 / 25.4, shortIn: 1134 / 25.4 },   // Philadelphia Solar 600 W bifacial (owner's kit), 2279 x 1134 mm
   gapIn: 1,          // between panels
   edgeFt: 1,         // clear of the eaves and gable ends
   ridgeFt: 1.5,      // off the ridge: the fire-code setback while panels cover under a third of the roof
