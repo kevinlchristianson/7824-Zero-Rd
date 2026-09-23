@@ -10,6 +10,10 @@
 //   B  Full off grid, no gas: panels, batteries, and the cheapest mix of
 //      heat pumps and electric resistance heat. Hot water from the owner's
 //      electric tankless, fed buffer-preheated cold water.
+//   C  B with an outdoor wood boiler feeding the buffer: it covers whatever
+//      the heat pumps can't, and takes over the heat when the batteries run
+//      low or it's cold enough, so the batteries carry only the house.
+//   B and C run in conservation mode year-round (see conservation()).
 
 import { buildContext, loadsFor, SOLAR_INPUTS } from './solar.js';
 import { INPUTS as THERMAL } from './thermal.js';
@@ -43,6 +47,14 @@ export const OFFGRID_INPUTS = {
   resBase: 1500, resPerKw: 100,                               // assumed: electric boiler in the buffer
   resOptions: [0, 10, 20, 30, 45],
   maxBehindH: 6,                                              // B: the house may run behind up to 6 h at a stretch (warm-ups)
+  // C: outdoor wood boiler (assumed: Central Boiler-class unit, 150k Btu/h)
+  owb: 18000, owbBtuh: 150000, owbEff: 0.6, owbPumpKw: 0.15,  // installed with buried lines and a buffer exchanger
+  cordMMBtu: 16, cordCost: 250,                               // Wyoming mixed wood per cord; delivered price
+  woodPolicies: [                                             // burn when batteries fall below socOn (until socOff), or below tF
+    { socOn: 0.2, socOff: 0.5, tF: null }, { socOn: 0.4, socOff: 0.7, tF: null }, { socOn: 0.6, socOff: 0.9, tF: null },
+    { socOn: 0.3, socOff: 0.6, tF: 10 }, { socOn: 0.3, socOff: 0.6, tF: 25 }, { socOn: 0.3, socOff: 0.6, tF: 40 },
+    { socOn: 1.01, socOff: 1.01, tF: null },                  // always, whenever there's heat to make
+  ],
   tons: {                                                     // heat pump sets (MBTEK less 20%) with install
     '3.5': { tons: 3.5, cost: 4138 + 1500, label: 'One 3.5-ton' },
     '6': { tons: 6, cost: 5816 + 1500, label: 'One 6-ton' },
@@ -86,6 +98,20 @@ export function offgridContext(wx, s = SOLAR_INPUTS, thermalInputs = THERMAL) {
       e[i] = x; peak = Math.max(peak, x);
     }
     return { e, behindH, longest, resKwh, peak };
+  };
+  // C parts: the house's own electricity, the heat the buffer must supply,
+  // and what the heat pumps can do toward it each hour.
+  ctx.woodParts = tons => {
+    const n = ctx.n, base = new Float64Array(n), heat = new Float64Array(n), cap = new Float64Array(n), cop = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const T = ctx.T[i], Tw = tankF(T), cool = Math.min(ctx.cool[i], coolRate);
+      const space = ctx.zone.shop[i] + ctx.zone.ground[i] + ctx.zone.upper[i], dhw = ctx.dhw[i];
+      const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - 10) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
+      base[i] = ctx.dom[i] + cool / (4.6 * BTU) + (cool > 0 ? cool / coolRate * distKW : 0) + space / pl.ahuHeatBtuh * distKW + (dhw - pre) / BTU;
+      heat[i] = space + pre;
+      cap[i] = T >= hp.minT ? capAt(T) * tons / 6 * capF(Tw) : 0; cop[i] = Math.max(1, copAt(T) * copF(Tw));
+    }
+    return { base, heat, cap, cop };
   };
   return ctx;
 }
@@ -211,4 +237,70 @@ export function optimizeB(ctx, O = OFFGRID_INPUTS) {
   }
   const ok = rows.filter(r => r.design).sort((a, b) => a.design.life - b.design.life);
   return { rows, best: ok.length ? simulateB(ctx, ok[0].design, O, true) : null };
+}
+
+// ---------------------------------------------------------------- C: wood
+
+export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
+  const s = ctx.s, f = s.finance, r = s.rates, { kw, nb, tons, policy } = design;
+  const W = (ctx._wp ??= {})[tons] ??= ctx.woodParts(O.tons[tons].tons);
+  const ni = Math.max(2, Math.ceil(kw / O.invDC)), ac = ni * O.invAC, cap = nb * O.battKwh * O.dod, bkw = Math.min(nb * O.battKw, ac), rt = Math.sqrt(O.rte);
+  let soc = cap, st;
+  for (let pass = 0; pass < 2; pass++) {
+    st = { unserved: 0, unH: 0, spill: 0, prod: 0, load: 0, woodBtu: 0, hpBtu: 0, unmetHeat: 0, burnH: 0 };
+    const mon = trace ? { prod: Array(12).fill(0), load: Array(12).fill(0), spill: Array(12).fill(0), wood: Array(12).fill(0), hp: Array(12).fill(0) } : null;
+    const daySoc = trace ? Array(365).fill(1) : null;
+    let burning = false;
+    for (let i = 0; i < ctx.n; i++) {
+      const m = ctx.month[i], p = Math.min(kw * ctx.pvDC[i] * O.eff, ac), H = W.heat[i];
+      // Burn when the batteries are low, when it's cold enough, or when the
+      // heat pumps can't carry the hour.
+      const frac = cap ? soc / cap : 0;
+      if (frac < policy.socOn) burning = true; else if (frac >= policy.socOff) burning = false;
+      const cold = policy.tF != null && ctx.T[i] < policy.tF;
+      let wood = 0, hpq = 0;
+      if (H > 0) {
+        if (burning || cold) wood = Math.min(H, O.owbBtuh);
+        hpq = Math.min(H - wood, W.cap[i]);
+        const short = H - wood - hpq;
+        if (short > 0) { const w2 = Math.min(short, O.owbBtuh - wood); wood += w2; st.unmetHeat += short - w2; }
+      }
+      const load = W.base[i] + hpq / (W.cop[i] * BTU) + (wood > 0 ? O.owbPumpKw : 0) + ni * O.idleW / 1000;
+      if (wood > 0) st.burnH++;
+      st.woodBtu += wood; st.hpBtu += hpq;
+      const net = p - load;
+      if (net >= 0) { const ch = Math.min(net, bkw, (cap - soc) / rt); soc += ch * rt; st.spill += net - ch; if (mon) mon.spill[m] += net - ch; }
+      else { let need = -net; const dis = Math.min(need, bkw, soc * rt); soc -= dis / rt; need -= dis; if (need > 1e-6) { st.unserved += need; st.unH++; } }
+      st.prod += p; st.load += load;
+      if (mon) { mon.prod[m] += p; mon.load[m] += load; mon.wood[m] += wood; mon.hp[m] += hpq; }
+      if (daySoc) { const d = Math.floor(i / 24); daySoc[d] = Math.min(daySoc[d], cap ? soc / cap : 0); }
+    }
+    if (trace) { st.mon = mon; st.daySoc = daySoc; }
+  }
+  const cords = st.woodBtu / O.owbEff / (O.cordMMBtu * 1e6);
+  const capex = kw * s.capex.pvPerKw + s.capex.fixed + ni * O.inv + nb * O.batt + O.tons[tons].cost + s.hp.buffer + s.hp.controls + O.owb;
+  let pvf = 0; for (let y = 1; y <= f.horizon; y++) pvf += (1 + r.escalation) ** (y - 1) / (1 + f.discount) ** y;
+  const annual = cords * O.cordCost;
+  const life = capex + nb * O.batt * O.battReplaceShare / (1 + f.discount) ** O.battLife + annual * pvf;
+  return { ...design, ni, battKwh: nb * O.battKwh, capex, annual, life, cords, woodShare: st.woodBtu / Math.max(1, st.woodBtu + st.hpBtu), ...st };
+}
+
+// Cheapest C: each heat pump set and burn rule, with the smallest panels for
+// each battery bank that never runs short of power or heat.
+export function optimizeC(ctx, O = OFFGRID_INPUTS) {
+  const kws = Array.from({ length: 30 }, (_, k) => 12 + 6 * k);
+  const nbs = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 19, 22, 25, 28, 31, 34, 37, 40];
+  const rows = [];
+  for (const tons of ['3.5', '6', '9.5', '12']) for (const policy of O.woodPolicies) {
+    const row = { tons, label: O.tons[tons].label, policy, design: null };
+    rows.push(row);
+    for (const nb of nbs) {
+      if (simulateC(ctx, { kw: kws.at(-1), nb, tons, policy }).unserved > 1) continue;
+      let lo = 0, hi = kws.length - 1, hit = null;
+      while (lo <= hi) { const mid = (lo + hi) >> 1, x = simulateC(ctx, { kw: kws[mid], nb, tons, policy }); if (x.unserved <= 1) { hit = x; hi = mid - 1; } else lo = mid + 1; }
+      if (hit && hit.unmetHeat < 1e5 && (!row.design || hit.life < row.design.life)) row.design = hit;
+    }
+  }
+  const ok = rows.filter(r => r.design).sort((a, b) => a.design.life - b.design.life);
+  return { rows, best: ok.length ? simulateC(ctx, ok[0].design, O, true) : null };
 }
