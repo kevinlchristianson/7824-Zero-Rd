@@ -91,6 +91,13 @@
   </section>
 
   <section>
+    <h2>If closing the HELOC comes first</h2>
+    <p class="sub" id="hf-sub"></p>
+    <div class="kit" id="hf-kit"></div>
+    <div class="table-wrap"><table id="hf"></table></div>
+  </section>
+
+  <section>
     <h2>What each step is worth</h2>
     <p class="sub">Costs at your prices (refurbished 18kPVs at $3,600, batteries at $3,400, MBTEK less 20%). Savings are yearly bill changes from the solar plan at today's rates, growing 3.3% a year in the cash flow. Nothing here counts as an asset; only what it saves counts.</p>
     <div class="table-wrap"><table id="ladder"></table></div>
@@ -104,7 +111,7 @@
 
   <section>
     <h2>Debt over time</h2>
-    <p class="sub">The HELOC and the rental mortgage together, month by month, for three schedules. The line dies, then surplus prepays the mortgage, then the rental sells.</p>
+    <p class="sub">The HELOC and the rental mortgage together, month by month, for four schedules; the HELOC-first line includes each phase's own line. The line dies, then surplus prepays the mortgage, then the rental sells.</p>
     <div class="legend" id="debt-legend"></div>
     <div class="chart" id="debt" role="img" aria-label="HELOC plus mortgage balance over time for three schedules"></div>
   </section>
@@ -151,6 +158,22 @@ function doSection() {
   $('#steps').replaceChildren(...steps.map(([b, t]) => { const li = document.createElement('li'); const d = document.createElement('div'); const bb = document.createElement('b'); bb.textContent = b.replace('${usd(F.floorTopUp)}', usd(F.floorTopUp)) + ' '; const sp = document.createElement('span'); sp.textContent = t; d.append(bb, sp); li.append(d); return li; }));
 }
 
+function helocFirst() {
+  const S1 = P.helocFirstSell, K = P.helocFirstKeep, ev = p => p.events.filter(e => /line|HELOC closed|sold/i.test(e.what));
+  $('#hf-sub').textContent = `Your alternative rule: kill the renovation line as fast as possible, then give each phase its own 7% line in turn (solar, lower level, heat pump, batteries, boiler). Selling the rental in ${S1.events.find(e => /sold/.test(e.what))?.date ?? 'Sep 2026'} frees about ${usd(S1.events.find(e => /sold/.test(e.what))?.amt ?? 0)} of equity after commission, taxes and the mortgage payoff, which pays the truck and then the line, and closes it in ${S1.locDead}, ${Math.round((new Date(K.locDead) - new Date(S1.locDead)) / 2.63e9)} months before keeping the rental gets there (${K.locDead}) and about ${Math.round((new Date(base.locDead) - new Date(S1.locDead)) / 2.63e9 / 12 * 10) / 10} years before the workbook path. The price is the rental's income and appreciation: ${k$(S1.nwNet)} in 2046 net of paycheck against ${k$(K.nwNet)} keeping it, with a $2,000/mo paycheck contribution instead of $1,500.`;
+  $('#hf-kit').replaceChildren(...[
+    ['Sell now', 'HELOC closed', S1.locDead, `all debt gone ${S1.debtFree}; solar ${S1.owned.solar}, lower level next, boiler ${S1.owned.wood}`],
+    ['Sell now', '2046, net of paycheck', k$(S1.nwNet), `interest ${usd(S1.interest)} over the run`],
+    ['Keep the rental', 'HELOC closed', K.locDead, `all debt gone ${K.debtFree}; solar ${K.owned.solar}, boiler ${K.owned.wood}; rental sold ${K.sold}`],
+    ['Keep the rental', '2046, net of paycheck', k$(K.nwNet), `interest ${usd(K.interest)}; ${k$(K.nwNet - base.nwNet)} vs the workbook path`],
+  ].map(([l, v0, v, s]) => { const d = document.createElement('div'); d.innerHTML = '<div class="k-label"></div><div class="k-value"></div><div class="k-sub"></div>'; d.children[0].textContent = `${l} · ${v0}`; d.children[1].textContent = v; d.children[2].textContent = s; return d; }));
+  const t = $('#hf');
+  t.innerHTML = '<thead><tr><th>Event</th><th class="num">Sell the rental now</th><th class="num">Keep the rental</th></tr></thead>';
+  const tb = t.createTBody();
+  const rows = [['Renovation HELOC closed', S1.locDead, K.locDead], ['Solar (own line)', S1.owned.solar, K.owned.solar], ['Lower level (own line)', S1.events.find(e => /Lower-level renovation on/.test(e.what))?.date, K.events.find(e => /Lower-level renovation on/.test(e.what))?.date], ['Heat pump and buffer', S1.owned.hp, K.owned.hp], ['Batteries', S1.owned.batt, K.owned.batt], ['Wood boiler', S1.owned.wood, K.owned.wood], ['All debt gone', S1.debtFree, K.debtFree], ['Rental sold', S1.sold ?? S1.events.find(e => /sold/.test(e.what))?.date, K.sold], ['Interest and fees', usd(S1.interest), usd(K.interest)], ['2046, net of paycheck', k$(S1.nwNet), k$(K.nwNet)]];
+  for (const [l, a, b] of rows) { const tr = tb.insertRow(); tr.insertCell().textContent = l; for (const v of [a, b]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v ?? '—'; } }
+}
+
 function ladder() {
   const t = $('#ladder');
   t.innerHTML = '<thead><tr><th>Step</th><th class="num">Cost</th><th class="num">Saves / yr</th><th class="num">Simple return</th><th>What it buys</th></tr></thead>';
@@ -180,7 +203,7 @@ function cmp() {
 
 function debtChart() {
   const el = $('#debt'), W = Math.max(300, el.clientWidth), H = 240, m = { l: 48, r: 130, t: 10, b: 24 };
-  const S3 = [['base', 'No energy', 'var(--s0)'], ['solarGift', 'Solar from gift 1', 'var(--s1)'], ['cGifts', 'C-capable by 2027', 'var(--s2)']];
+  const S3 = [['base', 'No energy', 'var(--s0)'], ['solarGift', 'Solar from gift 1', 'var(--s1)'], ['cGifts', 'C-capable by 2027', 'var(--s2)'], ['helocFirstSell', 'HELOC first, sell now', 'var(--s3)']];
   const hi = 400000, x = t => m.l + t / F.months * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
   let g = '';
   for (let v = 0; v <= hi; v += 100000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 3.5}" text-anchor="end">${k$(v)}</text>`;
@@ -194,6 +217,7 @@ function debtChart() {
   }
   ends.sort((a, b) => a.t - b.t);
   ends.forEach((e, i) => { g += `<text class="lbl" x="${x(e.t) + 6}" y="${y(0) - 6 - i * 14}" fill="${e.col}">${e.lab}: debt-free ${P[S3.find(q => q[1] === e.lab)[0]].debtFree}</text>`; });
+  $('#debt-legend').innerHTML = S3.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
   g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
   el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
   const xh = el.querySelector('.xh');
@@ -204,7 +228,6 @@ function debtChart() {
     showTip(e, `<div>${mo} ${yr}</div>` + S3.map(([id, lab, col]) => { const p = P[id].series.find(q => q.t === t); return p ? `<div><i style="display:inline-block;width:10px;height:2px;background:${col};margin-right:6px;vertical-align:middle"></i><b>${k$(p.loc + p.mtg + p.other)}</b> ${lab} · HELOC ${k$(p.loc)}, brokerage ${k$(p.brok)}</div>` : ''; }).join(''));
   });
   el.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
-  $('#debt-legend').innerHTML = S3.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
 }
 
 function notes() {
@@ -217,6 +240,6 @@ function notes() {
   $('#notes').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
 }
 
-doSection(); ladder(); cmp(); notes(); debtChart();
+doSection(); helocFirst(); ladder(); cmp(); notes(); debtChart();
 let rz = 0; new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(debtChart); }).observe($('#debt'));
 </script>

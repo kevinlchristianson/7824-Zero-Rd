@@ -15,7 +15,8 @@ export const F = {
   mtg: { bal: 247626.76, apr: 0.02875, pmt: 1453.32 },
   rental: { net: 1986.77 - 400, rent2: 1100, rent2From: 8, /* owner: second-dwelling rent starts Feb 2027 */ value: 400000, appr: 0.03, commission: 0.04, basis: 299000, capGains: 0.15, recapture: 12500 },
   heloc: { limit: 250000, apr: 0.07, reno1: 250000, reno2: 100000, reno2At: 100000 },   // owner: reno-1 grew to $250k
-  paycheck: 1500, inflation: 0.025, ret: 0.08, floor: 20000, payoffCushion: 50000,
+  paycheck: 1500, paycheckSold: 2000, inflation: 0.025, ret: 0.08, floor: 20000, payoffCushion: 50000,   // workbook: $2,000/mo once the rental is sold
+  sellMonth: 3,                                    // workbook's sell scenarios close in month 3 (Sep 2026)
   floorTopUp: 7000,                                // from gift 1: the $15k cash-to-close is no longer reimbursed, so the card payoffs would breach the floor
   gifts: [{ month: 6, amt: 50000 }, { month: 12, amt: 50000 }],                          // owner: Dec 2026, Jun 2027
   card: { limit: 20000, months: 18, fee: 0.03 },                                        // owner: one 0% card; fee assumed
@@ -45,6 +46,11 @@ export function run(plan, opts = {}) {
   const owned = {}, log = [], events = [];
   let interest = 0, cumPay = 0, cumSave = 0, minBrok = Infinity, brokPayoff = null;
   const buysLeft = [...(plan.buys ?? [])].sort((a, b) => a.month - b.month);
+  // HELOC-first plans: optional early sale, reno-2 deferred to its own line,
+  // then one 7% line per phase in order, each opened when the previous closes.
+  const phases = [...(plan.phases ?? [])];
+  let phase = null, helocClosed = null;
+  const reno2Deferred = !!plan.phases;
   for (let t = 1; t <= F.months; t++) {
     const yrs = (t - 1) / 12, infl = (1 + F.inflation) ** yrs, esc = (1 + F.escalation) ** yrs;
     if (t === 1) loc = Math.min(F.heloc.reno1, F.heloc.limit);
@@ -59,10 +65,20 @@ export function run(plan, opts = {}) {
     if (usb > 0) { const p = Math.min(F.usb.min, usb); usb -= p; req += p; }
     req += iLoc;                          // interest-only HELOC
     // Income and the paycheck.
+    // Forced early sale: equity pays the truck, then the HELOC.
+    if (plan.sellMonth && t === plan.sellMonth && !sold) {
+      value = F.rental.value * (1 + F.rental.appr) ** (t / 12);
+      const gross = value * (1 - F.rental.commission), tax = F.rental.capGains * Math.max(0, gross - F.rental.basis) + F.rental.recapture;
+      let cash = gross - tax - mtg; mtg = 0; sold = true;
+      const pt = Math.min(cash, truck); truck -= pt; cash -= pt;
+      const pl = Math.min(cash, loc); loc -= pl; cash -= pl;
+      brok += cash; events.push({ month: t, what: `Rental sold: ${Math.round(pt) ? 'truck paid, ' : ''}${'$' + Math.round(pl).toLocaleString('en-US')} to the HELOC`, amt: pt + pl + cash });
+    }
     const rentalNet = sold ? 0 : (F.rental.net + (t >= F.rental.rent2From ? F.rental.rent2 : 0)) * infl;
     let save = 0; for (const k of Object.keys(owned)) save += STEPS[k].saves / 12 * esc;
     cumSave += save;
-    const pay = Math.max(F.paycheck, req - rentalNet - save);
+    if (phase) { const ip = phase.bal * F.heloc.apr / 12; interest += ip; req += ip; }
+    const pay = Math.max(plan.sellMonth ? F.paycheckSold : F.paycheck, req - rentalNet - save);   // workbook: $2,000/mo only in the sell-now scenarios
     cumPay += pay;
     let surplus = rentalNet + save + pay - req;
     // Lumps: card payoffs at their 0% deadlines, energy purchases, gifts.
@@ -95,30 +111,42 @@ export function run(plan, opts = {}) {
     // Surplus waterfall: HELOC, then mortgage prepay once the line is dead, then brokerage.
     if (surplus > 0) {
       if (loc > 0) { const p = Math.min(surplus, loc); loc -= p; surplus -= p; }
+      if (surplus > 0 && phase) { const p = Math.min(surplus, phase.bal); phase.bal -= p; surplus -= p; }
       if (surplus > 0 && loc <= 0 && reno2Fired && !sold && mtg > 0) { const p = Math.min(surplus, mtg); mtg -= p; surplus -= p; }
       brok += surplus;
     } else brok += surplus;
+    // HELOC-first: the line closes, then phases open one at a time.
+    if (reno2Deferred) {
+      if (loc <= 0 && !helocClosed) { helocClosed = t; events.push({ month: t, what: 'Renovation HELOC closed', amt: 0 }); }
+      if (phase && phase.bal <= 0) { events.push({ month: t, what: `${phase.name} line paid off`, amt: 0 }); phase = null; }
+      if (helocClosed && !phase && phases.length) {
+        const ph = phases.shift(); phase = { name: ph.name, bal: ph.amount };
+        if (ph.step) owned[ph.step] = t; if (ph.reno2) reno2Fired = true;
+        events.push({ month: t, what: `${ph.name} on its own 7% line`, amt: ph.amount });
+      }
+    }
     // Reno-2 fires when the line first drops to its trigger.
-    if (!reno2Fired && loc <= F.heloc.reno2At) { loc += F.heloc.reno2; reno2Fired = true; events.push({ month: t, what: 'Reno-2 (lower level) draws', amt: F.heloc.reno2 }); }
+    if (!reno2Deferred && !reno2Fired && loc <= F.heloc.reno2At) { loc += F.heloc.reno2; reno2Fired = true; events.push({ month: t, what: 'Reno-2 (lower level) draws', amt: F.heloc.reno2 }); }
     // Brokerage pays the line off when it can keep the cushion.
-    if (loc > 0 && brok >= loc + (reno2Fired ? 0 : F.heloc.reno2) + F.payoffCushion) {
+    if (!reno2Deferred && loc > 0 && brok >= loc + (reno2Fired ? 0 : F.heloc.reno2) + F.payoffCushion) {
       brok -= loc; if (!reno2Fired) { brok -= F.heloc.reno2; reno2Fired = true; } loc = 0; brokPayoff = t; events.push({ month: t, what: 'Brokerage pays off the HELOC', amt: 0 });
     }
     // Sell the rental the month the mortgage settles.
     value = F.rental.value * (1 + F.rental.appr) ** (t / 12);
-    if (!sold && mtg <= 0 && reno2Fired && loc <= 0) {
+    if (!sold && mtg <= 0 && reno2Fired && loc <= 0 && !phase && !phases.length) {
       const gross = value * (1 - F.rental.commission), tax = F.rental.capGains * Math.max(0, gross - F.rental.basis) + F.rental.recapture;
       brok += gross - tax; sold = true; mtgDone = true; events.push({ month: t, what: 'Rental sold', amt: gross - tax });
     }
     brok *= 1 + r12;
     minBrok = Math.min(minBrok, brok);
-    const debt = truck + wf + usb + loc + (sold ? 0 : mtg) + cards.reduce((a, c) => a + c.bal, 0);
-    const nw = brok + (sold ? 0 : value - mtg) - truck - wf - usb - loc - cards.reduce((a, c) => a + c.bal, 0);
-    log.push({ t, brok, loc, mtg: sold ? 0 : mtg, truck, cc: wf + usb, nw, debt });
+    const pb = phase ? phase.bal : 0;
+    const debt = truck + wf + usb + loc + pb + (sold ? 0 : mtg) + cards.reduce((a, c) => a + c.bal, 0);
+    const nw = brok + (sold ? 0 : value - mtg) - truck - wf - usb - loc - pb - cards.reduce((a, c) => a + c.bal, 0);
+    log.push({ t, brok, loc: loc + pb, mtg: sold ? 0 : mtg, truck, cc: wf + usb, nw, debt });
   }
   const first = f => { const x = log.find(f); return x ? x.t : null; };
-  const debtFree = first(x => x.debt < 1), locDead = first(x => x.t > 1 && x.loc < 1 && reno2Fired), consumerFree = first(x => x.truck + x.cc < 1);
-  return { plan, log, events, owned, interest, cumPay, cumSave, minBrok, brokPayoff, debtFree, locDead, consumerFree,
+  const debtFree = first(x => x.debt < 1), locDead = helocClosed ?? first(x => x.t > 1 && x.loc < 1 && reno2Fired), consumerFree = first(x => x.truck + x.cc < 1);
+  return { plan, log, events, owned, interest, cumPay, cumSave, minBrok, brokPayoff, debtFree, locDead, helocClosed, consumerFree,
     nwEnd: log.at(-1).nw, nwNet: log.at(-1).nw - cumPay, nwAtDebtFree: debtFree ? log[debtFree - 1].nw : null, sold: events.find(e => e.what === 'Rental sold')?.month ?? null };
 }
 
@@ -135,6 +163,10 @@ export const PLANS = {
     gifts: { 6: [['hp', STEPS.hp.cost], ['batt', STEPS.batt.cost], ['loc', 'rest']], 12: [['wood', STEPS.wood.cost], ['loc', 'rest']] }, buys: [{ step: 'solar', month: 4, via: 'card' }] },
   cLate: { name: 'Solar now, the rest when the line dies', note: 'Solar from gift 1; heat pump, batteries and boiler bought from brokerage once the HELOC is gone.',
     gifts: { 6: [['solar', STEPS.solar.cost], ['loc', 'rest']] }, buys: [{ step: 'hp', month: 130, via: 'brok' }, { step: 'batt', month: 130, via: 'brok' }, { step: 'wood', month: 130, via: 'brok' }] },
+  helocFirstSell: { name: 'Close the HELOC first: sell the rental now', note: 'Rental sold Sep 2026; equity pays the truck, then the HELOC. Both gifts and all surplus ($2,000/mo paycheck) go to the HELOC; reno-2 waits. After it closes, one 7% line per phase in turn: solar, lower level, heat pump, batteries and boiler.',
+    gifts: {}, buys: [], sellMonth: F.sellMonth, phases: [{ name: 'Solar', amount: STEPS.solar.cost, step: 'solar' }, { name: 'Lower-level renovation', amount: F.heloc.reno2, reno2: true }, { name: 'Heat pump and buffer', amount: STEPS.hp.cost, step: 'hp' }, { name: 'Batteries', amount: STEPS.batt.cost, step: 'batt' }, { name: 'Wood boiler', amount: STEPS.wood.cost, step: 'wood' }] },
+  helocFirstKeep: { name: 'Close the HELOC first: keep the rental', note: 'Same waterfall without the sale: gifts and surplus to the HELOC, reno-2 deferred to its own line, then the phases in turn; the rental sells when its mortgage is prepaid.',
+    gifts: {}, buys: [], phases: [{ name: 'Solar', amount: STEPS.solar.cost, step: 'solar' }, { name: 'Lower-level renovation', amount: F.heloc.reno2, reno2: true }, { name: 'Heat pump and buffer', amount: STEPS.hp.cost, step: 'hp' }, { name: 'Batteries', amount: STEPS.batt.cost, step: 'batt' }, { name: 'Wood boiler', amount: STEPS.wood.cost, step: 'wood' }] },
   cStaged: { name: 'Solar now, heat pump 2028, batteries and boiler 2030', note: 'Solar from gift 1; the heat pump on the HELOC in spring 2028; batteries and boiler on the HELOC in fall 2030.',
     gifts: { 6: [['solar', STEPS.solar.cost], ['loc', 'rest']] }, buys: [{ step: 'hp', month: 22, via: 'heloc' }, { step: 'batt', month: 52, via: 'heloc' }, { step: 'wood', month: 52, via: 'heloc' }] },
 };
@@ -147,7 +179,7 @@ for (const [id, plan] of Object.entries(PLANS)) {
     interest: r.interest, cumPay: r.cumPay, cumSave: r.cumSave, minBrok: r.minBrok, minBrok6: r6.minBrok, locDead: r.locDead && label(r.locDead), debtFree: r.debtFree && label(r.debtFree),
     consumerFree: r.consumerFree && label(r.consumerFree), sold: r.sold && label(r.sold), nwEnd: r.nwEnd, nwEnd6: r6.nwEnd, nwNet: r.nwNet, nwNet6: r6.nwNet, nwAtDebtFree: r.nwAtDebtFree,
     series: r.log.filter(x => x.t % 3 === 0).map(x => ({ t: x.t, loc: Math.round(x.loc), mtg: Math.round(x.mtg), other: Math.round(x.truck + x.cc), brok: Math.round(x.brok), nw: Math.round(x.nw) })) };
-  console.log(`${plan.name.padEnd(44)} steps ${Object.entries(r.owned).map(([k, m]) => `${k} ${label(m)}`).join(', ') || 'none'} | consumer-free ${label(r.consumerFree)}, line dead ${r.locDead ? label(r.locDead) : '—'}, debt-free ${r.debtFree ? label(r.debtFree) : '—'}, sold ${r.sold ? label(r.sold) : '—'} | interest ${$(r.interest)}, saved ${$(r.cumSave)}, paycheck ${$(r.cumPay)}, min brok ${$(r.minBrok)} | NW 2046 ${$(r.nwEnd)}, net of paycheck ${$(r.nwNet)} (6%: ${$(r6.nwNet)})`);
+  console.log(`${plan.name.padEnd(44)} HELOC closed ${r.helocClosed ? label(r.helocClosed) : '—'} | steps ${Object.entries(r.owned).map(([k, m]) => `${k} ${label(m)}`).join(', ') || 'none'} | consumer-free ${label(r.consumerFree)}, line dead ${r.locDead ? label(r.locDead) : '—'}, debt-free ${r.debtFree ? label(r.debtFree) : '—'}, sold ${r.sold ? label(r.sold) : '—'} | interest ${$(r.interest)}, saved ${$(r.cumSave)}, paycheck ${$(r.cumPay)}, min brok ${$(r.minBrok)} | NW 2046 ${$(r.nwEnd)}, net of paycheck ${$(r.nwNet)} (6%: ${$(r6.nwNet)})`);
 }
 writeFileSync(new URL('../data/finance.json', import.meta.url), JSON.stringify(out));
 console.log('wrote data/finance.json');
