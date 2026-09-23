@@ -796,7 +796,7 @@ function renderWind() {
   const items = [
     [`${nf(R.heatDesign.shop.load / 1000 + R.heatDesign.ground.load / 1000 + R.heatDesign.upper.load / 1000)} kBtu/h`, `ASHRAE 99.6% design: ${nf(Tdesign())}°F with its coincident ${nf(Vdesign(), 1)} mph wind`],
     [`${nf(w.total / 1000)} kBtu/h`, `worst hour in the TMY3 year: ${nf(w.T)}°F with ${nf(w.V)} mph wind (${dayOf(w.i)}). Size for the wind, not the cold alone.`],
-    calm != null ? [`+$${nf((heatMM - calm) * 1e6 / inputs.plant.boilerEff / 1e5 * inputs.rates.gas)} a year`, `of gas goes to wind: it adds ${nf((heatMM / calm - 1) * 100)}% (${nf(heatMM - calm, 1)} MMBtu) to heating versus the same year in still air`] : ['off', 'turn wind on in Inputs to see its share'],
+    calm != null ? [`+$${nf((heatMM - calm) * 1e6 / inputs.plant.boilerEff / 1e5 * (inputs.rates.gasWinter ?? inputs.rates.gas))} a year`, `of gas goes to wind: it adds ${nf((heatMM / calm - 1) * 100)}% (${nf(heatMM - calm, 1)} MMBtu) to heating versus the same year in still air`] : ['off', 'turn wind on in Inputs to see its share'],
   ];
   $('#wind-callouts').replaceChildren(...items.map(([big, small]) => {
     const d = document.createElement('div'); d.className = 'callout';
