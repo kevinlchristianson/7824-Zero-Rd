@@ -13,7 +13,7 @@ export const F = {
   wf: { bal: 12116.75, min: 122, payoffMonth: 18 },
   usb: { bal: 23431, min: 235, payoffMonth: 20 },
   mtg: { bal: 247626.76, apr: 0.02875, pmt: 1453.32 },
-  rental: { net: 1986.77 - 400, rent2: 1100, value: 400000, appr: 0.03, commission: 0.04, basis: 299000, capGains: 0.15, recapture: 12500 },
+  rental: { net: 1986.77 - 400, rent2: 1100, rent2From: 8, /* owner: second-dwelling rent starts Feb 2027 */ value: 400000, appr: 0.03, commission: 0.04, basis: 299000, capGains: 0.15, recapture: 12500 },
   heloc: { limit: 250000, apr: 0.07, reno1: 250000, reno2: 100000, reno2At: 100000 },   // owner: reno-1 grew to $250k
   paycheck: 1500, inflation: 0.025, ret: 0.08, floor: 20000, payoffCushion: 50000,
   floorTopUp: 7000,                                // from gift 1: the $15k cash-to-close is no longer reimbursed, so the card payoffs would breach the floor
@@ -59,7 +59,7 @@ export function run(plan, opts = {}) {
     if (usb > 0) { const p = Math.min(F.usb.min, usb); usb -= p; req += p; }
     req += iLoc;                          // interest-only HELOC
     // Income and the paycheck.
-    const rentalNet = sold ? 0 : (F.rental.net + F.rental.rent2) * infl;
+    const rentalNet = sold ? 0 : (F.rental.net + (t >= F.rental.rent2From ? F.rental.rent2 : 0)) * infl;
     let save = 0; for (const k of Object.keys(owned)) save += STEPS[k].saves / 12 * esc;
     cumSave += save;
     const pay = Math.max(F.paycheck, req - rentalNet - save);
