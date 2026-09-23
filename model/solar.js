@@ -28,16 +28,27 @@ export const SOLAR_INPUTS = {
   hp: {
     cop47: 3.8, cop17: 2.5, cop5: 1.9, derate: 0.9, minT: -13,   // sheet (Apollo 6T)
     cap47: 72000, cap10: 39200,                                  // sheet, 6-ton, Btu/h
-    dhwCopFactor: 0.85,              // assumed: hotter water, lower COP
+    // Water temperature: the sheet's COPs are taken as rated at 95 °F supply
+    // water; hotter water costs COP and capacity.
+    ratedWaterF: 95,                 // assumed
+    copPerF: 0.012, capPerF: 0.006,  // assumed: share lost per °F above rated
+    waterF: { ahu: 115, floor: 135, dhw: 130 },   // assumed supply water each load needs
     units: {
       t35: { name: '3.5-ton', tons: 3.5, cost: 5172, coolCop: 4.6 },   // MBTEK listing; owner cooling COP
       t60: { name: '6-ton', tons: 6, cost: 7270, coolCop: 3.8 },       // MBTEK listing; sheet EER 13
     },
     install: 2500,                   // assumed, per unit: pump, piping, buffer, wiring
     option: 'auto',                  // an id from HP_OPTIONS, or 'auto' for the lowest 25-year cost
-    heat: 'auto',                    // 'hp' heat pumps heat first, 'cool' boiler heats, 'auto' cheaper
+    heat: 'auto',                    // a key of HP_MODES, or 'auto' for the cheapest
+    ahus: 'auto',                    // 1, 2, or 'auto'
   },
-  dhw: { galPerDay: 40, setF: 120, eff: 0.90 },  // assumed household hot water
+  // Upper-level hydronic floor (owner: "pretty inefficient"). With one AHU it
+  // carries this share of the upper level's heat, needs hot water, and loses
+  // some heat down into the ground level. A second AHU takes the upper level
+  // over by air and the floor is left off.
+  floor: { share: 0.6, downLoss: 0.15 },          // assumed
+  ahu2: { cost: 3200, install: 3000 },             // MBTEK 3.5-ton AHU listing; ducts and install assumed
+  dhw: { galPerDay: 60, setF: 120, eff: 0.90 },  // assumed: four people, about 15 gal each
   domestic: { kWhPerDay: 47, indoor: 0.7 },       // sheet
   rates: {
     elec: 0.1016, avoided: 0.03, elecFixed: 34,    // sheet
@@ -113,8 +124,12 @@ export const HP_OPTIONS = {
   both: { label: '3.5-ton + 6-ton', units: ['t35', 't60'] },
   two60: { label: 'Two 6-tons', units: ['t60', 't60'] },
 };
-export const HP_MODES = { hp: 'heats and cools', cool: 'cools only; the boiler heats' };
-const AHU_BTUH = 72000;
+export const HP_MODES = {
+  smart: 'heats when that beats gas: on solar credit that would be paid out, or when its COP beats gas',
+  hp: 'heats first whenever it can, boiler backs up',
+  cool: 'cools only; the boiler heats',
+};
+const AHU_BTUH = { 1: 72000, 2: 72000 + 42000 };   // 6-ton AHU, plus a 3.5-ton
 
 // Hourly thermal loads from the heating & cooling model, with the upper
 // level's internal gains taken from the domestic electricity use. Cooling is
@@ -127,12 +142,12 @@ export function thermalLoads(wxRaw, thermalInputs, s, prepared) {
   inp.plant.coolTons = 30;
   const r = runModel(wxRaw, inp, undefined, { prepared });
   const n = r.wx.n, keep = 1 - (inp.plant.distLoss ?? 0);
-  const heat = new Float64Array(n), cool = new Float64Array(n);
+  const heat = new Float64Array(n), cool = new Float64Array(n), zone = {};
   for (const z of ['shop', 'ground', 'upper']) {
-    const k = ZONES.indexOf(z);
-    for (let i = 0; i < n; i++) { heat[i] += r.main.Qh[k][i] / keep; cool[i] += r.main.Qc[k][i] / keep; }
+    const k = ZONES.indexOf(z), q = zone[z] = new Float64Array(n);
+    for (let i = 0; i < n; i++) { q[i] = r.main.Qh[k][i] / keep; heat[i] += q[i]; cool[i] += r.main.Qc[k][i] / keep; }
   }
-  return { heat, cool, plant: inp.plant, costs: r.cost, wx: r.wx };
+  return { heat, cool, zone, plant: inp.plant, costs: r.cost, wx: r.wx };
 }
 
 // Everything that does not depend on the solar array or the heat pumps:
@@ -148,53 +163,88 @@ export function buildContext(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, p
     dhw[i] = s.dhw.galPerDay * DHW_SHAPE[h] * 8.34 * (s.dhw.setF - tin);          // Btu this hour
   }
   return {
-    n, month: wx.month, T: wx.T, dom, dhw, space: th.heat, cool: th.cool, plant: th.plant,
+    n, month: wx.month, T: wx.T, dom, dhw, space: th.heat, cool: th.cool, zone: th.zone, plant: th.plant,
     pvDC: pvPerKw(wx, s.pv), s, m: pickInverter(s), thermal: th, cache: {},
   };
 }
 
-// Hourly electricity and gas for one heat pump setup and heating mode.
-// key: 'today' (no heat pump, no cooling) or '<option>.<mode>'.
+// Hourly electricity and gas for one heat pump setup, heating mode and AHU
+// count. key: 'today' (no heat pump, no cooling, one AHU, floor on) or
+// '<option>.<mode>.<ahus>'.
 export function loadsFor(ctx, key) {
   if (ctx.cache[key]) return ctx.cache[key];
-  const s = ctx.s, hp = s.hp, pl = ctx.plant, n = ctx.n;
-  const [opt, mode] = key === 'today' ? [null, 'cool'] : key.split('.');
+  const s = ctx.s, hp = s.hp, pl = ctx.plant, n = ctx.n, W = hp.waterF;
+  const [opt, mode, ahuS] = key === 'today' ? [null, 'cool', '1'] : key.split('.');
+  const ahus = Number(ahuS);
   const units = opt ? HP_OPTIONS[opt].units.map(u => hp.units[u]) : [];
   const tons = units.reduce((a, u) => a + u.tons, 0);
   const coolUnits = [...units].sort((a, b) => b.coolCop - a.coolCop);
-  const coolRate = Math.min(tons * 12000, AHU_BTUH), distKW = (pl.fanW + pl.pumpW) / 1000;
+  const coolRate = Math.min(tons * 12000, AHU_BTUH[ahus]), distKW = (pl.fanW + pl.pumpW) / 1000;
+  const fShare = ahus === 1 ? s.floor.share : 0, down = s.floor.downLoss;
+  const copF = Tw => Math.max(0.3, 1 - hp.copPerF * (Tw - hp.ratedWaterF));
+  const capF = Tw => Math.max(0.3, 1 - hp.capPerF * (Tw - hp.ratedWaterF));
+  const heatHp = mode === 'hp', smart = mode === 'smart' && tons > 0;
+  const r = s.rates, beGas = r.elec / r.gas;       // therms saved per kWh at which heat pump heat costs what gas does
+  const cand = smart ? Array.from({ length: 12 }, () => []) : null;
+  let alwaysHeat = 0;
   const elec = new Float64Array(n), gas = new Float64Array(n);
-  let heatTot = 0, hpHeat = 0, backupElec = 0, unmet = 0, coolTot = 0, coolUnmet = 0, coolUnmetHrs = 0, coolKWhTot = 0;
+  let heatTot = 0, hpHeat = 0, backupElec = 0, unmet = 0, coolTot = 0, coolUnmet = 0, coolUnmetHrs = 0, floorLoss = 0;
   for (let i = 0; i < n; i++) {
-    const T = ctx.T[i], space = ctx.space[i], dhw = ctx.dhw[i], cool = ctx.cool[i];
-    // Cooling: the most efficient unit first, up to what the AHU can move.
+    const T = ctx.T[i], dhw = ctx.dhw[i], cool = ctx.cool[i];
+    // Where the heat goes: the floor carries its share of the upper level
+    // and leaks some down, which the ground level uses when it needs heat.
+    const upFloor = fShare * ctx.zone.upper[i], floorOut = upFloor / (1 - down), leak = floorOut - upFloor;
+    const groundAir = Math.max(0, ctx.zone.ground[i] - leak);
+    floorLoss += Math.max(0, leak - ctx.zone.ground[i]);
+    const air = ctx.zone.shop[i] + groundAir + (1 - fShare) * ctx.zone.upper[i];
+    // Cooling: the most efficient unit first, up to what the AHUs can move.
     const served = Math.min(cool, coolRate);
     coolTot += cool;
     if (cool - served > 100) { coolUnmet += cool - served; coolUnmetHrs++; }
-    let rem = served, coolKWh = 0;
-    for (const u of coolUnits) { const q = Math.min(rem, u.tons * 12000); coolKWh += q / (u.coolCop * BTU_KWH); rem -= q; }
-    if (served > 0) coolKWh += served / coolRate * distKW;
-    coolKWhTot += coolKWh;
-    let e = ctx.dom[i] + coolKWh + space / pl.ahuHeatBtuh * distKW, g = 0;
-    if (mode === 'hp' && tons > 0) {
-      // Heat pumps first, backup for the rest.
-      const cap = T >= hp.minT ? capAt(hp, T) * tons / 6 : 0, cop = copAt(hp, T);
-      const qs = Math.min(space, cap), qd = Math.min(dhw, Math.max(0, cap - qs));
-      e += qs / (cop * BTU_KWH) + qd / (cop * hp.dhwCopFactor * BTU_KWH);
-      const r2 = space - qs + dhw - qd;
-      if (s.backup === 'strips') {
-        const strip = Math.min(r2, 10 * BTU_KWH);
-        e += strip / BTU_KWH; backupElec += strip / BTU_KWH; unmet += r2 - strip;
-      } else g = ((space - qs) / pl.boilerEff + (dhw - qd) / s.dhw.eff) / 1e5;
-      hpHeat += qs + qd;
-    } else g = (space / pl.boilerEff + dhw / s.dhw.eff) / 1e5;
-    heatTot += space + dhw;
+    let rem = served, e = ctx.dom[i];
+    for (const u of coolUnits) { const q = Math.min(rem, u.tons * 12000); e += q / (u.coolCop * BTU_KWH); rem -= q; }
+    if (served > 0) e += served / coolRate * distKW;
+    e += air / pl.ahuHeatBtuh * distKW;
+    // Heating: the heat pumps take the loads they serve, coolest water first,
+    // sharing the hour; the rest falls to the backup.
+    const loads = [['air', air, W.ahu], ['dhw', dhw, W.dhw], ['floor', floorOut, W.floor]];
+    let frac = T >= hp.minT && (heatHp || smart) && tons > 0 ? 1 : 0, left = { air, dhw, floor: floorOut };
+    const cap0 = capAt(hp, T) * tons / 6, cop0 = copAt(hp, T);
+    for (const [k, q, Tw] of loads) {
+      if (frac <= 0 || q <= 0) continue;
+      const cap = cap0 * capF(Tw), got = Math.min(q, frac * cap);
+      const kwh = got / (Math.max(1, cop0 * copF(Tw)) * BTU_KWH);
+      frac -= got / cap;
+      if (smart) {
+        // A candidate: this much heat pump electricity in place of this much gas.
+        const th = got / (k === 'dhw' ? s.dhw.eff : pl.boilerEff) / 1e5;
+        if (th / kwh >= beGas) { left[k] -= got; hpHeat += got; e += kwh; alwaysHeat += got; }
+        else cand[ctx.month[i]].push([th / kwh, kwh, th, got]);
+        continue;
+      }
+      left[k] -= got; hpHeat += got; e += kwh;
+    }
+    let g = 0;
+    if (heatHp && s.backup === 'strips') {
+      const r2 = left.air + left.dhw + left.floor, strip = Math.min(r2, 10 * BTU_KWH * ahus);
+      e += strip / BTU_KWH; backupElec += strip / BTU_KWH; unmet += r2 - strip;
+    } else g = ((left.air + left.floor) / pl.boilerEff + left.dhw / s.dhw.eff) / 1e5;
+    heatTot += air + floorOut + dhw;
     elec[i] = e; gas[i] = g;
   }
-  const cost = units.reduce((a, u) => a + u.cost + hp.install, 0);
+  const cost = units.reduce((a, u) => a + u.cost + hp.install, 0) + (ahus === 2 && opt ? s.ahu2.cost + s.ahu2.install : 0);
+  // Smart mode: per month, the remaining candidates best first, as running
+  // totals of kWh used, therms saved and heat moved.
+  let flex = null;
+  if (smart) flex = cand.map(list => {
+    list.sort((a, b) => b[0] - a[0]);
+    const kwh = new Float64Array(list.length + 1), th = new Float64Array(list.length + 1), btu = new Float64Array(list.length + 1);
+    list.forEach(([, k, t, q], j) => { kwh[j + 1] = kwh[j] + k; th[j + 1] = th[j] + t; btu[j + 1] = btu[j] + q; });
+    return { kwh, th, btu };
+  });
   return (ctx.cache[key] = {
-    key, opt, mode, elec, gas, tons, cost, hpShare: hpHeat / heatTot, backupElec, unmet,
-    coolTot, coolUnmet, coolUnmetHrs, coolKWh: coolKWhTot,
+    key, opt, mode, ahus, elec, gas, tons, cost, hpShare: hpHeat / heatTot, heatTot, backupElec, unmet,
+    coolTot, coolUnmet, coolUnmetHrs, floorLoss, flex,
   });
 }
 
@@ -229,6 +279,34 @@ export function evaluate(ctx, cfg) {
     }
     if (net > 0) monImp[m] += net; else monExp[m] -= net;
   }
+  // Smart heat pump heating: spend credit that would otherwise be paid out
+  // at the true-up on heat, best therms-per-kWh first, without ever making a
+  // month buy power it wouldn't have.
+  let flexTherms = 0, flexBtu = 0;
+  const flexGas = new Float64Array(12);
+  if (L.flex) {
+    const order = Array.from({ length: 12 }, (_, j) => (r.trueUpMonth + 1 + j) % 12);
+    const R = new Float64Array(12);
+    let b = 0;
+    order.forEach((m, j) => { b = Math.max(0, b - (monImp[m] - monExp[m])); R[j] = b; });
+    for (let j = 11; j >= 0; j--) {
+      let x = Infinity;
+      for (let k = j; k < 12; k++) x = Math.min(x, R[k]);
+      const F = L.flex[order[j]], n1 = F.kwh.length - 1;
+      x = Math.min(x, F.kwh[n1]);
+      if (x <= 1e-6) continue;
+      // Therms and heat for x kWh along the running totals.
+      let lo = 0, hi = n1;
+      while (hi - lo > 1) { const md = (lo + hi) >> 1; if (F.kwh[md] <= x) lo = md; else hi = md; }
+      const t = F.kwh[hi] > F.kwh[lo] ? (x - F.kwh[lo]) / (F.kwh[hi] - F.kwh[lo]) : 0;
+      const th = F.th[lo] + t * (F.th[hi] - F.th[lo]), q = F.btu[lo] + t * (F.btu[hi] - F.btu[lo]);
+      const m = order[j];
+      // More use this month: first out of what it exported, then imports.
+      const fromExp = Math.min(x, monExp[m]); monExp[m] -= fromExp; monImp[m] += x - fromExp; monLoad[m] += x;
+      for (let k = j; k < 12; k++) R[k] -= x;
+      flexTherms += th; flexBtu += q; flexGas[m] += th;
+    }
+  }
   // Net metering: two passes so the credit bank reaches steady state.
   let bank = 0, elecBill = 0, paidOut = 0, bought = 0;
   const monBill = new Float64Array(12), monBank = new Float64Array(12);
@@ -250,11 +328,13 @@ export function evaluate(ctx, cfg) {
   let therms = 0;
   const monGas = new Float64Array(12);
   for (let i = 0; i < n; i++) { therms += L.gas[i]; monGas[ctx.month[i]] += L.gas[i]; }
+  therms -= flexTherms; for (let m = 0; m < 12; m++) monGas[m] -= flexGas[m];
   const gasService = therms > 0.5 || s.backup !== 'strips';
   const gasBill = therms * r.gas + (gasService ? 12 * r.gasFixed : 0);
   const solarCapex = (cfg.kw > 0 ? cfg.kw * c.pvPerKw + c.fixed : 0) + invCost(M, cfg) + (cfg.battery ? c.batteryKwh * c.batteryPerKwh : 0);
   return {
     cfg, prod, imp: sumA(monImp), exp: sumA(monExp), bought, paidOut, therms, gasService,
+    hpShare: L.heatTot ? L.hpShare + flexBtu / L.heatTot : 0,
     elecBill, gasBill, total: elecBill + gasBill,
     capex: solarCapex * (1 - c.incentive) + L.cost, solarCapex: solarCapex * (1 - c.incentive), hpCapex: L.cost,
     monProd, monLoad, monImp, monExp, monBill, monBank, monGas,
@@ -349,13 +429,22 @@ export function ladder(ctx, load) {
 
 // The cheapest array for one setup and inverter, by 25-year cost.
 function bestArray(ctx, load, m) {
-  const s = ctx.s, M = invOf(s, m), max = maxInv(s, M) * dcPer(s, M);
+  const s = ctx.s, M = invOf(s, m), max = Math.floor(maxInv(s, M) * dcPer(s, M) + 1e-9);
   const res0 = evaluate(ctx, { kw: 0, inv: 0, load, m, battery: false });
   let best = { kw: 0, inv: 0, res: res0, cost: lifeCost(res0, res0, s) };
-  for (let kw = 1; kw <= max; kw++) {
+  const seen = new Set();
+  const at = kw => {
+    if (kw < 1 || kw > max || seen.has(kw)) return;
+    seen.add(kw);
     const inv = unitsFor(s, M, kw), res = evaluate(ctx, { kw, inv, load, m, battery: false }), cost = lifeCost(res, res0, s);
     if (cost < best.cost) best = { kw, inv, res, cost };
-  }
+  };
+  // Coarse pass, then every size near the best and at each inverter edge.
+  for (let kw = 3; kw <= max; kw += 3) at(kw);
+  at(max);
+  for (let u = 1; u <= maxInv(s, M); u++) at(Math.floor(u * dcPer(s, M)));
+  const k0 = best.kw;
+  for (let kw = k0 - 2; kw <= k0 + 2; kw++) at(kw);
   return { ...best, res0 };
 }
 
@@ -367,18 +456,22 @@ const pick = r => ({
   monBill: Array.from(r.monBill), monGas: Array.from(r.monGas),
 });
 
-// Every heat pump setup and heating mode, each with its cheapest array on
-// inverter m (or on every inverter when m is null).
+// Every heat pump setup, heating mode and AHU count, each with its cheapest
+// array on inverter m (or on every inverter when m is null). Without gas,
+// only heating everything from the heat pumps makes sense.
+export const setupLabel = (opt, ahus) => `${HP_OPTIONS[opt].label}, ${ahus === 2 ? 'two AHUs' : 'one AHU'}`;
 function compareSetups(ctx, m) {
   const s = ctx.s, rows = [];
   const optIds = s.hp.option in HP_OPTIONS ? [s.hp.option] : Object.keys(HP_OPTIONS);
   const modes = s.hp.heat in HP_MODES ? [s.hp.heat] : Object.keys(HP_MODES);
+  const ahuN = [1, 2].includes(Number(s.hp.ahus)) ? [Number(s.hp.ahus)] : [1, 2];
   const invIds = m ? [m] : Object.keys(s.inverters);
-  for (const opt of Object.keys(HP_OPTIONS)) for (const mode of Object.keys(HP_MODES)) {
-    const load = `${opt}.${mode}`;
+  for (const opt of Object.keys(HP_OPTIONS)) for (const mode of Object.keys(HP_MODES)) for (const ahus of [1, 2]) {
+    if (s.backup === 'strips' && mode === 'smart') continue;
+    const load = `${opt}.${mode}.${ahus}`;
     let best = null;
     for (const id of invIds) { const b = bestArray(ctx, load, id); if (!best || b.cost < best.cost) best = { ...b, m: id }; }
-    rows.push({ opt, mode, load, allowed: optIds.includes(opt) && modes.includes(mode), ...best });
+    rows.push({ opt, mode, ahus, load, allowed: optIds.includes(opt) && modes.includes(mode) && ahuN.includes(ahus), ...best });
   }
   return rows;
 }
@@ -397,18 +490,20 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   const M = invOf(s, ctx.m), dcMax = dcPer(s, M), nMax = maxInv(s, M);
   const today = evaluate(ctx, { kw: 0, inv: 0, load: 'today', battery: false });
   const L0 = loadsFor(ctx, 'today');
-  const setupRows = Object.keys(HP_OPTIONS).map(opt => {
-    const both = setups.filter(r => r.opt === opt), best = both.filter(r => r.allowed).sort((a, b) => a.cost - b.cost)[0] ?? both.sort((a, b) => a.cost - b.cost)[0];
-    const other = both.find(r => r !== best), Lb = loadsFor(ctx, best.load);
-    return {
-      opt, label: HP_OPTIONS[opt].label, tons: Lb.tons, mode: best.mode, hpCost: Lb.cost, allowed: best.allowed,
+  const setupRows = [];
+  for (const opt of Object.keys(HP_OPTIONS)) for (const ahus of [1, 2]) {
+    const mine = setups.filter(r => r.opt === opt && r.ahus === ahus).sort((a, b) => a.cost - b.cost);
+    const best = mine.find(r => r.allowed) ?? mine[0], Lb = loadsFor(ctx, best.load);
+    setupRows.push({
+      id: `${opt}.${ahus}`, opt, ahus, label: setupLabel(opt, ahus), tons: Lb.tons, mode: best.mode, hpCost: Lb.cost, allowed: best.allowed,
       kw: best.kw, inv: best.inv, m: best.m, invName: s.inverters[best.m].name,
       capex: best.res.capex, bills: best.res.total, billsNoPv: best.res0.total, cost: best.cost,
-      otherMode: other.mode, otherCost: other.cost,
-      hpShare: loadsFor(ctx, `${opt}.hp`).hpShare, coolUnmetHrs: Lb.coolUnmetHrs, coolUnmet: Lb.coolUnmet / Math.max(1, Lb.coolTot),
-      unmet: loadsFor(ctx, `${opt}.hp`).unmet,
-    };
-  }).sort((a, b) => a.cost - b.cost);
+      modes: Object.fromEntries(mine.map(r => [r.mode, r.cost])),
+      hpShare: best.res.hpShare, coolUnmetHrs: Lb.coolUnmetHrs, coolUnmet: Lb.coolUnmet / Math.max(1, Lb.coolTot),
+      therms: best.res.therms,
+    });
+  }
+  setupRows.sort((a, b) => (b.allowed - a.allowed) || (a.cost - b.cost));
 
   // 2. The solar purchase order on the winning setup.
   const withE = (r, b) => ({ ...r, econ: economics(r, b, s) });
@@ -427,12 +522,14 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   }).sort((a, b) => b.npv - a.npv);
 
   // 4. 25-year cost of each setup by array size, on the chosen inverter.
+  // One line per heat pump choice, with its better AHU count and mode.
+  const lines = Object.keys(HP_OPTIONS).map(opt => setupRows.filter(r => r.opt === opt).sort((a, b) => a.cost - b.cost)[0]);
   const curve = [];
-  const res0 = Object.fromEntries(setupRows.map(r => [r.opt, evaluate(ctx, { kw: 0, inv: 0, load: `${r.opt}.${r.mode}`, battery: false })]));
+  const res0 = Object.fromEntries(lines.map(r => [r.opt, evaluate(ctx, { kw: 0, inv: 0, load: `${r.opt}.${r.mode}.${r.ahus}`, battery: false })]));
   for (let kw = 0; kw <= nMax * dcMax; kw++) {
     const row = { kw };
-    for (const r of setupRows) {
-      const res = evaluate(ctx, { kw, inv: unitsFor(s, M, kw), load: `${r.opt}.${r.mode}`, battery: false });
+    for (const r of lines) {
+      const res = evaluate(ctx, { kw, inv: unitsFor(s, M, kw), load: `${r.opt}.${r.mode}.${r.ahus}`, battery: false });
       row[r.opt] = lifeCost(res, res0[r.opt], s);
     }
     curve.push(row);
@@ -447,14 +544,15 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
     c2.m = ctx.m;
     const rows = compareSetups(c2, ctx.m).filter(r => r.allowed);
     const per = {};
-    for (const r of rows) if (!per[r.opt] || r.cost < per[r.opt].cost) per[r.opt] = { cost: r.cost, mode: r.mode, kw: r.kw, inv: r.inv, unmet: loadsFor(c2, r.load).unmet };
+    for (const r of rows) if (!per[r.opt] || r.cost < per[r.opt].cost) per[r.opt] = { cost: r.cost, mode: r.mode, ahus: r.ahus, kw: r.kw, inv: r.inv, unmet: loadsFor(c2, r.load).unmet };
     const winner = Object.entries(per).sort((a, b) => a[1].cost - b[1].cost)[0][0];
     variants.push({ label, per, winner });
   };
   variant('As entered', () => {});
-  variant('Gas service dropped, AHU strips as backup', x => { x.backup = 'strips'; x.hp.heat = x.hp.heat === 'cool' ? 'auto' : x.hp.heat; });
+  variant('Gas service dropped, AHU strips as backup', x => { x.backup = 'strips'; x.hp.heat = 'hp'; });
   variant('Annual true-up in April instead', x => { x.rates.trueUpMonth = 3; });
-  variant('April true-up and gas dropped', x => { x.rates.trueUpMonth = 3; x.backup = 'strips'; x.hp.heat = x.hp.heat === 'cool' ? 'auto' : x.hp.heat; });
+  variant('April true-up and gas dropped', x => { x.rates.trueUpMonth = 3; x.backup = 'strips'; x.hp.heat = 'hp'; });
+  variant('Household use 65 kWh/day', x => { x.domestic.kWhPerDay = 65; });
   variant('Gas at $0.80/therm', x => { x.rates.gas = Math.max(x.rates.gas, 0.80); });
 
   const addBatt = evaluate(ctx, { ...Lr.final.cfg, battery: true });
@@ -462,7 +560,8 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   const Lw = loadsFor(ctx, load);
   return {
     inputs: s,
-    setup: { opt: win.opt, mode: win.mode, label: HP_OPTIONS[win.opt].label, tons: Lw.tons, hpCost: Lw.cost, hpShare: Lw.hpShare, coolUnmetHrs: Lw.coolUnmetHrs, auto: !(s.hp.option in HP_OPTIONS) },
+    setup: { opt: win.opt, mode: win.mode, ahus: win.ahus, label: setupLabel(win.opt, win.ahus), hpLabel: HP_OPTIONS[win.opt].label, tons: Lw.tons, hpCost: Lw.cost, hpShare: rec.hpShare, coolUnmetHrs: Lw.coolUnmetHrs, floorLoss: Lw.floorLoss, auto: !(s.hp.option in HP_OPTIONS) },
+    lines: lines.map(r => ({ opt: r.opt, ahus: r.ahus, mode: r.mode, label: r.label })),
     setups: setupRows,
     inverter: { id: ctx.m, ...M, dcMax, maxUnits: nMax, auto: autoInv },
     inverters,

@@ -14,7 +14,7 @@ console.log(`Today (no cooling): ${P.today.loadKWh.toFixed(0)} kWh, ${P.today.th
 
 console.log('\nHeat pump setups, each with its cheapest array and inverter (25-year cost, lower is better):');
 for (const r of P.setups)
-  console.log(`  ${r.label.padEnd(16)} ${r.mode.padEnd(5)} HP ${$(r.hpCost).padStart(7)}  ${String(r.kw).padStart(2)} kW on ${r.inv} ${r.invName.padEnd(20)} up front ${$(r.capex).padStart(8)}  bills ${$(r.bills).padStart(6)}/yr  25-yr ${$(r.cost).padStart(8)}  (${r.otherMode} ${$(r.otherCost)})  heat share ${(r.hpShare * 100).toFixed(0)}%  cooling short ${r.coolUnmetHrs} h`);
+  console.log(`  ${r.label.padEnd(28)} ${r.mode.padEnd(5)} HP ${$(r.hpCost).padStart(7)}  ${String(r.kw).padStart(2)} kW on ${r.inv} ${r.invName.padEnd(20)} up front ${$(r.capex).padStart(8)}  bills ${$(r.bills).padStart(6)}/yr  25-yr ${$(r.cost).padStart(8)}  (${Object.entries(r.modes).map(([k, v]) => k + ' ' + $(v)).join(', ')})  heat share ${(r.hpShare * 100).toFixed(0)}%  cooling short ${r.coolUnmetHrs} h`);
 console.log(`Chosen: ${P.setup.label}, ${P.setup.mode}`);
 
 console.log(`\nInverters on the ${P.setup.label}, each with its own purchase order:`);
@@ -29,7 +29,7 @@ for (const st of P.rejected)
 const R = P.recommended;
 console.log(`Recommended: ${sys(R.cfg)}, ${$(R.capex)}, saves ${$(R.econ.save1)}/yr, payback ${yr(R.econ.payback)}, NPV ${$(R.econ.npv)}, bills ${$(R.total)}`);
 console.log(`Battery on top: ${$(P.battery.dCap)} saves ${$(P.battery.dSave)}/yr${P.battery.possible ? '' : ' (not possible on this inverter)'}`);
-for (const v of P.variants) console.log(`  ${v.label.padEnd(44)} → ${v.winner}  ${Object.entries(v.per).map(([k, x]) => `${k} ${$(x.cost)} (${x.mode}, ${x.kw} kW)`).join('  ')}`);
+for (const v of P.variants) console.log(`  ${v.label.padEnd(44)} → ${v.winner}  ${Object.entries(v.per).map(([k, x]) => `${k} ${$(x.cost)} (${x.mode}, ${x.ahus} AHU, ${x.kw} kW)`).join('  ')}`);
 console.log(`(${(performance.now() - t0).toFixed(0)} ms)`);
 
 if (process.argv.includes('--write')) {

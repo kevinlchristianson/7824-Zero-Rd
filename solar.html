@@ -242,11 +242,21 @@ const SCHEMA = [
   { group: 'Heat pumps', items: [
     ['hp.option', 'Setup', '', 'assumed'],
     ['hp.heat', 'Heating', '', 'assumed'],
+    ['hp.ahus', 'Air handlers', '', 'owner'],
     ['hp.units.t35.cost', 'Apollo 3.5-ton, each', '$', 'listing', 0, 30000, 50],
     ['hp.units.t60.cost', 'Apollo 6-ton, each', '$', 'listing', 0, 30000, 50],
     ['hp.install', 'Install, per unit', '$', 'assumed', 0, 20000, 100],
     ['hp.units.t35.coolCop', 'Cooling COP, 3.5-ton', '×', 'owner', 1, 8, 0.1],
     ['hp.units.t60.coolCop', 'Cooling COP, 6-ton', '×', 'sheet', 1, 8, 0.1],
+    ['ahu2.cost', 'Second AHU (3.5-ton)', '$', 'listing', 0, 20000, 50],
+    ['ahu2.install', 'Second AHU ducts and install', '$', 'assumed', 0, 30000, 100],
+    ['hp.waterF.ahu', 'Water the AHU coils need', '°F', 'assumed', 80, 160, 1],
+    ['hp.waterF.floor', 'Water the upper floor needs', '°F', 'assumed', 80, 180, 1],
+    ['hp.waterF.dhw', 'Water for hot-water tank', '°F', 'assumed', 100, 160, 1],
+    ['hp.ratedWaterF', 'COPs above are rated at', '°F', 'assumed', 70, 140, 1],
+    ['hp.copPerF', 'COP lost per °F hotter', '×', 'assumed', 0, 0.05, 0.001],
+    ['floor.share', 'Upper-level heat from the floor (one AHU)', '×', 'assumed', 0, 1, 0.05],
+    ['floor.downLoss', 'Floor heat lost downward', '×', 'assumed', 0, 0.6, 0.01],
     ['hp.cop47', 'COP at 47°F', '×', 'sheet', 1, 6, 0.1],
     ['hp.cop17', 'COP at 17°F', '×', 'sheet', 1, 6, 0.1],
     ['hp.cop5', 'COP at 5°F', '×', 'sheet', 1, 6, 0.1],
@@ -261,7 +271,8 @@ const SELECTS = {
   'rates.trueUpMonth': MON.map((m, k) => [k, `End of ${m}`]),
   'pv.inverter': [['auto', 'Best value (auto)'], ...Object.entries(SOLAR_INPUTS.inverters).map(([k, v]) => [k, v.name])],
   'hp.option': [['auto', 'Lowest 25-year cost (auto)'], ['c35', 'One 3.5-ton'], ['h60', 'One 6-ton'], ['both', '3.5-ton + 6-ton'], ['two60', 'Two 6-tons']],
-  'hp.heat': [['auto', 'Cheaper of the two (auto)'], ['hp', 'Heat pumps heat, boiler backs up'], ['cool', 'Heat pumps only cool']],
+  'hp.heat': [['auto', 'Cheapest (auto)'], ['smart', 'Heat when it beats gas'], ['hp', 'Heat first, boiler backs up'], ['cool', 'Cool only']],
+  'hp.ahus': [['auto', 'Cheapest (auto)'], ['1', 'One (6-ton), floor carries upstairs'], ['2', 'Add a 3.5-ton, floor off']],
   backup: [['boiler', 'Gas boiler (keep gas service)'], ['strips', 'AHU 10 kW strips (drop gas)']],
 };
 
@@ -327,15 +338,16 @@ function legend(el, items) {
 const WORDS = ['', 'one', 'two', 'three', 'four'];
 const invLabel = (inv, n, micro) => (micro ? `${inv.name} microinverters` : `${WORDS[n] ?? n} ${inv.name}${n > 1 ? 's' : ''}`);
 const sysLabel = c => c.kw ? `${c.kw} kW on ${invLabel(P.inverter, c.inv, P.inverter.kind === 'micro')}${c.battery ? ' + battery' : ''}` : 'No solar';
-const MODE = { hp: 'heats and cools', cool: 'cools only' };
+const MODE = { smart: 'heats when it beats gas', hp: 'heats first', cool: 'cools only' };
+const isPick = r => r.opt === P.setup.opt && r.ahus === P.setup.ahus;
 
 // ---------------------------------------------------------------- render
 function render() {
   if (!P) return;
   const R = P.recommended, B = P.baseline, T = P.today, i = P.inputs, U = P.setup;
   const tiles = [
-    ['hero', 'Buy', `${U.label} Apollo`,
-      `${U.mode === 'hp' ? `Let it heat as well as cool; it covers ${nf(U.hpShare * 100)}% of space and water heat and the boiler covers the rest.` : 'Cooling only; the boiler keeps heating.'} ${usd(U.hpCost)} installed.`],
+    ['hero', 'Buy', `${U.hpLabel} Apollo`,
+      `${U.ahus === 2 ? 'Plus a second AHU for the upper level. ' : 'On the existing AHU. '}${U.mode === 'smart' ? `Let it heat only when that beats gas: on solar credit that would otherwise be paid out at $${i.rates.avoided}/kWh, or when its COP beats gas. It covers ${nf(U.hpShare * 100)}% of space and water heat.` : U.mode === 'hp' ? `Let it heat first; it covers ${nf(U.hpShare * 100)}% of space and water heat.` : 'Cooling only; the boiler keeps heating.'} ${usd(U.hpCost)} installed.`],
     ['', 'With solar', R.cfg.kw > 0 ? `${R.cfg.kw} kW` : 'None', R.cfg.kw > 0 ? `on ${invLabel(P.inverter, R.cfg.inv, P.inverter.kind === 'micro')}; ${usd(R.solarCapex)}, pays back in ${nf(R.econ.payback, 1)} yr` : 'no array pays back'],
     ['', 'Bills today', usd(T.total), 'a year, with no cooling'],
     ['', 'Bills after', usd(R.total), `a year, with cooling; ${usd(B.total)} without the solar`],
@@ -351,22 +363,24 @@ function render() {
 
 function renderSetups() {
   const t = $('#setups'), i = P.inputs;
-  t.innerHTML = '<thead><tr><th>Setup</th><th class="num">Heat pumps</th><th>Best solar</th><th class="num">Up front</th><th class="num">Bills / yr</th><th class="num">25-yr cost</th><th class="num">Other mode</th></tr></thead>';
+  t.innerHTML = '<thead><tr><th>Setup</th><th class="num">Heat pumps</th><th>Best solar</th><th class="num">Up front</th><th class="num">Bills / yr</th><th class="num">25-yr cost</th><th class="num">Other heating</th></tr></thead>';
   const tb = t.createTBody(), best = P.setups[0].cost;
   for (const r of P.setups) {
-    const tr = tb.insertRow(); if (r.opt === P.setup.opt) tr.className = 'pick';
+    const tr = tb.insertRow(); if (isPick(r)) tr.className = 'pick';
     const c0 = tr.insertCell(); c0.textContent = r.label;
     const k = document.createElement('div'); k.className = 'cellnote';
-    k.textContent = `${MODE[r.mode]}${r.mode === 'hp' ? ` · ${nf(r.hpShare * 100)}% of heat` : ''} · cooling short ${r.coolUnmetHrs} h/yr`;
+    k.textContent = `${MODE[r.mode]}${r.mode !== 'cool' ? ` · ${nf(r.hpShare * 100)}% of heat` : ''} · cooling short ${r.coolUnmetHrs} h/yr`;
     c0.append(k);
     let c = tr.insertCell(); c.className = 'num'; c.textContent = usd(r.hpCost);
     tr.insertCell().textContent = r.kw ? `${r.kw} kW on ${r.inv > 1 ? r.inv + ' × ' : ''}${r.invName}` : 'none';
     for (const v of [usd(r.capex), usd(r.bills), usd(r.cost)]) { c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
-    c = tr.insertCell(); c.className = 'num'; c.textContent = `${MODE[r.otherMode]}: +${usd(r.otherCost - r.cost)}`;
+    c = tr.insertCell(); c.className = 'num';
+    const others = Object.entries(r.modes).filter(([k2]) => k2 !== r.mode);
+    others.forEach(([k2, v2], j) => { const d = document.createElement(j ? 'div' : 'span'); if (j) d.className = 'cellnote'; d.textContent = `${MODE[k2]} +${usd(v2 - r.cost)}`; c.append(d); });
     if (r.cost > best) { const d = document.createElement('div'); d.className = 'cellnote'; d.textContent = `+${usd(r.cost - best)} vs best`; tr.cells[5].append(d); }
   }
   const U = P.setups[0], sec = P.setups[1];
-  $('#setup-sub').textContent = `Each setup gets the array and inverter that make it cheapest to own. "25-yr cost" is everything bought up front plus the present value of ${i.finance.horizon} years of electric and gas bills at ${nf(i.finance.discount * 100, 1)}%; lower is better. ${U.label} wins by ${usd(sec.cost - U.cost)} over ${sec.label.toLowerCase()}. Extra tons buy almost nothing: cooling needs about ${nf(P.coolDemand.btu / 1e6)} MMBtu a year, the 3.5-ton falls short only ${U.opt === 'c35' ? U.coolUnmetHrs : P.setups.find(r => r.opt === 'c35')?.coolUnmetHrs} hours a year, and the single 6-ton AHU caps cooling at 6 tons anyway. On heat, a bigger unit mostly displaces gas at retail electric prices, which costs more than the gas.`;
+  $('#setup-sub').textContent = `Each setup gets the array and inverter that make it cheapest to own. "25-yr cost" is everything bought up front plus the present value of ${i.finance.horizon} years of electric and gas bills at ${nf(i.finance.discount * 100, 1)}%; lower is better. ${U.label} wins by ${usd(sec.cost - U.cost)} over ${sec.label.replace(/^One/, 'one')}. Extra tons buy almost nothing: cooling needs about ${nf(P.coolDemand.btu / 1e6)} MMBtu a year and the 3.5-ton falls short only ${P.setups.find(r => r.opt === 'c35')?.coolUnmetHrs} hours of it. On heat, the ${i.hp.waterF.floor}°F water the upper floor needs and the ${i.hp.waterF.ahu}°F the AHU needs cut the heat pump's COP well below its rating, so heat pump heat beats gas only on solar credit that would otherwise be paid out. A second AHU would let the floor go off and the heat pump run cooler, but it saves less than its ${usd(i.ahu2.cost + i.ahu2.install)} cost.`;
 }
 
 function renderLadder() {
@@ -410,7 +424,7 @@ function renderCurve() {
   const el = $('#curve'), W = Math.max(300, el.clientWidth), H = 280, m = { l: 56, r: 118, t: 16, b: 34 };
   const d = P.curve, maxKw = d.at(-1).kw;
   const COL = { c35: 'var(--s1)', h60: 'var(--s2)', both: 'var(--s3)', two60: 'var(--s4)' };
-  const S = P.setups.map(r => [r.opt, r.label, COL[r.opt]]);
+  const S = P.lines.map(r => [r.opt, r.label, COL[r.opt]]);
   const vals = d.flatMap(r => S.map(([k]) => r[k]));
   const ticks = niceTicks(Math.min(...vals), Math.max(...vals), 5), lo = ticks[0], hi = ticks.at(-1);
   const x = k => m.l + k / maxKw * (W - m.l - m.r), y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
@@ -439,7 +453,7 @@ function renderCurve() {
   });
   el.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
   legend($('#curve-legend'), S.map(([, l, c]) => ({ label: l, color: c, line: true })));
-  $('#curve-sub').textContent = `25-year cost of each heat pump setup, in its cheaper heating mode, by array size on the ${P.inverter.name}; lower is better. Every setup keeps getting cheaper as the array grows, because a heat pump that heats can use winter solar at full retail value. The curves flatten where extra panels only make credit that is paid out at $${P.inputs.rates.avoided}/kWh.`;
+  $('#curve-sub').textContent = `25-year cost of each heat pump choice, with its better AHU count and heating mode, by array size on the ${P.inverter.name}; lower is better. Each setup gets cheaper as the array grows while the panels offset power bought at retail, and a heat pump that heats can also turn fall surplus into heat instead of $${P.inputs.rates.avoided}/kWh credit. The curves flatten where extra panels only make credit that is paid out at $${P.inputs.rates.avoided}/kWh.`;
 }
 
 function renderYear() {
@@ -473,7 +487,7 @@ function renderYear() {
 }
 
 function renderVariants() {
-  const t = $('#variants'), opts = P.setups.map(r => [r.opt, r.label]);
+  const t = $('#variants'), HPL = { c35: 'One 3.5-ton', h60: 'One 6-ton', both: '3.5-ton + 6-ton', two60: 'Two 6-tons' }, opts = Object.entries(HPL);
   t.innerHTML = `<thead><tr><th>If</th>${opts.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th>Cheapest</th></tr></thead>`;
   const tb = t.createTBody();
   for (const v of P.variants) {
@@ -482,12 +496,12 @@ function renderVariants() {
     for (const [k] of opts) {
       const c = tr.insertCell(); c.className = 'num'; const x = v.per[k];
       c.textContent = x ? usd(x.cost) : '—';
-      if (x) { const n = document.createElement('div'); n.className = 'cellnote'; n.textContent = `${x.kw} kW · ${x.mode === 'hp' ? 'heats' : 'cools only'}${x.unmet > 1e5 ? ` · ${nf(x.unmet / 1e6, 1)} MMBtu short` : ''}`; c.append(n); }
+      if (x) { const n = document.createElement('div'); n.className = 'cellnote'; n.textContent = `${x.kw} kW · ${{ smart: 'smart', hp: 'heat first', cool: 'cool only' }[x.mode]}${x.ahus === 2 ? ' · 2 AHUs' : ''}${x.unmet > 1e5 ? ` · ${nf(x.unmet / 1e6, 1)} MMBtu short` : ''}`; c.append(n); }
     }
-    const c = tr.insertCell(); const sp = document.createElement('span'); sp.className = 'verdict yes'; sp.textContent = P.setups.find(r => r.opt === v.winner).label; c.append(sp);
+    const c = tr.insertCell(); const sp = document.createElement('span'); sp.className = 'verdict yes'; sp.textContent = HPL[v.winner]; c.append(sp);
   }
   const i = P.inputs, gasMM = i.rates.gas / 0.88 * 10, hpMM = i.rates.elec / (2.6 * 3412) * 1e6, surMM = i.rates.avoided / (2.6 * 3412) * 1e6;
-  $('#hp-sub').textContent = `25-year cost of each setup under other rules and prices, each with its best array on the ${P.inverter.name}. Heat from gas costs about $${gasMM.toFixed(2)} per MMBtu. A heat pump on bought power costs about $${hpMM.toFixed(2)}, but on solar it would otherwise sell at $${i.rates.avoided}/kWh it costs only $${surMM.toFixed(2)}. That is why heating with the heat pump pays only alongside a large array, and why bigger units that displace more gas don't pay for themselves. "MMBtu short" is cold-snap heat the 10 kW strips can't cover once gas is gone; with gas dropped, a lone 3.5-ton leaves the building cold on the worst days.`;
+  $('#hp-sub').textContent = `25-year cost of each setup under other rules and prices, each with its best array on the ${P.inverter.name}. Heat from gas costs about $${gasMM.toFixed(2)} per MMBtu. A heat pump on bought power costs about $${hpMM.toFixed(2)}, but on solar it would otherwise sell at $${i.rates.avoided}/kWh it costs only $${surMM.toFixed(2)}. At the hot water your floor and AHU need, the heat pump's real COP is lower still. So it pays to heat with it only on surplus solar credit, and bigger units that displace more gas don't pay for themselves. "MMBtu short" is cold-snap heat the 10 kW strips can't cover once gas is gone; with gas dropped, a lone 3.5-ton leaves the building cold on the worst days.`;
 }
 
 function renderMethod() {
@@ -495,10 +509,11 @@ function renderMethod() {
   const items = [
     ['Sun', `Casper TMY3 hourly beam, diffuse and global radiation on panels tilted ${i.pv.tilt}° facing south: ${nf(P.pvYield)} kWh per kW of panels a year, ${nf(P.pvMonthly[11])} in December and ${nf(P.pvMonthly[6])} in July. Cell temperature follows air temperature and wind, which suits cold, windy Casper. ${nf(i.pv.losses * 100)}% losses. The ${P.inverter.name} converts at ${nf(P.inverter.eff * 100, 1)}%${P.inverter.ac ? ` and clips at ${P.inverter.ac} kW AC per unit, taking up to ${P.inverter.dc} kW of panels` : ''}.`],
     ['Loads', `Heating and cooling come hour by hour from the thermal model, with upstairs internal gains set from your ${i.domestic.kWhPerDay} kWh/day at ${nf(i.domestic.indoor * 100)}% indoors. Household electricity follows a typical daily shape. Hot water is ${i.dhw.galPerDay} gal/day heated to ${i.dhw.setF}°F from Casper ground water, by gas today.`],
-    ['Heat pumps', `Each Apollo follows your 6-ton COP and capacity curves (${i.hp.cop47} at 47°F, ${i.hp.cop17} at 17°F, ${i.hp.cop5} at 5°F, derated ${i.hp.derate}; stops below ${i.hp.minT}°F), with capacity scaled by tons; the 3.5-ton is assumed to match the 6-ton's COPs. When heat pumps heat, they cover space heat and hot water first and the ${i.backup === 'strips' ? 'AHU strips cover' : 'boiler covers'} the rest. Cooling runs the most efficient unit first (COP ${i.hp.units.t35.coolCop} for the 3.5-ton, ${i.hp.units.t60.coolCop} for the 6-ton from EER 13) and is capped at 6 tons by the one AHU. Prices are MBTEK list plus $${nf(i.hp.install)} per unit to install.`],
+    ['Heat pumps', `Each Apollo follows your 6-ton COP and capacity curves (${i.hp.cop47} at 47°F, ${i.hp.cop17} at 17°F, ${i.hp.cop5} at 5°F, derated ${i.hp.derate}; stops below ${i.hp.minT}°F), taken as rated at ${i.hp.ratedWaterF}°F water, with capacity scaled by tons. Hotter water costs ${nf(i.hp.copPerF * 100, 1)}% of COP per °F: the AHU coils get ${i.hp.waterF.ahu}°F, the upper floor ${i.hp.waterF.floor}°F, the hot-water tank ${i.hp.waterF.dhw}°F, coolest first. With one AHU the floor carries ${nf(i.floor.share * 100)}% of the upper level's heat and loses ${nf(i.floor.downLoss * 100)}% downward, which the ground level uses when it needs heat. A second AHU takes the upper level over by air, the floor stays off, and cooling can reach 9.5 tons. "Heats when it beats gas" spends each month's banked solar credit that would otherwise be paid out at the true-up on the best COP hours first, plus any hour where the heat pump beats gas outright. It never makes a month buy power it wouldn't have. Cooling runs the most efficient unit first (COP ${i.hp.units.t35.coolCop} for the 3.5-ton, ${i.hp.units.t60.coolCop} for the 6-ton). Prices are MBTEK list plus $${nf(i.hp.install)} per unit to install.`],
+    ['Household', `Your ${i.domestic.kWhPerDay} kWh/day (${nf(i.domestic.kWhPerDay * 365)} kWh a year) is in every load, along with ${i.dhw.galPerDay} gal/day of hot water for four people. The recommended array makes ${nf(P.recommended.prod)} kWh against ${nf(P.recommended.loadKWh)} kWh used, so over the year it covers the household and the heat pump. In ${P.recommended.monProd.map((v, k) => v < P.recommended.monLoad[k] ? MON[k] : null).filter(Boolean).join(', ') || 'no month'}, use runs ahead of production and banked credit makes up the difference.`],
     ['Net metering', `Each month's kWh are netted. Surplus is banked at full retail value and carried forward; whatever is left at the end of ${MON[i.rates.trueUpMonth]} is paid at $${i.rates.avoided}/kWh. Systems are limited to ${i.nemCapKwAC} kW of inverter AC rating, which allows ${P.inverter.maxUnits > 1 ? P.inverter.maxUnits + ' ' + P.inverter.name + 's' : P.inverter.kind === 'micro' ? P.inverter.dcMax + ' kW of panels on microinverters' : 'one ' + P.inverter.name}. Confirm both the limit and the true-up date with Rocky Mountain Power.`],
     ['Money', `Panel, site and battery costs are from your sheet; inverter prices other than the 18kPV are 2026 retail listings. Savings grow ${nf(i.rates.escalation * 100, 1)}% a year with rates, less ${nf(i.rates.degradation * 100, 1)}% panel degradation. "Worth" is net present value at ${nf(i.finance.discount * 100, 1)}% over ${i.finance.horizon} years. Payback counts the growing savings.`],
-    ['Not counted', 'Smarter heating control (running the heat pump only when solar or banked credit covers it would do better than heat-pump-first), extra electrical service for two units, tax credits (the federal residential credit ended in 2025; set any rebate under Costs), demand charges (none on your Schedule 25 bill), and panel or inverter replacement.'],
+    ['Not counted', 'The controller the smart mode needs (a seasonal schedule and an outdoor-temperature lockout get most of it), extra electrical service for two units, tax credits (the federal residential credit ended in 2025; set any rebate under Costs), demand charges (none on your Schedule 25 bill), and panel or inverter replacement.'],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
 }
@@ -527,7 +542,7 @@ function buildForm() {
       ctl.id = id;
       const on = () => {
         let v = ctl.value;
-        if (ctl.tagName === 'SELECT') v = ['backup', 'pv.inverter', 'hp.option', 'hp.heat'].includes(path) ? v : Number(v);
+        if (ctl.tagName === 'SELECT') v = ['backup', 'pv.inverter', 'hp.option', 'hp.heat'].includes(path) || (path === 'hp.ahus' && v === 'auto') ? v : Number(v);
         else { v = Number(v); if (!Number.isFinite(v) || ctl.value === '') return; v = Math.min(Number(max), Math.max(Number(min), v)); }
         if (getIn(inputs, path) === v) return;
         setIn(inputs, path, v);
