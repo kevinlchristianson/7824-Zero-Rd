@@ -1,10 +1,12 @@
-// Lays out solar panels on the south roof slopes and writes data/roofpv.json
-// for the 3D viewer. Usage: npm run roofpv
+// Lays out solar panels on the south roof slopes and wires the shop's array;
+// writes data/roofpv.json for the 3D viewer and data/wiring.json for the
+// wiring sheet. Usage: npm run roofpv
 import { readFileSync, writeFileSync } from 'node:fs';
 import { prepareWeather } from '../model/thermal.js';
 import { pvPerKw, SOLAR_INPUTS } from '../model/solar.js';
 import { DEFAULTS } from '../model/params.js';
 import { roofPV, ROOFPV_INPUTS as S } from '../model/roofpv.js';
+import { wiring } from '../model/wiring.js';
 
 const wx = prepareWeather(JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.meta.url), 'utf8')));
 const t0 = performance.now();
@@ -24,4 +26,11 @@ console.log(`Total: ${T.panels} panels, ${T.kw.toFixed(1)} kW, ${n(T.kwh)} kWh D
 
 const round = (k, v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
 writeFileSync(new URL('../data/roofpv.json', import.meta.url), JSON.stringify(R, round));
-console.log('wrote data/roofpv.json');
+
+const D = wiring(R), B = D.bom;
+for (const st of D.strings)
+  console.log(`  ${st.id} -> inverter ${st.inverter} ${st.input}: ${st.n} panels in columns ${st.cols.join(',')}; Voc ${st.vocCold.toFixed(0)} V at ${D.inputs.lowC} C; ${st.amps.toFixed(1)} A (input takes ${st.iscMax} A); home runs - ${st.minus.ft.toFixed(0)} ft, + ${st.plus.ft.toFixed(0)} ft`);
+console.log(`Junction box ${D.jbox.x} ft from the roof's west edge, ${D.jbox.w} ft up the slope; two conduits of ${D.conduits[0].ft.toFixed(0)} ft to the inverters; ${D.jumpers.length} jumpers (${B.jumperFt.toFixed(0)} ft)`);
+console.log(`Wire: PV red ${n(B.pvRedFt)} ft, black ${n(B.pvBlackFt)} ft; THWN-2 red ${n(B.thwnRedFt)}, black ${n(B.thwnBlackFt)}, green ${n(B.greenFt)} ft; bare copper ${n(B.bareFt)} ft; ${B.mc4Pairs} MC4 pairs, ${B.rsd} rapid-shutdown units, ${B.terminals} terminals`);
+writeFileSync(new URL('../data/wiring.json', import.meta.url), JSON.stringify(D, round));
+console.log('wrote data/roofpv.json and data/wiring.json');

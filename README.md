@@ -3,6 +3,7 @@
 Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one set of geometry.
 
 - **`index.html`**: parametric three.js massing model (3D viewer), with solar panels laid out on the south roof slopes. `npm run roofpv` rebuilds the layout in `data/roofpv.json`.
+- **`wiring.html`**: DC wiring for the shop's roof array: strings, home runs, the roof junction box, conduits to the inverters in the shop's SE corner, grounding, and the wire and parts list. `npm run roofpv` rebuilds `data/wiring.json` with the layout.
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 - **`offgrid.html`**: off-grid questions sized hour by hour, in grid-down conservation mode: (A) batteries, generator and stored gas to carry the grid-tied house through its worst week; (B) full off grid with no gas on heat pumps, resistance and batteries; (C) the same with an outdoor wood boiler. `npm run offgrid` rebuilds `data/offgrid.json`.
