@@ -381,7 +381,7 @@ document.getElementById('tgl-site').addEventListener('change', e => { layer('sit
 
 // ---------------- solar layout (data/roofpv.json)
 const pvBox = document.getElementById('pv');
-fetch(new URL('./data/roofpv.json', import.meta.url)).then(r => r.json()).then(L => {
+fetch(new URL('./data/roofpv.json', import.meta.url), { cache: 'no-cache' }).then(r => r.json()).then(L => {
   const pv = pvPanels(L);
   pv.visible = document.getElementById('tgl-pv').checked;
   house.add(pv);
