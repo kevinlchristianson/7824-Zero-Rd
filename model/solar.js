@@ -42,7 +42,7 @@ export const SOLAR_INPUTS = {
     install: 1500,                   // assumed, per unit: pad, line set, wiring, glycol
     buffer: 2890,                    // MBTEK BF250 dual-coil, list less 20%
     controls: 1500,                  // assumed: HBX ECO-0600, V-1..V-4, sensors, P-3 (pack M-3/M-5)
-    shopHeater: 1600,                // assumed: MBTEK commercial hydronic unit heater, installed
+    shopHeater: 1600,                // assumed: MBTEK commercial hydronic unit heater, installed (only if shop.heater = 'navien')
     option: 'auto',                  // an id from HP_OPTIONS, or 'auto' for the lowest 25-year cost
     heat: 'auto',                    // a key of HP_MODES, or 'auto' for the cheapest
     ahus: 'auto',                    // 1, 2, or 'auto'
@@ -55,8 +55,11 @@ export const SOLAR_INPUTS = {
   floor: { areaFt2: 3168, btuPerFt2F: 0.35, downLoss: 0.08 },   // area from M-1; output and loss assumed
   boilerEff: 0.93,                   // assumed: Navien condensing on ≤120 °F return
   ahu2: { cost: 2560, install: 3000 },             // MBTEK 3.5-ton AHU list less 20%; ducts and install assumed
-  // Today's shop heater: a gas Modine, kept until the heat pump plan moves
-  // the shop onto the buffer and a hydronic unit heater.
+  // The shop is heated only on demand, fast, with gas (owner): either the
+  // existing Modine, or a hydronic unit heater fed max-temperature water
+  // straight from the Navien in burst mode (non-condensing at that
+  // temperature). The heat pump never heats the shop.
+  shop: { heater: 'modine', navienBurstEff: 0.87 },   // owner; burst efficiency assumed
   modine: { eff: 0.82, resale: 2500 },             // separated-combustion rating; resale assumed (half of new)
   dhw: { galPerDay: 60, setF: 120, eff: 0.90 },  // assumed: four people, about 15 gal each
   domestic: { kWhPerDay: 47, indoor: 0.7 },       // sheet
@@ -211,8 +214,8 @@ export function loadsFor(ctx, key) {
     floorLoss += Math.max(0, leak - ctx.zone.ground[i]);
     // Today the gas Modine heats the shop directly, with no pipes to lose heat
     // through; the heat pump plans move it onto the buffer.
-    const shopModine = !opt, shopQ = ctx.zone.shop[i];
-    const air = (shopModine ? 0 : shopQ) + groundAir + ctx.zone.upper[i] - upFloor;
+    const shopQ = ctx.zone.shop[i];
+    const air = groundAir + ctx.zone.upper[i] - upFloor;
     // Hot water: the combi heats it, from cold water the buffer's lower coil
     // has preheated whenever the tank is warm (not while it's chilled).
     const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - hp.preheatApproachF) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
@@ -250,11 +253,13 @@ export function loadsFor(ctx, key) {
       const r2 = left.air + left.floor + left.pre + left.dhw, strip = Math.min(r2, 10 * BTU_KWH * ahus);
       e += strip / BTU_KWH; backupElec += strip / BTU_KWH; unmet += r2 - strip;
     } else g = ((left.air + left.floor) / bEff + (left.pre + left.dhw) / s.dhw.eff) / 1e5;
-    if (shopModine) g += shopQ * (1 - (pl.distLoss ?? 0)) / s.modine.eff / 1e5;
-    heatTot += air + floorOut + dhw + (shopModine ? shopQ : 0); floorBtu += upFloor;
+    // The shop, always on gas.
+    g += s.shop.heater === 'navien' ? shopQ / s.shop.navienBurstEff / 1e5 : shopQ * (1 - (pl.distLoss ?? 0)) / s.modine.eff / 1e5;
+    e += s.shop.heater === 'navien' ? shopQ / pl.ahuHeatBtuh * distKW : 0;
+    heatTot += air + floorOut + dhw + shopQ; floorBtu += upFloor;
     elec[i] = e; gas[i] = g;
   }
-  const cost = !opt ? 0 : units.reduce((a, u) => a + u.cost + hp.install, 0) + hp.buffer + hp.controls + hp.shopHeater - s.modine.resale
+  const cost = !opt ? 0 : units.reduce((a, u) => a + u.cost + hp.install, 0) + hp.buffer + hp.controls
     + (ahus === 2 ? s.ahu2.cost + s.ahu2.install : 0);
   // Smart mode: per month, the remaining candidates best first, as running
   // totals of kWh used, therms saved and heat moved.
