@@ -12,6 +12,7 @@
     "solar": "node scripts/solar.mjs",
     "solar:write": "node scripts/solar.mjs --write",
     "offgrid": "node scripts/offgrid.mjs",
+    "tanks": "node scripts/tanks.mjs",
     "finance": "node scripts/finance.mjs"
   },
   "dependencies": {

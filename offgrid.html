@@ -116,6 +116,17 @@
     <div class="chart" id="b-soc" role="img" aria-label="Lowest battery charge each day through the year for designs B and C"></div>
   </section>
 
+  <section id="tanks">
+    <p class="part">A · B · C · The buffer tank</p>
+    <h2>Which tank to use as the buffer</h2>
+    <p class="sub" id="t-sub"></p>
+    <div class="table-wrap"><table id="t-rows"></table></div>
+    <h3>C with the tank swapped and nothing else changed</h3>
+    <p class="sub">C's cheapest design with the BF250, rerun with each tank and the same panels, batteries and burn rule. The coil and the storage are what hold it together.</p>
+    <div class="table-wrap"><table id="t-fixed"></table></div>
+    <ul class="notes" id="t-notes"></ul>
+  </section>
+
   <section>
     <h2>How it works</h2>
     <ul class="notes" id="notes"></ul>
@@ -290,7 +301,41 @@ function notes() {
   $('#notes').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
 }
 
-partA(); partB(); partC(); notes();
+async function tanks() {
+  let T;
+  try { T = await (await fetch(new URL('./data/tanks.json', import.meta.url))).json(); } catch { $('#t-sub').textContent = 'The tank comparison didn’t load.'; return; }
+  const [base] = T.tanks, d = (v, b) => (Math.abs(v - b) < 50 ? '—' : (v > b ? '+' : '−') + '$' + nf(Math.abs(v - b)));
+  $('#t-sub').textContent = `Each tank run through all three designs, with C's panels, batteries and burn rule re-optimized for it. Differences are against the BF250. The outage kit for A is ${A.best.nb} batteries and a ${A.best.gen} kW generator whichever tank you use: the Navien heats through the outage, so the tank never enters it. What changes for A is the grid-tied plan it protects.`;
+  const t = $('#t-rows');
+  t.innerHTML = '<thead><tr><th>Tank</th><th class="num">Tank cost</th><th class="num">Grid-tied, 25-yr</th><th class="num">B up front</th><th class="num">C up front</th><th class="num">C 25-yr</th><th class="num">C wood</th></tr></thead>';
+  const tb = t.createTBody();
+  for (const r of T.tanks) {
+    const tr = tb.insertRow(); if (r === base) tr.className = 'pick';
+    const c0 = tr.insertCell(); c0.textContent = r.label;
+    const cells = r === base
+      ? [usd(r.cost), usd(r.grid.life), usd(r.B.capex), usd(r.C.capex), usd(r.C.life), `${nf(r.C.cords, 1)} cords`]
+      : [usd(r.cost), d(r.grid.life, base.grid.life), d(r.B.capex, base.B.capex), d(r.C.capex, base.C.capex), d(r.C.life, base.C.life), `${nf(r.C.cords, 1)} cords`];
+    for (const v of cells) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+  }
+  const f = $('#t-fixed');
+  f.innerHTML = '<thead><tr><th>Buffer</th><th class="num">Hot-water coil</th><th class="num">Days conserving</th><th class="num">Power short</th><th class="num">House kWh/yr</th></tr></thead>';
+  const fb = f.createTBody();
+  for (const r of T.fixedC) {
+    const tr = fb.insertRow(); if (r.gal === 250 && r.coil) tr.className = 'pick'; else if (r.unserved > 1 || r.consH > I.maxConsH) tr.className = 'no';
+    tr.insertCell().textContent = `${r.gal} gal`;
+    for (const v of [r.coil ? 'yes' : 'no', nf(r.consH / 24, 1), r.unserved > 1 ? `${nf(r.unserved)} kWh` : 'none', nf(r.load)]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+  }
+  const items = [
+    ['Grid-tied and A', `The coil's hot-water preheat is worth only about $7 a year here, because smart heating hands most of it to the Navien. Reusing the gas water heater saves its ${usd(base.cost - T.tanks[1].cost)} outright. The 12 kW elements never earn their keep on the grid: resistance heat at your electric rate costs nearly 5× what gas heat does. In an outage they would have to be locked out, or they'd drain the batteries in hours.`],
+    ['B', `B is sized by its worst stretches: ${nf(base.B.kw)} kW of panels and ${nf(base.B.battKwh)} kWh of batteries whichever tank you use. It needs ${base.B.resKw} kW of resistance for a few hundred hours a year. The 120-gal heater's built-in 12 kW covers part of that, so the inline electric boiler shrinks, but the tank costs more. The two come out within ${usd(Math.abs(T.tanks[2].B.capex - base.B.capex))} of each other.`],
+    ['C', `This is where the tank matters. With the fire lit, the BF250 banks wood heat at ${I.bufferMaxF}°F and its coil turns that into nearly free hot water. With 50 or 120 gallons and no coil, the tankless runs all winter and there's less stored heat to coast on. Held to the same panels and batteries, C then comes up short. Re-optimized, it needs a 6-ton and more batteries: about ${usd(T.tanks[1].C.capex - base.C.capex)} more up front with the water heater, ${usd(T.tanks[2].C.capex - base.C.capex)} more with the 120-gal. Fewer cords go with it, because the heat pump carries more.`],
+    ['Elements in the buffer', `B's resistance is costed as an inline electric boiler piped to the buffer (${usd(I.resBase)} + ${usd(I.resPerKw)}/kW, assumed), so the BF250 needs no element wells. A spare 1½″ or 2″ NPT tapping could take a screw-in element instead; 1½″ ones stop around 5.5 kW at 240 V.`],
+    ['Water heater as buffer', 'Ports: a water heater has two on top plus the drain and relief ports, so it becomes a two-pipe volume tank beside a hydraulic separator, with no coil for preheat. It can hold the heat pump\'s glycol, but that voids its warranty, and at C\'s 180°F a glass-lined tank and its anode age faster. 50 gallons is about the least a 3.5-ton should have against short cycling, and thin for a 6-ton. An atmospheric gas heater also keeps losing heat up its flue while it sits as a buffer.'],
+  ];
+  $('#t-notes').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
+}
+
+partA(); partB(); partC(); notes(); tanks();
 const draw = () => { weekChart(); heatChart(); socChart(); };
 draw();
 let rz = 0; new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(draw); }).observe($('#a-week'));

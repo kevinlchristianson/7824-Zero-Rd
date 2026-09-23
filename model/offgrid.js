@@ -49,6 +49,7 @@ export const OFFGRID_INPUTS = {
   // B: full off grid
   resBase: 1500, resPerKw: 100,                               // assumed: electric boiler in the buffer
   resOptions: [0, 10, 20, 30, 45],
+  tankResKw: 0,                                               // resistance built into the buffer itself (an electric water heater as the buffer); costs nothing extra
   maxBehindH: 6,                                              // B: the house may run behind up to 6 h at a stretch (warm-ups)
   maxConsH: 336,                                              // owner: conservation only in the worst stretches, at most two weeks a year
   consRules: [null, { on: 0.15, off: 0.5 }, { on: 0.3, off: 0.6 }, { on: 0.5, off: 0.8 }],  // enter below `on`, leave at `off` battery charge
@@ -73,6 +74,9 @@ export const OFFGRID_INPUTS = {
   },
 };
 
+// Resistance beyond what the tank has built in comes from an inline electric
+// boiler on the buffer.
+const resCost = (kw, O) => (kw > (O.tankResKw ?? 0) ? O.resBase + O.resPerKw * (kw - (O.tankResKw ?? 0)) : 0);
 const BTU = 3412, clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const MON_START = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
@@ -96,7 +100,7 @@ export function offgridContext(wx, s = SOLAR_INPUTS, thermalInputs = THERMAL) {
       const space = ctx.zone.shop[i] + ctx.zone.ground[i] + ctx.zone.upper[i], dhw = ctx.dhw[i];
       x += space / pl.ahuHeatBtuh * distKW;
       const cap = T >= hp.minT ? capAt(T) * tons / 6 * capF(Tw) : 0, cop = Math.max(1, copAt(T) * copF(Tw));
-      const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - 10) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
+      const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - hp.preheatApproachF) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
       const want = space + pre + debt, q = Math.min(want, cap), r = Math.min(want - q, resKw * BTU);
       x += q / (cop * BTU) + r / BTU + (dhw - pre) / BTU;
       resKwh += r / BTU;
@@ -117,7 +121,7 @@ export function offgridContext(wx, s = SOLAR_INPUTS, thermalInputs = THERMAL) {
       space[i] = sp; tw[i] = Tw; chilled[i] = cool > 0 ? 1 : 0;
       cap[i] = T >= hp.minT ? capAt(T) * tons / 6 * capF(Tw) : 0; cop[i] = Math.max(1, copAt(T) * copF(Tw));
     }
-    return { base, space, tw, cap, cop, chilled, dhw: ctx.dhw, tin: ctx.tin, setF: s.dhw.setF };
+    return { base, space, tw, cap, cop, chilled, dhw: ctx.dhw, tin: ctx.tin, setF: s.dhw.setF, approach: hp.preheatApproachF };
   };
   return ctx;
 }
@@ -221,7 +225,7 @@ export function simulateB(ctx, design, O = OFFGRID_INPUTS, trace = false) {
     if (trace) { st.mon = mon; st.daySoc = daySoc; st.dayCons = dayCons; }
   }
   const capex = kw * s.capex.pvPerKw + s.capex.fixed + ni * O.inv + nb * O.batt + O.tons[tons].cost + s.hp.buffer + s.hp.controls
-    + (resKw ? O.resBase + O.resPerKw * resKw : 0);
+    + resCost(resKw, O);
   const life = capex + nb * O.batt * O.battReplaceShare / (1 + f.discount) ** O.battLife;
   return { ...design, ni, battKwh: nb * O.battKwh, capex, life, behindH: L.behindH, longestBehind: L.longest, resKwh: L.resKwh, peak: L.peak, ...st };
 }
@@ -279,7 +283,7 @@ export function simulateC(ctx, design, O = OFFGRID_INPUTS, trace = false) {
       // Hot water: the lower coil preheats toward the tank's temperature; the
       // electric tankless makes up the rest.
       const tank = Tw + E / lbPerF, dhw = W.dhw[i];
-      const pre = W.chilled[i] ? 0 : dhw * clamp((Math.min(W.setF, tank - 10) - W.tin[i]) / (W.setF - W.tin[i]), 0, 1);
+      const pre = W.chilled[i] ? 0 : dhw * clamp((Math.min(W.setF, tank - W.approach) - W.tin[i]) / (W.setF - W.tin[i]), 0, 1);
       const H = X.space[i] + pre;
       const frac = cap ? soc / cap : 0;
       if (frac < policy.socOn) burning = true; else if (frac >= policy.socOff) burning = false;
