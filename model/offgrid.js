@@ -12,6 +12,19 @@
 //      electric tankless, fed buffer-preheated cold water.
 
 import { buildContext, loadsFor, SOLAR_INPUTS } from './solar.js';
+import { INPUTS as THERMAL } from './thermal.js';
+
+// Grid-down conservation mode (owner): shop and downstairs held at their
+// minimums with no warm-ups, upstairs at 65 °F, household electricity cut
+// 60%. Cooling, if an outage lands in summer, rises to 78 °F (assumed).
+export function conservation(s = SOLAR_INPUTS, t = THERMAL) {
+  const s2 = JSON.parse(JSON.stringify(s)), t2 = JSON.parse(JSON.stringify(t));
+  s2.domestic.kWhPerDay = s.domestic.kWhPerDay * 0.4;
+  t2.shop.hoursPerWeek = 0; t2.shop.occF = t2.shop.minF;
+  t2.ground.hoursPerWeek = 0; t2.ground.occF = t2.ground.minF;
+  t2.upper.heatF = 65; t2.upper.unoccDays = 0; t2.upper.coolF = 78;
+  return { s: s2, t: t2 };
+}
 
 export const OFFGRID_INPUTS = {
   inv: 3600, invAC: 12, invDC: 18, idleW: 70, eff: 0.969,   // refurbished EG4 18kPV (owner price)
@@ -43,8 +56,8 @@ export const OFFGRID_INPUTS = {
 const BTU = 3412, clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const MON_START = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
-export function offgridContext(wx, s = SOLAR_INPUTS) {
-  const ctx = buildContext(wx, s), hp = s.hp, pl = ctx.plant;
+export function offgridContext(wx, s = SOLAR_INPUTS, thermalInputs = THERMAL) {
+  const ctx = buildContext(wx, s, thermalInputs), hp = s.hp, pl = ctx.plant;
   const R0 = hp.reset;
   const tankF = T => clamp(R0.lowF + (R0.lowAtF - T) * (R0.highF - R0.lowF) / (R0.lowAtF - R0.highAtF), R0.lowF, R0.highF);
   const copAt = T => clamp(hp.derate * (T >= 17 ? hp.cop17 + (T - 17) * (hp.cop47 - hp.cop17) / 30 : hp.cop5 + (T - 5) * (hp.cop17 - hp.cop5) / 12), 1, hp.cop47 * 1.3);
