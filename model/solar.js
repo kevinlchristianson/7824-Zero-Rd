@@ -19,8 +19,7 @@ export const SOLAR_INPUTS = {
     tilt: 40, azimuth: 180,          // assumed: fixed ground mount facing south
     losses: 0.10,                    // assumed: soiling, snow, wiring, mismatch
     tempCoef: -0.0035,               // assumed: per °C, mono PERC
-    invEff: 0.965,                   // assumed
-    invAC: 12, invDC: 18,            // EG4 18kPV: 12 kW AC out, 18 kW PV in
+    inverter: 'auto',                // an id from INVERTERS, or 'auto' for the best value
     albedo: 0.25,                    // assumed: dry grass, some snow
   },
   hp: {
@@ -41,11 +40,24 @@ export const SOLAR_INPUTS = {
     trueUpMonth: 11,                               // sheet: year-end (December)
   },
   capex: {
-    pvPerKw: 590, fixed: 4000, inverter: 4200,     // sheet
+    pvPerKw: 590, fixed: 4000,                     // sheet
     batteryPerKwh: 220, batteryKwh: 30, batteryRte: 0.9, batteryKw: 15, // sheet
     incentive: 0,                                  // share of capex refunded
   },
   finance: { loanRate: 0.08, loanYears: 10, horizon: 25, discount: 0.08 },   // sheet; discount = loan rate
+  // Inverter choices. ac and dc are per unit (kW); cost per unit; perKw is
+  // per kW of panels (optimizers, microinverters); fixed is per system;
+  // idleW is what each unit draws around the clock. Prices are 2026 retail
+  // listings unless marked; efficiencies are CEC-weighted.
+  inverters: {
+    eg4_18kpv: { name: 'EG4 18kPV', kind: 'hybrid', ac: 12, dc: 18, cost: 4200, eff: 0.969, idleW: 70, battery: true },   // sheet price; 70 W idle from EG4
+    flexboss21: { name: 'EG4 FlexBOSS21', kind: 'hybrid', ac: 16, dc: 21, cost: 4199, eff: 0.965, idleW: 70, battery: true },   // eff and idle assumed
+    flexboss18: { name: 'EG4 FlexBOSS18', kind: 'hybrid', ac: 13, dc: 18, cost: 3499, eff: 0.965, idleW: 70, battery: true },   // eff and idle assumed
+    eg4_12kpv: { name: 'EG4 12kPV', kind: 'hybrid', ac: 8, dc: 12, cost: 3499, eff: 0.965, idleW: 60, battery: true },         // eff and idle assumed
+    solaredge: { name: 'SolarEdge SE11400H', kind: 'string', ac: 11.4, dc: 17.6, cost: 2800, perKw: 130, eff: 0.99, idleW: 3, battery: false },  // perKw: S440 optimizers, assumed
+    sma77: { name: 'SMA Sunny Boy 7.7', kind: 'string', ac: 7.68, dc: 11.5, cost: 1706, eff: 0.965, idleW: 1, battery: false },
+    enphase: { name: 'Enphase IQ8HC', kind: 'micro', acRatio: 0.873, perKw: 450, fixed: 1000, eff: 0.97, idleW: 0, battery: false },  // 384 VA per 440 W panel; combiner assumed
+  },
   nemCapKwAC: 25,                    // Wyoming net-metering limit (verify with RMP)
   backup: 'boiler',                  // 'boiler' keeps gas; 'strips' = AHU 10 kW electric
 };
@@ -58,7 +70,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 // ---------------------------------------------------------------- PV
 
-// AC output per kW of DC panels, before inverter clipping [kW/kW], hourly.
+// DC output per kW of panels, before the inverter [kW/kW], hourly.
 export function pvPerKw(wx, pv) {
   const n = wx.n, out = new Float64Array(n);
   const tilt = pv.tilt * Math.PI / 180, paz = pv.azimuth * Math.PI / 180;
@@ -73,7 +85,7 @@ export function pvPerKw(wx, pv) {
     const Ta = (wx.T[i] - 32) / 1.8, ws = wx.V[i] / 2.23694;
     const Tc = Ta + poa / (25 + 6.84 * ws);             // Faiman cell temperature
     const dc = poa / 1000 * (1 + pv.tempCoef * (Tc - 25)) * (1 - pv.losses);
-    out[i] = Math.max(0, dc) * pv.invEff;
+    out[i] = Math.max(0, dc);
   }
   return out;
 }
@@ -140,21 +152,31 @@ export function buildContext(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, p
   }
   hpc.hpShare = hpHeat / heatTot;
   const month = wx.month;
-  return { n, month, base, hpc, pv1: pvPerKw(wx, s.pv), s, heatTot, thermal: th, dhwBtu: 0 };
+  return { n, month, base, hpc, pvDC: pvPerKw(wx, s.pv), s, m: pickInverter(s), heatTot, thermal: th, dhwBtu: 0 };
 }
 
 // ---------------------------------------------------------------- one year
 
-// cfg: { kw (DC), inv (count), hp (bool), battery (bool) }
+// Inverter helpers. A microinverter system counts as one "unit" whose AC
+// output follows the panels.
+export const invOf = (s, id) => s.inverters[id];
+const acOf = (M, cfg) => (M.acRatio ? cfg.kw * M.acRatio : cfg.inv * M.ac);
+export const dcPer = (s, M) => (M.acRatio ? Math.floor(s.nemCapKwAC / M.acRatio + 1e-9) : M.dc);
+export const maxInv = (s, M) => (M.acRatio ? 1 : Math.max(1, Math.floor(s.nemCapKwAC / M.ac + 1e-9)));
+const pickInverter = s => (s.pv.inverter in s.inverters ? s.pv.inverter : Object.keys(s.inverters)[0]);
+export const invCost = (M, cfg) => (cfg.kw > 0 ? cfg.inv * (M.cost ?? 0) + (M.fixed ?? 0) + cfg.kw * (M.perKw ?? 0) : 0);
+
+// cfg: { kw (DC), inv (count), hp (bool), battery (bool), m (inverter id) }
 export function evaluate(ctx, cfg) {
   const s = ctx.s, r = s.rates, c = s.capex, n = ctx.n;
   const L = cfg.hp ? ctx.hpc : ctx.base;
-  const ac = cfg.inv * s.pv.invAC;
+  const M = invOf(s, cfg.m ?? ctx.m);
+  const ac = acOf(M, cfg), eff = M.eff, idle = cfg.kw > 0 ? cfg.inv * M.idleW / 1000 : 0;
   const monImp = new Float64Array(12), monExp = new Float64Array(12), monProd = new Float64Array(12), monLoad = new Float64Array(12);
   let soc = 0, prod = 0, direct = 0;
   const bCap = cfg.battery ? c.batteryKwh : 0;
   for (let i = 0; i < n; i++) {
-    const p = Math.min(cfg.kw * ctx.pv1[i], ac), load = L.elec[i], m = ctx.month[i];
+    const p = Math.min(cfg.kw * ctx.pvDC[i] * eff, ac), load = L.elec[i] + idle, m = ctx.month[i];
     prod += p; monProd[m] += p; monLoad[m] += load;
     let net = load - p;
     direct += Math.min(p, load);
@@ -187,7 +209,7 @@ export function evaluate(ctx, cfg) {
   for (let i = 0; i < n; i++) { therms += L.gas[i]; monGas[ctx.month[i]] += L.gas[i]; }
   const gasService = therms > 0.5 || s.backup !== 'strips' || !cfg.hp;
   const gasBill = therms * r.gas + (gasService ? 12 * r.gasFixed : 0);
-  const capex = (cfg.kw > 0 ? cfg.kw * c.pvPerKw + c.fixed + cfg.inv * c.inverter : 0)
+  const capex = (cfg.kw > 0 ? cfg.kw * c.pvPerKw + c.fixed : 0) + invCost(M, cfg)
     + (cfg.hp ? s.hp.cost : 0) + (cfg.battery ? c.batteryKwh * c.batteryPerKwh : 0);
   return {
     cfg, prod, direct, imp: sumA(monImp), exp: sumA(monExp), bought, paidOut, therms, gasService,
@@ -218,14 +240,12 @@ export function economics(res, baseline, s) {
 
 // ---------------------------------------------------------------- plans
 
-const maxInv = s => Math.max(1, Math.floor(s.nemCapKwAC / s.pv.invAC + 1e-9));
-
 // Every combination on a grid, for the size curves and the best-of picks.
 export function grid(ctx) {
-  const s = ctx.s, baseline = evaluate(ctx, { kw: 0, inv: 0, hp: false, battery: false });
+  const s = ctx.s, M = invOf(s, ctx.m), baseline = evaluate(ctx, { kw: 0, inv: 0, hp: false, battery: false });
   const rows = [];
-  for (const hp of [false, true]) for (const battery of [false, true]) for (let inv = 1; inv <= maxInv(s); inv++) {
-    for (let kw = 0; kw <= inv * s.pv.invDC + 1e-9; kw += 1) {
+  for (const hp of [false, true]) for (const battery of [false, true]) for (let inv = 1; inv <= maxInv(s, M); inv++) {
+    for (let kw = 0; kw <= inv * dcPer(s, M) + 1e-9; kw += 1) {
       if (kw === 0 && (inv > 1 || battery)) continue;
       const cfg = { kw, inv: kw === 0 ? 0 : inv, hp, battery };
       const res = evaluate(ctx, cfg);
@@ -239,7 +259,7 @@ export function grid(ctx) {
 // the shortest payback on its own extra cost, until nothing left pays back
 // within the horizon.
 export function ladder(ctx) {
-  const s = ctx.s, H = s.finance.horizon;
+  const s = ctx.s, H = s.finance.horizon, M = invOf(s, ctx.m), dcMax = dcPer(s, M), nMax = maxInv(s, M);
   const baseline = evaluate(ctx, { kw: 0, inv: 0, hp: false, battery: false });
   let cur = { cfg: { kw: 0, inv: 0, hp: false, battery: false }, res: baseline };
   const steps = [], rejected = [];
@@ -257,24 +277,25 @@ export function ladder(ctx) {
     };
     // Panels: in 1 kW steps on existing inverters, or a new inverter with
     // the best fill of panels.
-    if (c0.inv > 0 && c0.kw + 1 <= c0.inv * s.pv.invDC + 1e-9) add('+1 kW of panels', 'pv', { ...c0, kw: c0.kw + 1 });
-    if (c0.inv < maxInv(s)) {
+    if (c0.inv > 0 && c0.kw + 1 <= c0.inv * dcMax + 1e-9) add('+1 kW of panels', 'pv', { ...c0, kw: c0.kw + 1 });
+    if (c0.inv < nMax) {
       for (const withHp of c0.hp ? [false] : [false, true]) {
         let best = null;
-        for (let k = 2; k <= s.pv.invDC; k++) {
+        for (let k = 2; k <= dcMax; k++) {
           const cfg = { ...c0, inv: c0.inv + 1, kw: c0.kw + k, hp: c0.hp || withHp };
           const res = tryCfg(cfg), dCap = res.capex - cur.res.capex, dSave = cur.res.total - res.total;
           if (dSave > 1 && (!best || dCap / dSave < best.pb)) best = { cfg, res, dCap, dSave, pb: dCap / dSave, dNpv: dSave * pvf - dCap, k };
         }
-        const which = c0.inv ? (c0.inv === 1 ? 'Second' : 'Third') : 'First';
-        if (best) moves.push({ ...best, kind: withHp ? 'hp' : 'inv', label: `${withHp ? 'Heat pump + ' : ''}${which.toLowerCase() === 'first' && !withHp ? 'First' : withHp ? which.toLowerCase() : which} inverter with ${best.k} kW of panels` });
+        const unit = M.kind === 'micro' ? `${M.name} microinverters` : `${c0.inv ? (c0.inv === 1 ? 'second ' : 'third ') : ''}${M.name}`;
+        const lab = `${withHp ? 'Heat pump + ' : ''}${unit} with ${best?.k} kW of panels`;
+        if (best) moves.push({ ...best, kind: withHp ? 'hp' : 'inv', label: lab[0].toUpperCase() + lab.slice(1) });
       }
     }
     if (!c0.hp) {
       add('Heat pump for heating', 'hp', { ...c0, hp: true });
-      if (c0.inv > 0) for (let k = 1; k <= 12 && c0.kw + k <= c0.inv * s.pv.invDC; k++) add(`Heat pump + ${k} kW of panels`, 'hp', { ...c0, hp: true, kw: c0.kw + k });
+      if (c0.inv > 0) for (let k = 1; k <= 12 && c0.kw + k <= c0.inv * dcMax; k++) add(`Heat pump + ${k} kW of panels`, 'hp', { ...c0, hp: true, kw: c0.kw + k });
     }
-    if (!c0.battery && c0.inv > 0) add(`${s.capex.batteryKwh} kWh battery`, 'battery', { ...c0, battery: true });
+    if (!c0.battery && c0.inv > 0 && M.battery) add(`${s.capex.batteryKwh} kWh battery`, 'battery', { ...c0, battery: true });
     if (!moves.length) break;
     // Take the fastest payback among additions that are worth more than they
     // cost at the discount rate.
@@ -313,14 +334,34 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   const ctx = buildContext(wxRaw, s, thermalInputs, prepared, th);
   const baseline = evaluate(ctx, { kw: 0, inv: 0, hp: false, battery: false });
   const withE = r => ({ ...r, econ: economics(r, baseline, s) });
+
+  // Every inverter on the same footing: its own purchase order, and the
+  // best system it allows with the new heat pump.
+  const inverters = Object.entries(s.inverters).map(([id, M]) => {
+    const cm = { ...ctx, m: id }, Lm = ladder(cm), r = withE(Lm.final.res);
+    let hpBest = null;
+    for (let inv = 1; inv <= maxInv(s, M); inv++) for (let kw = 2; kw <= inv * dcPer(s, M); kw++) {
+      const e = economics(evaluate(cm, { kw, inv, hp: true, battery: false }), baseline, s);
+      if (!hpBest || e.npv > hpBest.npv) hpBest = { kw, inv, npv: e.npv };
+    }
+    const clipped = r.cfg.kw > 0 ? 1 - r.prod / (r.cfg.kw * ctx.pvDC.reduce((a, b) => a + b, 0) * M.eff) : 0;
+    return {
+      id, name: M.name, kind: M.kind, ac: M.ac ?? null, dc: M.dc ?? null, eff: M.eff, idleW: M.idleW, battery: M.battery,
+      maxUnits: maxInv(s, M), cfg: r.cfg, capex: r.capex, invCapex: invCost(M, r.cfg), save1: r.econ.save1,
+      payback: r.econ.payback, npv: r.econ.npv, total: r.total, clipped, hpBest,
+    };
+  }).sort((a, b) => b.npv - a.npv);
+  const chosen = s.pv.inverter in s.inverters ? s.pv.inverter : inverters[0].id;
+  ctx.m = chosen;
+  const M = invOf(s, chosen), dcMax = dcPer(s, M), nMax = maxInv(s, M);
   const L = ladder(ctx);
   const rec = L.final.res;
 
   // Value of each array size, with and without the heat pump (no battery),
   // using the cheapest inverter count that fits the panels.
   const curve = [];
-  for (let kw = 0; kw <= maxInv(s) * s.pv.invDC; kw++) {
-    const inv = kw === 0 ? 0 : Math.ceil(kw / s.pv.invDC);
+  for (let kw = 0; kw <= nMax * dcMax; kw++) {
+    const inv = kw === 0 ? 0 : Math.ceil(kw / dcMax);
     const row = { kw };
     for (const hp of [false, true]) {
       const r = withE(evaluate(ctx, { kw, inv, hp, battery: false }));
@@ -340,9 +381,10 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   const variant = (label, mut) => {
     const s2 = JSON.parse(JSON.stringify(s)); mut(s2);
     const c2 = buildContext(wxRaw, s2, thermalInputs, prepared, th);
+    c2.m = chosen;
     const b2 = evaluate(c2, { kw: 0, inv: 0, hp: false, battery: false });
     let best = { npv: -Infinity }, bestNo = { npv: -Infinity };
-    for (let inv = 1; inv <= maxInv(s2); inv++) for (let kw = 2; kw <= inv * s2.pv.invDC; kw++) {
+    for (let inv = 1; inv <= nMax; inv++) for (let kw = 2; kw <= inv * dcMax; kw++) {
       for (const hp of [false, true]) {
         const r = evaluate(c2, { kw, inv, hp, battery: false }), e = economics(r, b2, s2);
         const o = { kw, inv, npv: e.npv, payback: e.payback, total: r.total };
@@ -358,10 +400,12 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   variant('April true-up and gas dropped', x => { x.rates.trueUpMonth = 3; x.backup = 'strips'; });
   variant('Gas at $0.80/therm', x => { x.rates.gas = Math.max(x.rates.gas, 0.80); });
 
-  const mon = Array(12).fill(0); ctx.pv1.forEach((v, i) => { mon[ctx.month[i]] += v; });
+  const mon = Array(12).fill(0); ctx.pvDC.forEach((v, i) => { mon[ctx.month[i]] += v * M.eff; });
   return {
     inputs: s,
-    pvYield: ctx.pv1.reduce((a, b) => a + b, 0), pvMonthly: mon,
+    inverter: { id: chosen, ...M, dcMax, maxUnits: nMax, auto: !(s.pv.inverter in s.inverters) },
+    inverters,
+    pvYield: mon.reduce((a, b) => a + b, 0), pvMonthly: mon,
     hpShare: ctx.hpc.hpShare,
     baseline: pick(withE(baseline)),
     hpNoPv: pick(withE(evaluate(ctx, { kw: 0, inv: 0, hp: true, battery: false }))),

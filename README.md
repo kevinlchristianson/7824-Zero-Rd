@@ -63,6 +63,8 @@ The plan runs hourly over the same TMY3 year:
 - **Heat pump option.** A new 6-ton Apollo air-to-water heat pump, using the COP and capacity curves from the owner's sheet. The Navien boiler or AHU strips cover what it can't.
 - **Net metering.** Rocky Mountain Power's Wyoming rules: kWh netted monthly, surplus banked at retail, leftover credit paid at avoided cost at the annual true-up, 25 kW AC cap.
 
+- **Inverters.** A catalog of options, each with its own AC and DC limits, efficiency, standby draw and price: EG4 18kPV, FlexBOSS21, FlexBOSS18 and 12kPV; SolarEdge SE11400H; SMA Sunny Boy 7.7; Enphase IQ8HC. Each one gets its own purchase order, and `pv.inverter: 'auto'` plans around whichever is worth the most.
+
 A greedy "ladder" adds the upgrade with the shortest payback at each step: panels, a second inverter, the heat pump, or a battery. It stops when the next step's net present value is negative.
 
 Costs and rates come from `Casper_Solar_Sizing_Model.xlsx`. Inputs the owner still needs to confirm are marked ASSUMED on the page.

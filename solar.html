@@ -59,6 +59,9 @@
   th { font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--rule); }
   td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   tr.no td { color: var(--muted); }
+  tr.pick td { font-weight: 600; }
+  .cellnote { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+  tr.pick td:first-child::before { content: '▸ '; }
   tr.sep td { border-bottom: 0; padding-top: 14px; font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   .stepn { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--sheet); font: 600 11px var(--mono); margin-right: 8px; }
   .verdict { font: 600 11px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 6px 2px; border-radius: 2px; }
@@ -90,7 +93,7 @@
   .btn { background: transparent; border: 1px solid var(--rule); border-radius: 3px; padding: 4px 10px; font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
   .key { font-size: 12px; color: var(--muted); margin: 6px 0 12px; }
   .badge { display: inline-block; font: 600 10px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 5px 2px; border-radius: 2px; }
-  .badge.sheet, .badge.owner { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--rule); }
+  .badge.sheet, .badge.owner, .badge.listing { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--rule); }
   .badge.assumed { color: var(--accent); background: var(--accent-wash); }
   .inputs details { border-top: 1px solid var(--rule); }
   .inputs summary { cursor: pointer; padding: 10px 0; font: 600 14px var(--display); letter-spacing: 0.04em; list-style: none; display: flex; justify-content: space-between; }
@@ -134,6 +137,12 @@
       </section>
 
       <section>
+        <h2>Which inverter</h2>
+        <p class="sub" id="inv-sub"></p>
+        <div class="table-wrap"><table id="inverters"></table></div>
+      </section>
+
+      <section>
         <h2>How big an array</h2>
         <p class="sub" id="curve-sub">What each array size is worth over the horizon, after its cost, discounted.</p>
         <div class="legend" id="curve-legend"></div>
@@ -162,7 +171,7 @@
 
     <aside class="inputs" aria-label="Model inputs">
       <div class="inputs-head"><h2>Inputs</h2><button type="button" class="btn" id="reset">Reset</button></div>
-      <p class="key"><span class="badge sheet">sheet</span> your spreadsheet · <span class="badge owner">owner</span> from you · <span class="badge assumed">assumed</span> to confirm</p>
+      <p class="key"><span class="badge sheet">sheet</span> your spreadsheet · <span class="badge owner">owner</span> from you · <span class="badge listing">listing</span> 2026 retail price · <span class="badge assumed">assumed</span> to confirm</p>
       <form id="form" autocomplete="off"></form>
     </aside>
   </div>
@@ -179,7 +188,7 @@ const usd = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v));
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const getIn = (o, p) => p.split('.').reduce((a, k) => a[k], o);
 const setIn = (o, p, v) => { const k = p.split('.'), l = k.pop(); k.reduce((a, x) => a[x], o)[l] = v; };
-const STORE = 'zero-rd-solar-inputs-v1';
+const STORE = 'zero-rd-solar-inputs-v2';
 
 const SCHEMA = [
   { group: 'Rates', items: [
@@ -194,7 +203,6 @@ const SCHEMA = [
   { group: 'Costs & money', items: [
     ['capex.pvPerKw', 'Panels + racking, per kW', '$', 'sheet', 0, 3000, 10],
     ['capex.fixed', 'Trenching, permits, disconnects', '$', 'sheet', 0, 30000, 100],
-    ['capex.inverter', 'EG4 18kPV, each', '$', 'sheet', 0, 20000, 50],
     ['hp.cost', 'New 6-ton Apollo, installed', '$', 'assumed', 0, 40000, 100],
     ['capex.batteryPerKwh', 'Battery, per kWh', '$', 'sheet', 0, 2000, 5],
     ['capex.incentive', 'Share of cost refunded (credits, rebates)', '×', 'assumed', 0, 0.6, 0.01],
@@ -204,9 +212,20 @@ const SCHEMA = [
   { group: 'Array', items: [
     ['pv.tilt', 'Tilt', '°', 'assumed', 0, 90, 1],
     ['pv.losses', 'Soiling, snow, wiring losses', '×', 'assumed', 0, 0.4, 0.01],
-    ['pv.invAC', 'Inverter AC output', 'kW', 'owner', 1, 30, 0.5],
-    ['pv.invDC', 'Inverter PV input limit', 'kW', 'owner', 1, 40, 0.5],
+    ['pv.inverter', 'Inverter', '', 'assumed'],
     ['nemCapKwAC', 'Net-metering size limit (AC)', 'kW', 'assumed', 5, 200, 1],
+  ] },
+  { group: 'Inverter prices', items: [
+    ['inverters.eg4_18kpv.cost', 'EG4 18kPV, each', '$', 'sheet', 0, 20000, 50],
+    ['inverters.flexboss21.cost', 'EG4 FlexBOSS21, each', '$', 'listing', 0, 20000, 50],
+    ['inverters.flexboss18.cost', 'EG4 FlexBOSS18, each', '$', 'listing', 0, 20000, 50],
+    ['inverters.eg4_12kpv.cost', 'EG4 12kPV, each', '$', 'listing', 0, 20000, 50],
+    ['inverters.solaredge.cost', 'SolarEdge SE11400H, each', '$', 'listing', 0, 20000, 50],
+    ['inverters.solaredge.perKw', 'SolarEdge optimizers, per kW', '$', 'assumed', 0, 1000, 5],
+    ['inverters.sma77.cost', 'SMA Sunny Boy 7.7, each', '$', 'listing', 0, 20000, 50],
+    ['inverters.enphase.perKw', 'Enphase IQ8HC micros + cables, per kW', '$', 'listing', 0, 2000, 5],
+    ['inverters.enphase.fixed', 'Enphase combiner and gateway', '$', 'assumed', 0, 10000, 50],
+    ['inverters.eg4_18kpv.idleW', 'EG4 hybrid standby draw, each', 'W', 'assumed', 0, 300, 5],
   ] },
   { group: 'Loads', items: [
     ['domestic.kWhPerDay', 'Household electricity', 'kWh/day', 'sheet', 0, 300, 1],
@@ -226,6 +245,7 @@ const SCHEMA = [
 ];
 const SELECTS = {
   'rates.trueUpMonth': MON.map((m, k) => [k, `End of ${m}`]),
+  'pv.inverter': [['auto', 'Best value (auto)'], ...Object.entries(SOLAR_INPUTS.inverters).map(([k, v]) => [k, v.name])],
   backup: [['boiler', 'Gas boiler (keep gas service)'], ['strips', 'AHU 10 kW strips (drop gas)']],
 };
 
@@ -288,7 +308,9 @@ function niceTicks(lo, hi, count = 5) {
 function legend(el, items) {
   el.replaceChildren(...items.map(it => { const s = document.createElement('span'); const i = document.createElement('i'); if (it.line) i.className = 'line'; i.style.background = it.color; s.append(i, document.createTextNode(it.label)); return s; }));
 }
-const sysLabel = c => c.kw ? `${c.kw} kW on ${c.inv} EG4${c.inv > 1 ? 's' : ''}${c.hp ? ' + new heat pump' : ''}${c.battery ? ' + battery' : ''}` : (c.hp ? 'New heat pump, no solar' : 'Today');
+const WORDS = ['', 'one', 'two', 'three', 'four'];
+const invLabel = (inv, n, micro) => (micro ? `${inv.name} microinverters` : `${WORDS[n] ?? n} ${inv.name}${n > 1 ? 's' : ''}`);
+const sysLabel = c => c.kw ? `${c.kw} kW on ${invLabel(P.inverter, c.inv, P.inverter.kind === 'micro')}${c.hp ? ' + new heat pump' : ''}${c.battery ? ' + battery' : ''}` : (c.hp ? 'New heat pump, no solar' : 'Today');
 
 // ---------------------------------------------------------------- render
 function render() {
@@ -296,8 +318,8 @@ function render() {
   const R = P.recommended, B = P.baseline, i = P.inputs;
   const hpVerdict = P.variants[0];
   const tiles = [
-    ['hero', 'Start with', R.cfg.kw > 0 ? `${R.cfg.kw} kW, ${R.cfg.inv > 1 ? R.cfg.inv + ' EG4s' : 'one EG4'}` : 'Nothing',
-      R.cfg.kw > 0 ? `${usd(R.capex)} up front saves ${usd(R.econ.save1)} a year and pays back in ${nf(R.econ.payback, 1)} years; worth ${usd(R.econ.npv)} over ${i.finance.horizon} years at ${nf(i.finance.discount * 100, 1)}%.` : 'No addition pays back at these inputs.'],
+    ['hero', 'Start with', R.cfg.kw > 0 ? `${R.cfg.kw} kW of panels` : 'Nothing',
+      R.cfg.kw > 0 ? `on ${invLabel(P.inverter, R.cfg.inv, P.inverter.kind === 'micro')}. ${usd(R.capex)} up front saves ${usd(R.econ.save1)} a year and pays back in ${nf(R.econ.payback, 1)} years; worth ${usd(R.econ.npv)} over ${i.finance.horizon} years at ${nf(i.finance.discount * 100, 1)}%.` : 'No addition pays back at these inputs.'],
     ['', 'Bills today', usd(B.total), `a year for electricity and gas, service charges included`],
     ['', 'Bills after the plan', usd(R.total), `${sysLabel(R.cfg)}; ${usd(B.total - R.total)} a year less`],
     ['', 'New heat pump', hpVerdict.gain > 0 ? 'Worth it' : 'Not yet', hpVerdict.gain > 0 ? `adds ${usd(hpVerdict.gain)} of value` : `costs ${usd(-hpVerdict.gain)} more than it saves, at best`],
@@ -308,7 +330,7 @@ function render() {
     for (const [c, t] of [['kpi-label', l], ['kpi-value', v], ['kpi-sub', s]]) { const e = document.createElement('div'); e.className = c; e.textContent = t; d.append(e); }
     return d;
   }));
-  renderLadder(); renderCurve(); renderYear(); renderVariants(); renderMethod();
+  renderLadder(); renderInverters(); renderCurve(); renderYear(); renderVariants(); renderMethod();
 }
 
 function renderLadder() {
@@ -330,6 +352,24 @@ function renderLadder() {
   $('#ladder-sub').textContent = `Starting from today's setup, each step is the addition that pays for itself fastest. Steps stop when the next one is worth less than it costs at ${nf(P.inputs.finance.discount * 100, 1)}% over ${P.inputs.finance.horizon} years. "Worth" is that step's net present value.`;
 }
 
+function renderInverters() {
+  const t = $('#inverters'), I = P.inverters;
+  t.innerHTML = '<thead><tr><th>Inverter</th><th>Best system</th><th class="num">Costs</th><th class="num">Saves / yr</th><th class="num">Pays back</th><th class="num">Worth</th><th class="num">With new heat pump</th></tr></thead>';
+  const tb = t.createTBody();
+  const kinds = { hybrid: 'hybrid, battery-ready', string: 'grid-tie string', micro: 'microinverters' };
+  for (const r of I) {
+    const tr = tb.insertRow(); if (r.id === P.inverter.id) tr.className = 'pick';
+    const c0 = tr.insertCell(); c0.textContent = r.name;
+    const k = document.createElement('div'); k.className = 'cellnote';
+    k.textContent = `${kinds[r.kind]}${r.ac ? ` · ${r.ac} kW AC, ${r.dc} kW panels max` : ''}${r.idleW >= 10 ? ` · ${r.idleW} W standby` : ''}`;
+    c0.append(k);
+    tr.insertCell().textContent = r.cfg.kw ? `${r.cfg.kw} kW${r.kind === 'micro' ? '' : ` on ${r.cfg.inv}`}` : 'none';
+    for (const v of [usd(r.capex), usd(r.save1), r.payback ? `${nf(r.payback, 1)} yr` : 'never', usd(r.npv), `${usd(r.hpBest.npv)} at ${r.hpBest.kw} kW`]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+  }
+  const best = I[0], eg4 = I.filter(r => r.id.startsWith('eg4') || r.id.startsWith('flexboss'))[0], spread = best.npv - I.at(-1).npv;
+  $('#inv-sub').textContent = `Each inverter gets its own purchase order, capped at ${P.inputs.nemCapKwAC} kW AC in total. ${best.name} comes out ahead at these prices, but the whole field is within ${usd(spread)} over ${P.inputs.finance.horizon} years${eg4 && eg4 !== best ? `, and the best battery-ready option, the ${eg4.name}, trails it by ${usd(best.npv - eg4.npv)}` : ''}. That is smaller than the uncertainty in any installer's quote, so let price and what you want later decide. Hybrids draw standby power around the clock (about $${nf(70 * 8.76 * P.inputs.rates.elec)} a year at 70 W) but can add a battery or backup; grid-tie inverters can't. Ground mount assumed, so no rapid-shutdown hardware per panel.`;
+}
+
 function renderCurve() {
   const el = $('#curve'), W = Math.max(300, el.clientWidth), H = 260, m = { l: 56, r: 100, t: 12, b: 34 };
   const d = P.curve, maxKw = d.at(-1).kw;
@@ -341,8 +381,8 @@ function renderCurve() {
   for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 0 ? '--muted' : '--grid'})"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${usd(t / 1000)}k</text>`;
   for (let k = 0; k <= maxKw; k += 6) g += `<text x="${x(k)}" y="${H - 16}" text-anchor="middle">${k}</text>`;
   g += `<text x="${(m.l + W - m.r) / 2}" y="${H}" text-anchor="middle">array size, kW DC</text>`;
-  const invEdge = P.inputs.pv.invDC;
-  g += `<line x1="${x(invEdge)}" x2="${x(invEdge)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--rule)"/><text x="${x(invEdge) + 4}" y="${m.t + 10}">2nd EG4 →</text>`;
+  const invEdge = P.inverter.dcMax;
+  if (P.inverter.maxUnits > 1 && invEdge < maxKw) g += `<line x1="${x(invEdge)}" x2="${x(invEdge)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--rule)"/><text x="${x(invEdge) + 4}" y="${m.t + 10}">2nd inverter →</text>`;
   const ends = [];
   for (const [k, label, col] of S) {
     g += `<polyline points="${d.map(r => `${x(r.kw)},${y(r[k].npv)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`;
@@ -402,9 +442,9 @@ function renderVariants() {
   for (const v of P.variants) {
     const tr = tb.insertRow();
     tr.insertCell().textContent = v.label + (v.unmet > 1e5 ? ` (strips leave ${nf(v.unmet / 1e6, 1)} MMBtu of cold-snap heat unmet)` : '');
-    tr.insertCell().textContent = `${v.hp.kw} kW, ${v.hp.inv} EG4`;
+    tr.insertCell().textContent = sysLabel({ kw: v.hp.kw, inv: v.hp.inv });
     let c = tr.insertCell(); c.className = 'num'; c.textContent = usd(v.hp.npv);
-    tr.insertCell().textContent = `${v.nohp.kw} kW, ${v.nohp.inv} EG4`;
+    tr.insertCell().textContent = sysLabel({ kw: v.nohp.kw, inv: v.nohp.inv });
     c = tr.insertCell(); c.className = 'num'; c.textContent = usd(v.nohp.npv);
     c = tr.insertCell(); c.className = 'num';
     const s = document.createElement('span'); s.className = 'verdict ' + (v.gain > 0 ? 'yes' : 'no'); s.textContent = (v.gain > 0 ? '+' : '') + usd(v.gain);
@@ -417,11 +457,11 @@ function renderVariants() {
 function renderMethod() {
   const i = P.inputs;
   const items = [
-    ['Sun', `Casper TMY3 hourly beam, diffuse and global radiation on panels tilted ${i.pv.tilt}° facing south: ${nf(P.pvYield)} kWh per kW of panels a year, ${nf(P.pvMonthly[11])} in December and ${nf(P.pvMonthly[6])} in July. Cell temperature follows air temperature and wind, which suits cold, windy Casper. ${nf(i.pv.losses * 100)}% losses; each EG4 clips at ${i.pv.invAC} kW AC and takes up to ${i.pv.invDC} kW of panels.`],
+    ['Sun', `Casper TMY3 hourly beam, diffuse and global radiation on panels tilted ${i.pv.tilt}° facing south: ${nf(P.pvYield)} kWh per kW of panels a year, ${nf(P.pvMonthly[11])} in December and ${nf(P.pvMonthly[6])} in July. Cell temperature follows air temperature and wind, which suits cold, windy Casper. ${nf(i.pv.losses * 100)}% losses. The ${P.inverter.name} converts at ${nf(P.inverter.eff * 100, 1)}%${P.inverter.ac ? ` and clips at ${P.inverter.ac} kW AC per unit, taking up to ${P.inverter.dc} kW of panels` : ''}.`],
     ['Loads', `Heating and cooling come hour by hour from the thermal model, with upstairs internal gains set from your ${i.domestic.kWhPerDay} kWh/day at ${nf(i.domestic.indoor * 100)}% indoors. Household electricity follows a typical daily shape. Hot water is ${i.dhw.galPerDay} gal/day heated to ${i.dhw.setF}°F from Casper ground water, by gas today.`],
     ['Heat pumps', `The new 6-ton Apollo follows your COP and capacity curves (${i.hp.cop47} at 47°F, ${i.hp.cop17} at 17°F, ${i.hp.cop5} at 5°F, derated ${i.hp.derate}; stops below ${i.hp.minT}°F).${i.hp.existingHeats ? ' The existing 3.5-ton unit adds capacity alongside it.' : ''} It covers space heat and hot water first; the boiler covers the rest.`],
-    ['Net metering', `Each month's kWh are netted. Surplus is banked at full retail value and carried forward; whatever is left at the end of ${MON[i.rates.trueUpMonth]} is paid at $${i.rates.avoided}/kWh. Systems are limited to ${i.nemCapKwAC} kW AC, which allows ${Math.floor(i.nemCapKwAC / i.pv.invAC)} EG4s. Confirm both the limit and the true-up date with Rocky Mountain Power.`],
-    ['Money', `Costs are from your sheet. Savings grow ${nf(i.rates.escalation * 100, 1)}% a year with rates, less ${nf(i.rates.degradation * 100, 1)}% panel degradation. "Worth" is net present value at ${nf(i.finance.discount * 100, 1)}% over ${i.finance.horizon} years. Payback counts the growing savings.`],
+    ['Net metering', `Each month's kWh are netted. Surplus is banked at full retail value and carried forward; whatever is left at the end of ${MON[i.rates.trueUpMonth]} is paid at $${i.rates.avoided}/kWh. Systems are limited to ${i.nemCapKwAC} kW of inverter AC rating, which allows ${P.inverter.maxUnits > 1 ? P.inverter.maxUnits + ' ' + P.inverter.name + 's' : P.inverter.kind === 'micro' ? P.inverter.dcMax + ' kW of panels on microinverters' : 'one ' + P.inverter.name}. Confirm both the limit and the true-up date with Rocky Mountain Power.`],
+    ['Money', `Panel, site and battery costs are from your sheet; inverter prices other than the 18kPV are 2026 retail listings. Savings grow ${nf(i.rates.escalation * 100, 1)}% a year with rates, less ${nf(i.rates.degradation * 100, 1)}% panel degradation. "Worth" is net present value at ${nf(i.finance.discount * 100, 1)}% over ${i.finance.horizon} years. Payback counts the growing savings.`],
     ['Not counted', 'Tax credits (the federal residential credit ended in 2025; set any rebate under Costs), demand charges (none on your Schedule 25 bill), and panel or inverter replacement.'],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
@@ -451,10 +491,12 @@ function buildForm() {
       ctl.id = id;
       const on = () => {
         let v = ctl.value;
-        if (ctl.tagName === 'SELECT') v = path === 'backup' ? v : Number(v);
+        if (ctl.tagName === 'SELECT') v = path === 'backup' || path === 'pv.inverter' ? v : Number(v);
         else { v = Number(v); if (!Number.isFinite(v) || ctl.value === '') return; v = Math.min(Number(max), Math.max(Number(min), v)); }
         if (getIn(inputs, path) === v) return;
-        setIn(inputs, path, v); save(); mark(); run();
+        setIn(inputs, path, v);
+        if (path === 'inverters.eg4_18kpv.idleW') for (const k of ['flexboss21', 'flexboss18', 'eg4_12kpv']) inputs.inverters[k].idleW = v;
+        save(); mark(); run();
       };
       ctl.addEventListener('change', on);
       if (ctl.tagName === 'INPUT') ctl.addEventListener('input', () => { if (ctl.validity.valid) on(); });
