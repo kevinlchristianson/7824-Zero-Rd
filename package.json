@@ -10,7 +10,8 @@
     "thermal:write": "node scripts/thermal.mjs --write",
     "weather": "node scripts/epw-to-json.mjs",
     "solar": "node scripts/solar.mjs",
-    "solar:write": "node scripts/solar.mjs --write"
+    "solar:write": "node scripts/solar.mjs --write",
+    "offgrid": "node scripts/offgrid.mjs"
   },
   "dependencies": {
     "three": "0.160.0"

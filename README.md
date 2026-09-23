@@ -5,6 +5,7 @@ Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one 
 - **`index.html`**: parametric three.js massing model (3D viewer).
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
+- **`offgrid.html`**: off-grid designs sized hour by hour: panels, batteries and heat pumps with gas kept, with gas limited to one week a year, and with no gas. `npm run offgrid` rebuilds `data/offgrid.json`.
 
 All three read `model/params.js`: the plan dimensions, heights and the full door/window inventory.
 
