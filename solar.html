@@ -243,12 +243,17 @@ const SCHEMA = [
     ['hp.option', 'Setup', '', 'assumed'],
     ['hp.heat', 'Heating', '', 'assumed'],
     ['hp.ahus', 'Air handlers', '', 'owner'],
-    ['hp.units.t35.cost', 'Apollo 3.5-ton, each', '$', 'listing', 0, 30000, 50],
-    ['hp.units.t60.cost', 'Apollo 6-ton, each', '$', 'listing', 0, 30000, 50],
+    ['hp.units.t35.cost', 'Apollo 3.5-ton (20% off), each', '$', 'owner', 0, 30000, 50],
+    ['hp.units.t60.cost', 'Apollo 6-ton (20% off), each', '$', 'owner', 0, 30000, 50],
     ['hp.install', 'Install, per unit', '$', 'assumed', 0, 20000, 100],
+    ['hp.buffer', 'Buffer tank, 250-gal dual coil', '$', 'listing', 0, 10000, 50],
+    ['hp.controls', 'Controls and valves (HBX, V-1..V-4)', '$', 'assumed', 0, 10000, 50],
+    ['hp.shopHeater', 'Shop hydronic unit heater, installed', '$', 'assumed', 0, 10000, 50],
+    ['modine.resale', 'Modine sold for', '$', 'assumed', 0, 10000, 50],
+    ['modine.eff', 'Modine efficiency', '×', 'listing', 0.5, 1, 0.01],
     ['hp.units.t35.coolCop', 'Cooling COP, 3.5-ton', '×', 'owner', 1, 8, 0.1],
     ['hp.units.t60.coolCop', 'Cooling COP, 6-ton', '×', 'sheet', 1, 8, 0.1],
-    ['ahu2.cost', 'Second AHU (3.5-ton)', '$', 'listing', 0, 20000, 50],
+    ['ahu2.cost', 'Second AHU (3.5-ton, 20% off)', '$', 'owner', 0, 20000, 50],
     ['ahu2.install', 'Second AHU ducts and install', '$', 'assumed', 0, 30000, 100],
     ['hp.reset.lowF', 'Buffer tank at 60°F outdoors', '°F', 'owner', 70, 140, 1],
     ['hp.reset.highF', 'Buffer tank cap (at −10°F)', '°F', 'owner', 80, 160, 1],
@@ -379,8 +384,16 @@ function renderSetups() {
     others.forEach(([k2, v2], j) => { const d = document.createElement(j ? 'div' : 'span'); if (j) d.className = 'cellnote'; d.textContent = `${MODE[k2]} +${usd(v2 - r.cost)}`; c.append(d); });
     if (r.cost > best) { const d = document.createElement('div'); d.className = 'cellnote'; d.textContent = `+${usd(r.cost - best)} vs best`; tr.cells[5].append(d); }
   }
+  if (P.noHp) {
+    const n = P.noHp, tr = tb.insertRow(); tr.className = 'no';
+    const c0 = tr.insertCell(); c0.textContent = 'No heat pump (Phase 1)';
+    const k = document.createElement('div'); k.className = 'cellnote'; k.textContent = 'Navien + Modine · no cooling'; c0.append(k);
+    let c = tr.insertCell(); c.className = 'num'; c.textContent = usd(0);
+    tr.insertCell().textContent = n.kw ? `${n.kw} kW on ${n.inv > 1 ? n.inv + ' × ' : ''}${n.invName}` : 'none';
+    for (const v of [usd(n.capex), usd(n.bills), usd(n.cost), '']) { c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+  }
   const U = P.setups[0], sec = P.setups[1];
-  $('#setup-sub').textContent = `Each setup gets the array and inverter that make it cheapest to own. "25-yr cost" is everything bought up front plus the present value of ${i.finance.horizon} years of electric and gas bills at ${nf(i.finance.discount * 100, 1)}%; lower is better. ${U.label} wins by ${usd(sec.cost - U.cost)} over ${sec.label.replace(/^One/, 'one')}. Extra tons buy almost nothing: cooling needs about ${nf(P.coolDemand.btu / 1e6)} MMBtu a year and the 3.5-ton falls short only ${P.setups.find(r => r.opt === 'c35')?.coolUnmetHrs} hours of it. On heat, everything the heat pump makes goes through the buffer at ${i.hp.reset.lowF}–${i.hp.reset.highF}°F on the outdoor reset. Even so, its heat beats gas at $${i.rates.gas}/therm only on solar credit that would otherwise be paid out, so a bigger unit mostly adds cost. The 6-ton in your hydronic pack is the runner-up, ${usd((P.setups.find(r => r.opt === 'h60' && r.ahus === 1)?.cost ?? 0) - U.cost)} behind: close enough that its extra heat and pull-down capacity can decide it. A second AHU would only replace the radiant floor upstairs and adds its ${usd(i.ahu2.cost + i.ahu2.install)} cost.`;
+  $('#setup-sub').textContent = `Each setup gets the array and inverter that make it cheapest to own. "25-yr cost" is everything bought up front plus the present value of ${i.finance.horizon} years of electric and gas bills at ${nf(i.finance.discount * 100, 1)}%; lower is better. ${U.label} wins by ${usd(sec.cost - U.cost)} over ${sec.label.replace(/^One/, 'one')}. Extra tons buy almost nothing: cooling needs about ${nf(P.coolDemand.btu / 1e6)} MMBtu a year and the 3.5-ton falls short only ${P.setups.find(r => r.opt === 'c35')?.coolUnmetHrs} hours of it. On heat, everything the heat pump makes goes through the buffer at ${i.hp.reset.lowF}–${i.hp.reset.highF}°F on the outdoor reset. Even so, its heat beats gas at $${i.rates.gas}/therm only on solar credit that would otherwise be paid out, so a bigger unit mostly adds cost. The 6-ton in your hydronic pack is the runner-up, ${usd((P.setups.find(r => r.opt === 'h60' && r.ahus === 1)?.cost ?? 0) - U.cost)} behind: close enough that its extra heat and pull-down capacity can decide it. A second AHU would only replace the radiant floor upstairs and adds its ${usd(i.ahu2.cost + i.ahu2.install)} cost. The grey row is Phase 1 with no heat pump: cheaper to own${P.noHp ? ` (${usd(P.noHp.cost)})` : ''}, but it has no cooling, so the gap is mostly the price of air conditioning.`;
 }
 
 function renderLadder() {

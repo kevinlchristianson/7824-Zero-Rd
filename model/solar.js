@@ -36,10 +36,13 @@ export const SOLAR_INPUTS = {
     reset: { lowF: 85, lowAtF: 60, highF: 120, highAtF: -10 },   // owner: schematic M-4
     preheatApproachF: 10,            // assumed: buffer lower coil to cold water
     units: {
-      t35: { name: '3.5-ton', tons: 3.5, cost: 5172, coolCop: 4.6 },   // MBTEK listing; owner cooling COP
-      t60: { name: '6-ton', tons: 6, cost: 7270, coolCop: 3.8 },       // MBTEK listing; sheet EER 13
+      t35: { name: '3.5-ton', tons: 3.5, cost: 4138, coolCop: 4.6 },   // MBTEK list less 20% (owner); owner cooling COP
+      t60: { name: '6-ton', tons: 6, cost: 5816, coolCop: 3.8 },       // MBTEK list less 20% (owner); sheet EER 13
     },
-    install: 2500,                   // assumed, per unit: pump, piping, buffer, wiring
+    install: 1500,                   // assumed, per unit: pad, line set, wiring, glycol
+    buffer: 2890,                    // MBTEK BF250 dual-coil, list less 20%
+    controls: 1500,                  // assumed: HBX ECO-0600, V-1..V-4, sensors, P-3 (pack M-3/M-5)
+    shopHeater: 1600,                // assumed: MBTEK commercial hydronic unit heater, installed
     option: 'auto',                  // an id from HP_OPTIONS, or 'auto' for the lowest 25-year cost
     heat: 'auto',                    // a key of HP_MODES, or 'auto' for the cheapest
     ahus: 'auto',                    // 1, 2, or 'auto'
@@ -51,7 +54,10 @@ export const SOLAR_INPUTS = {
   // the floor is left off.
   floor: { areaFt2: 3168, btuPerFt2F: 0.35, downLoss: 0.08 },   // area from M-1; output and loss assumed
   boilerEff: 0.93,                   // assumed: Navien condensing on ≤120 °F return
-  ahu2: { cost: 3200, install: 3000 },             // MBTEK 3.5-ton AHU listing; ducts and install assumed
+  ahu2: { cost: 2560, install: 3000 },             // MBTEK 3.5-ton AHU list less 20%; ducts and install assumed
+  // Today's shop heater: a gas Modine, kept until the heat pump plan moves
+  // the shop onto the buffer and a hydronic unit heater.
+  modine: { eff: 0.82, resale: 2500 },             // separated-combustion rating; resale assumed (half of new)
   dhw: { galPerDay: 60, setF: 120, eff: 0.90 },  // assumed: four people, about 15 gal each
   domestic: { kWhPerDay: 47, indoor: 0.7 },       // sheet
   rates: {
@@ -203,7 +209,10 @@ export function loadsFor(ctx, key) {
     const floorOut = upFloor / (1 - down), leak = floorOut - upFloor;
     const groundAir = Math.max(0, ctx.zone.ground[i] - leak);
     floorLoss += Math.max(0, leak - ctx.zone.ground[i]);
-    const air = ctx.zone.shop[i] + groundAir + ctx.zone.upper[i] - upFloor;
+    // Today the gas Modine heats the shop directly, with no pipes to lose heat
+    // through; the heat pump plans move it onto the buffer.
+    const shopModine = !opt, shopQ = ctx.zone.shop[i];
+    const air = (shopModine ? 0 : shopQ) + groundAir + ctx.zone.upper[i] - upFloor;
     // Hot water: the combi heats it, from cold water the buffer's lower coil
     // has preheated whenever the tank is warm (not while it's chilled).
     const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - hp.preheatApproachF) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
@@ -241,10 +250,12 @@ export function loadsFor(ctx, key) {
       const r2 = left.air + left.floor + left.pre + left.dhw, strip = Math.min(r2, 10 * BTU_KWH * ahus);
       e += strip / BTU_KWH; backupElec += strip / BTU_KWH; unmet += r2 - strip;
     } else g = ((left.air + left.floor) / bEff + (left.pre + left.dhw) / s.dhw.eff) / 1e5;
-    heatTot += air + floorOut + dhw; floorBtu += upFloor;
+    if (shopModine) g += shopQ * (1 - (pl.distLoss ?? 0)) / s.modine.eff / 1e5;
+    heatTot += air + floorOut + dhw + (shopModine ? shopQ : 0); floorBtu += upFloor;
     elec[i] = e; gas[i] = g;
   }
-  const cost = units.reduce((a, u) => a + u.cost + hp.install, 0) + (ahus === 2 && opt ? s.ahu2.cost + s.ahu2.install : 0);
+  const cost = !opt ? 0 : units.reduce((a, u) => a + u.cost + hp.install, 0) + hp.buffer + hp.controls + hp.shopHeater - s.modine.resale
+    + (ahus === 2 ? s.ahu2.cost + s.ahu2.install : 0);
   // Smart mode: per month, the remaining candidates best first, as running
   // totals of kWh used, therms saved and heat moved.
   let flex = null;
@@ -516,6 +527,11 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
     });
   }
   setupRows.sort((a, b) => (b.allowed - a.allowed) || (a.cost - b.cost));
+  // Reference: no heat pump (Phase 1: Navien + Modine, no cooling), with its
+  // own cheapest array.
+  let noHp = null;
+  for (const id of autoInv ? Object.keys(s.inverters) : [s.pv.inverter]) { const b = bestArray(ctx, 'today', id); if (!noHp || b.cost < noHp.cost) noHp = { ...b, m: id }; }
+  noHp = { kw: noHp.kw, inv: noHp.inv, invName: s.inverters[noHp.m].name, capex: noHp.res.capex, bills: noHp.res.total, cost: noHp.cost, therms: noHp.res.therms };
 
   // 2. The solar purchase order on the winning setup.
   const withE = (r, b) => ({ ...r, econ: economics(r, b, s) });
@@ -574,7 +590,7 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
     inputs: s,
     setup: { opt: win.opt, mode: win.mode, ahus: win.ahus, label: setupLabel(win.opt, win.ahus), hpLabel: HP_OPTIONS[win.opt].label, tons: Lw.tons, hpCost: Lw.cost, hpShare: rec.hpShare, coolUnmetHrs: Lw.coolUnmetHrs, floorLoss: Lw.floorLoss, floorShare: Lw.floorShare, auto: !(s.hp.option in HP_OPTIONS) },
     lines: lines.map(r => ({ opt: r.opt, ahus: r.ahus, mode: r.mode, label: r.label })),
-    setups: setupRows,
+    setups: setupRows, noHp,
     inverter: { id: ctx.m, ...M, dcMax, maxUnits: nMax, auto: autoInv },
     inverters,
     pvYield: mon.reduce((a, b) => a + b, 0), pvMonthly: mon,
