@@ -434,7 +434,7 @@ function renderKpis() {
   const windPct = calm ? (heat / calm - 1) * 100 : null;
   const tiles = [
     ['hero', 'Heating & cooling, per year', `$${nf(c.total)}`, `$${nf(lo)} if the center is tight (ACH50 ${i.center.achLow}), $${nf(hi)} if leaky (ACH50 ${i.center.achHigh}). Service charges add $${nf(c.fixed)} a year either way.`],
-    ['', 'Gas for heat', `$${nf(c.gas)}`, `${nf(c.therms)} therms at $${i.rates.gas.toFixed(3)}, Navien at ${nf(i.plant.boilerEff * 100)}%`],
+    ['', 'Gas for heat', `$${nf(c.gas)}`, `${nf(c.therms)} therms, $${i.rates.gasWinter.toFixed(3)} Nov–Mar and $${i.rates.gas.toFixed(3)} Apr–Oct, Navien at ${nf(i.plant.boilerEff * 100)}%`],
     ['', 'Electric for cooling', `$${nf(c.cooling)}`, `${nf(c.compKWh)} kWh for the Apollo at COP ${i.plant.coolCOP}, plus the AHU and pumps`],
     ['', 'AHU and pumps for heat', `$${nf(c.heatElec)}`, `${nf(c.heatHours)} hours at ${nf(i.plant.fanW + i.plant.pumpW)} W`],
     ['', 'Wind adds', windPct == null ? 'off' : `+${nf(windPct)}%`, windPct == null ? 'Wind is switched off in Inputs' : `to heating, against the same year in still air`],
@@ -638,7 +638,7 @@ function renderCosts() {
   }
 
   // What moves the bill.
-  const gasPerMMBtu = i.rates.gas / i.plant.boilerEff * 10;
+  const gasPerMMBtu = (i.rates.gasWinter ?? i.rates.gas) / i.plant.boilerEff * 10;
   const elecPerMMBtu = i.rates.elec / 3412 * 1e6;
   const fanAll = i.plant.fanW / 1000 * R.main.hours * i.rates.elec;
   const fanAuto = (c.heatHours + c.coolHours) * i.plant.fanW / 1000 * i.rates.elec;
@@ -660,7 +660,7 @@ function renderCosts() {
     d.append(bb, sp); return d;
   }));
   $('#rates-note').textContent =
-    `Rates are from your August 2026 bills, taxes included. Gas is $${i.rates.gas.toFixed(3)}/therm on Black Hills Energy RGS GCA: $0.2008 volumetric, $0.3398 commodity, riders −$0.0115, +$0.0203 and −$0.0007, and 5% sales tax. The commodity charge passes through gas costs and changes during the year. Electricity is $${i.rates.elec.toFixed(4)}/kWh on Rocky Mountain Power Schedule 25: $0.06467 energy, $0.02997 net power cost, −$0.00052 renewable adjustment, 2.84% efficiency and 0.05% carbon charges, and 5% sales tax. The bill shows no demand charge, so none is included. Monthly service charges of $${i.rates.gasMonthly.toFixed(2)} for gas and $${i.rates.elecMonthly.toFixed(2)} for electric are paid regardless and are not in the totals above.`;
+    `Rates are from your bills, taxes included. Gas on Black Hills Energy RGS GCA is $${i.rates.gasWinter.toFixed(3)}/therm November–March, from the January 2026 bill ($0.2008 volumetric, $0.3449 commodity, riders −$0.0049, +$0.0203 and +$0.0088, 5% sales tax; the city franchise fee and city tax on that bill's in-town premise don't apply at Zero Rd), and $${i.rates.gas.toFixed(3)}/therm April–October, from the August 2026 bill ($0.3398 commodity, riders −$0.0115, +$0.0203 and −$0.0007). The commodity charge passes through gas costs, and the riders reset during the year. Electricity is $${i.rates.elec.toFixed(4)}/kWh on Rocky Mountain Power Schedule 25: $0.06467 energy, $0.02997 net power cost, −$0.00052 renewable adjustment, 2.84% efficiency and 0.05% carbon charges, and 5% sales tax. The bill shows no demand charge, so none is included. Monthly service charges of $${i.rates.gasMonthly.toFixed(2)} for gas and $${i.rates.elecMonthly.toFixed(2)} for electric are paid regardless and are not in the totals above.`;
 }
 // ---------------------------------------------------------------- sensitivity
 function renderSensitivity() {

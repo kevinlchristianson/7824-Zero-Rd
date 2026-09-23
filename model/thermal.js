@@ -70,7 +70,11 @@ export const INPUTS = {
   // plus 5% sales tax. Electric, Rocky Mountain Power Schedule 25:
   // 0.06467 energy + 0.02997 net power cost - 0.00052 renewable adj,
   // plus 2.84% efficiency services, 0.05% carbon capture and 5% sales tax.
-  rates: { gas: 0.576, elec: 0.1017, gasMonthly: 34.65, elecMonthly: 37.46 },
+  // Winter gas (Nov-Mar) from the Jan-2026 bill on the same schedule
+  // (Palmer Dr premise, city fees removed): 0.2008 volumetric - 0.0049
+  // revenue adj + 0.0203 integrity rider + 0.3449 commodity + 0.0088 EE,
+  // plus 5% sales tax. `gas` is the Apr-Oct rate.
+  rates: { gas: 0.576, gasWinter: 0.598, winterMonths: [10, 11, 0, 1, 2], elec: 0.1017, gasMonthly: 34.65, elecMonthly: 37.46 },
 };
 
 // Input schema for forms and reports. src: 'given' = from the owner,
@@ -123,7 +127,8 @@ export const SCHEMA = [
     ['plant.ahuHeatBtuh', 'AHU heat output, full fan', 'Btu/h', 'assumed', 10000, 400000, 1000],
   ] },
   { group: 'Rates (from your bills)', items: [
-    ['rates.gas', 'Gas, per therm, all-in', '$', 'given', 0, 5, 0.001],
+    ['rates.gasWinter', 'Gas, per therm, Nov–Mar, all-in', '$', 'given', 0, 5, 0.001],
+    ['rates.gas', 'Gas, per therm, Apr–Oct, all-in', '$', 'given', 0, 5, 0.001],
     ['rates.elec', 'Electricity, per kWh, all-in', '$', 'given', 0, 1, 0.0001],
     ['rates.gasMonthly', 'Gas customer charge, per month', '$', 'given', 0, 200, 0.01],
     ['rates.elecMonthly', 'Electric basic charge, per month', '$', 'given', 0, 200, 0.01],
@@ -968,7 +973,8 @@ export function costs(res, inp) {
   const pl = inp.plant, rt = inp.rates;
   const coolCap = pl.coolTons * 12000, distKW = (pl.fanW + pl.pumpW) / 1000;
   const keep = 1 - (pl.distLoss ?? 0);   // share of plant output that reaches the rooms
-  const zone = (heat, cool) => {
+  const gasAt = m => (m != null && (rt.winterMonths ?? []).includes(m) ? rt.gasWinter ?? rt.gas : rt.gas);
+  const zone = (heat, cool, m) => {
     const therms = heat / keep / pl.boilerEff / 1e5;
     const heatHours = heat / keep / pl.ahuHeatBtuh, coolHours = cool / keep / coolCap;
     const compKWh = cool / keep / (pl.coolCOP * 3412);
@@ -976,7 +982,7 @@ export function costs(res, inp) {
     const heatDistKWh = heatHours * distKW, coolDistKWh = coolHours * distKW;
     return {
       heat, cool, therms, compKWh, distKWh, heatHours, coolHours,
-      gas: therms * rt.gas,
+      gas: therms * gasAt(m),
       heatElec: heatDistKWh * rt.elec,
       coolElec: (compKWh + coolDistKWh) * rt.elec,
     };
@@ -984,7 +990,8 @@ export function costs(res, inp) {
   const zones = {}, monthly = {};
   ZONES.forEach((z, k) => {
     zones[z] = zone(res.heatTot[k], res.coolTot[k]);
-    monthly[z] = Array.from({ length: 12 }, (_, m) => zone(res.heat[k][m], res.cool[k][m]));
+    monthly[z] = Array.from({ length: 12 }, (_, m) => zone(res.heat[k][m], res.cool[k][m], m));
+    zones[z].gas = monthly[z].reduce((a, x) => a + x.gas, 0);   // each month at its season's rate
   });
   const sum = f => ZONES.reduce((s, z) => s + f(zones[z]), 0);
   const t = {
@@ -1012,7 +1019,7 @@ const scaleGains = (i, k) => {
 export const SENSITIVITY = [
   { key: 'center', label: 'Center airtightness', fmt: v => `ACH50 ${v}`, better: i => i.center.achLow, worse: i => i.center.achHigh, set: (i, v) => { i.center.ach50 = v; }, sim: true },
   { key: 'framing', label: 'Foam effectiveness in walls', fmt: v => `×${v}`, better: () => 1, worse: () => 0.4, set: (i, v) => { i.framing = v; }, sim: true },
-  { key: 'gas', label: 'Gas price over the winter', fmt: v => `$${v.toFixed(2)}/therm`, better: i => i.rates.gas, worse: i => Math.max(i.rates.gas, 0.80), set: (i, v) => { i.rates.gas = v; }, sim: false },
+  { key: 'gas', label: 'Gas price over the winter', fmt: v => `$${v.toFixed(2)}/therm`, better: i => i.rates.gasWinter ?? i.rates.gas, worse: i => Math.max(i.rates.gasWinter ?? i.rates.gas, 0.80), set: (i, v) => { i.rates.gasWinter = v; }, sim: false },
   { key: 'dist', label: 'Duct and piping losses', fmt: v => `${Math.round(v * 100)}%`, better: () => 0, worse: () => 0.2, set: (i, v) => { i.plant.distLoss = v; }, sim: false },
   { key: 'boiler', label: 'Boiler seasonal efficiency', fmt: v => `${Math.round(v * 100)}%`, better: () => 0.93, worse: () => 0.82, set: (i, v) => { i.plant.boilerEff = v; }, sim: false },
   { key: 'windows', label: 'Window U-factor', fmt: v => `U-${v}`, better: () => 0.3, worse: () => 0.65, set: (i, v) => { i.glass.windowU = v; }, sim: true },
