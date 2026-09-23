@@ -1,0 +1,222 @@
+<title>Zero Rd Build Plan</title>
+<meta name="description" content="How to pay for the steps toward design C at 7824 Zero Rd: the owner's cash-flow workbook rebuilt with the $250k renovation, two $50k gifts, and each energy step bought on different schedules.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f1eee8; --sheet: #fbfaf7; --ink: #23201d; --ink-2: #4a4540; --muted: #6d675f;
+    --rule: #d9d3c9; --grid: #e8e3da; --accent: #8a4f35; --accent-wash: rgba(138, 79, 53, 0.10);
+    --s0: #8f877c; --s1: #2a78d6; --s2: #eb6834; --s3: #1f9e89; --focus: #2f6f8f;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
+      --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
+      --s0: #8d857a; --s1: #3987e5; --s2: #d95926; --s3: #2bb39c; --focus: #7fb7d1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
+    --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
+    --s0: #8d857a; --s1: #3987e5; --s2: #d95926; --s3: #2bb39c; --focus: #7fb7d1;
+  }
+  body { margin: 0; background: var(--sheet); color: var(--ink); font: 14px/1.5 var(--body); }
+  .page { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .masthead { padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+  .eyebrow { font: 600 12px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  h1 { font: 700 44px/0.95 var(--display); margin: 0; }
+  .lede { color: var(--muted); margin: 8px 0 0; max-width: 68ch; text-wrap: pretty; }
+  section { padding-block: 24px 8px; border-bottom: 1px solid var(--rule); }
+  section:last-child { border-bottom: 0; }
+  h2 { font: 700 26px/1.1 var(--display); margin: 0 0 4px; text-wrap: balance; }
+  h3 { font: 600 16px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; margin: 18px 0 8px; color: var(--ink-2); }
+  .sub { color: var(--muted); margin: 0 0 14px; max-width: 74ch; text-wrap: pretty; }
+
+  .kit { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--rule); margin: 6px 0 16px; }
+  .kit > div { padding: 14px 16px; box-shadow: -1px 0 0 var(--rule); display: grid; gap: 2px; align-content: start; }
+  .kit > div:first-child { box-shadow: none; padding-left: 0; }
+  .k-label { font: 600 12px/1.2 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .k-value { font: 600 28px/1.1 var(--body); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .k-sub { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  @media (max-width: 760px) { .kit { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kit > div:nth-child(3) { box-shadow: none; padding-left: 0; } .kit > div:nth-child(n+3) { border-top: 1px solid var(--rule); } }
+
+  ol.steps { margin: 0 0 16px; padding-left: 0; list-style: none; display: grid; gap: 10px; max-width: 76ch; counter-reset: s; }
+  ol.steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+  ol.steps li::before { counter-increment: s; content: counter(s); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--sheet); font: 600 12px var(--mono); }
+  ol.steps b { color: var(--ink); }
+  ol.steps span { color: var(--ink-2); }
+
+  .chart { position: relative; width: 100%; margin-bottom: 6px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+  .chart .lbl { font-family: var(--body); font-size: 11.5px; fill: var(--ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 16px; height: 2px; }
+
+  .table-wrap { overflow-x: auto; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); vertical-align: baseline; }
+  th { font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--rule); }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.pick td { font-weight: 600; }
+  tr.pick td:first-child::before { content: '▸ '; }
+  .cellnote { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+  .warn { color: var(--accent); }
+  .notes { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); max-width: 80ch; font-size: 13px; }
+  .notes b { color: var(--ink); }
+  .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 160px; }
+  .tip b { font: 600 12px var(--mono); }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <p class="eyebrow">Build plan · 7824 Zero Rd</p>
+    <h1>Paying for the road to design C</h1>
+    <p class="lede">Your cash-flow workbook's chosen path (hold the rental, rent the second unit, kill the line, prepay the mortgage, sell) rebuilt month by month with the renovation at $250k on a $250k interest-only HELOC and your mom's two $50k gifts. Each step toward the wood-boiler off-grid design is then bought on different schedules, and the schedules are compared on what you end up with in 2046 after everything the paycheck put in.</p>
+  </header>
+
+  <section>
+    <h2>What to do</h2>
+    <p class="sub" id="do-sub"></p>
+    <div class="kit" id="kit"></div>
+    <ol class="steps" id="steps"></ol>
+  </section>
+
+  <section>
+    <h2>What each step is worth</h2>
+    <p class="sub">Costs at your prices (refurbished 18kPVs at $3,600, batteries at $3,400, MBTEK less 20%). Savings are yearly bill changes from the solar plan at today's rates, growing 3.3% a year in the cash flow. Nothing here counts as an asset; only what it saves counts.</p>
+    <div class="table-wrap"><table id="ladder"></table></div>
+  </section>
+
+  <section>
+    <h2>Schedules compared</h2>
+    <p class="sub" id="cmp-sub"></p>
+    <div class="table-wrap"><table id="cmp"></table></div>
+  </section>
+
+  <section>
+    <h2>Debt over time</h2>
+    <p class="sub">The HELOC and the rental mortgage together, month by month, for three schedules. The line dies, then surplus prepays the mortgage, then the rental sells.</p>
+    <div class="legend" id="debt-legend"></div>
+    <div class="chart" id="debt" role="img" aria-label="HELOC plus mortgage balance over time for three schedules"></div>
+  </section>
+
+  <section>
+    <h2>How it works, and what isn't in it</h2>
+    <ul class="notes" id="notes"></ul>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const nf = (v, d = 0) => Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const usd = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v));
+const k$ = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v) / 1000) + 'k';
+const tip = $('#tip');
+const showTip = (e, html) => { tip.innerHTML = html; tip.hidden = false; tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; };
+const hideTip = () => { tip.hidden = true; };
+
+let D;
+try { D = await (await fetch(new URL('./data/finance.json', import.meta.url))).json(); }
+catch { $('#do-sub').textContent = 'The plan data didn’t load. Reload the page to try again.'; throw new Error('no data'); }
+const P = D.plans, F = D.F, S = D.STEPS, base = P.base, rec = P.solarGift;
+const gain = p => p.nwNet - base.nwNet;
+
+function doSection() {
+  $('#do-sub').textContent = `Buy the solar with the first gift and let everything else ride the HELOC. The 21 kW array on two refurbished 18kPVs returns about ${nf(S.solar.saves / S.solar.cost * 100)}% a year, more than the 7% the line costs, and it leaves you ${usd(gain(rec))} better off by 2046 than putting that gift on the line. Every other step toward C costs wealth whenever you buy it, because the heat pump mostly buys cooling, the batteries buy resilience, and the boiler burns wood worth more than the gas it replaces while you're on the grid.`;
+  const kit = [
+    ['Dec 2026', 'Solar', `${usd(S.solar.cost)} from gift 1; the other ${usd(50000 - S.solar.cost - F.floorTopUp)} pays the line, ${usd(F.floorTopUp)} stays in brokerage to hold the floor`],
+    ['Jun 2027', 'Gift 2 → HELOC', 'all of it, unless you want the outage kit now'],
+    [rec.locDead, 'Line dies', `about ${rec.locDead === base.locDead ? 'the same month as' : 'a month after'} the no-solar path, with the array paid for`],
+    [rec.sold, 'Rental sells', `${k$(rec.nwNet)} in 2046 after everything the paycheck put in, vs ${k$(base.nwNet)} without solar`],
+  ];
+  $('#kit').replaceChildren(...kit.map(([l, v, s]) => { const d = document.createElement('div'); d.innerHTML = '<div class="k-label"></div><div class="k-value"></div><div class="k-sub"></div>'; d.children[0].textContent = l; d.children[1].textContent = v; d.children[2].textContent = s; return d; }));
+  const steps = [
+    ['Dec 2026: solar.', `21 kW on two refurbished EG4 18kPVs (hybrid, so batteries can follow) with the Dec 2026 gift. ${usd(S.solar.cost)}; saves about ${usd(S.solar.saves)} a year. The 18kPVs cost ${usd(3800)} more than grid-tie SMAs but they're the doorway to everything else in C.`],
+    ['Keep ${usd(F.floorTopUp)} of gift 1 in brokerage.', `The $15k you floated for closing isn't reimbursed now that the line is full, so the two card payoffs (Dec 2027 and Feb 2028) would push brokerage below your ${usd(F.floor)} floor without it.`],
+    ['Jun 2027: gift 2 to the HELOC.', `Paying 7% beats every remaining step. If you want the outage kit sooner, 32 kWh of batteries is ${usd(S.batt.cost)} and costs about ${k$(-(gain(P.cGifts) - gain(rec)) * S.batt.cost / (S.hp.cost + S.batt.cost + S.wood.cost))} of 2046 wealth.`],
+    ['Heat pump when you want cooling, not before.', `The 3.5-ton, buffer and controls (${usd(S.hp.cost)}) save only about ${usd(S.hp.saves)} a year on top of solar. Buy them the summer you decide you want air conditioning; on the HELOC is fine.`],
+    ['Wood boiler last, or when the line dies.', `${usd(S.wood.cost)} installed, and while you're grid-connected it burns about ${usd(-S.wood.saves)} a year more in wood than it saves in gas at a $150/cord blend. It's what makes the house heat without the grid; buy it as insurance, not as an investment. Buying the heat pump, batteries and boiler in 2027 instead of 2036 costs about ${k$(gain(P.cLate) - gain(P.cGifts))} of 2046 wealth.`],
+    ['Skip the 0% card for solar.', `Putting the array on the card in Oct 2026 gains two months of production but drops brokerage to ${k$(P.solarCard.minBrok)}, under the floor, and the card fee plus a balloon in Apr 2028 land ${k$(gain(rec) - gain(P.solarCard))} behind waiting for the gift.`],
+  ];
+  $('#steps').replaceChildren(...steps.map(([b, t]) => { const li = document.createElement('li'); const d = document.createElement('div'); const bb = document.createElement('b'); bb.textContent = b.replace('${usd(F.floorTopUp)}', usd(F.floorTopUp)) + ' '; const sp = document.createElement('span'); sp.textContent = t; d.append(bb, sp); li.append(d); return li; }));
+}
+
+function ladder() {
+  const t = $('#ladder');
+  t.innerHTML = '<thead><tr><th>Step</th><th class="num">Cost</th><th class="num">Saves / yr</th><th class="num">Simple return</th><th>What it buys</th></tr></thead>';
+  const tb = t.createTBody();
+  const roles = { solar: 'Cuts the electric bill to near zero under net metering', hp: 'Cooling, and a little cheaper heat on fall surplus', batt: 'Rides through a week without the grid (design A)', wood: 'Heat without gas or grid (design C); costs money on the grid' };
+  for (const [k, s] of Object.entries(S)) {
+    const tr = tb.insertRow(); if (k === 'solar') tr.className = 'pick';
+    tr.insertCell().textContent = s.label;
+    for (const v of [usd(s.cost), (s.saves < 0 ? '−' : '') + usd(Math.abs(s.saves)), s.saves > 0 ? `${nf(s.saves / s.cost * 100, 1)}%` : '—']) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+    tr.insertCell().textContent = roles[k];
+  }
+}
+
+function cmp() {
+  const t = $('#cmp');
+  t.innerHTML = '<thead><tr><th>Schedule</th><th>Steps bought</th><th class="num">Line dies</th><th class="num">Debt-free</th><th class="num">Interest + fees</th><th class="num">Bills saved</th><th class="num">Lowest brokerage</th><th class="num">2046, net of paycheck</th><th class="num">vs no energy</th></tr></thead>';
+  const tb = t.createTBody();
+  for (const [id, p] of Object.entries(P)) {
+    const tr = tb.insertRow(); if (id === 'solarGift') tr.className = 'pick';
+    const c0 = tr.insertCell(); c0.textContent = p.name; const n = document.createElement('div'); n.className = 'cellnote'; n.textContent = p.note; c0.append(n);
+    tr.insertCell().textContent = Object.entries(p.owned).map(([k, d]) => `${{ solar: 'solar', hp: 'heat pump', batt: 'batteries', wood: 'boiler' }[k]} ${d}`).join(', ') || 'none';
+    const floorNote = p.minBrok < F.floor ? ' ⚠' : '';
+    for (const v of [p.locDead ?? '—', p.debtFree ?? '—', usd(p.interest), usd(p.cumSave), usd(p.minBrok) + floorNote, k$(p.nwNet), (gain(p) >= 0 ? '+' : '') + k$(gain(p))]) { const c = tr.insertCell(); c.className = 'num' + (v.includes('⚠') ? ' warn' : ''); c.textContent = v; }
+  }
+  $('#cmp-sub').textContent = `All on the workbook's rules: $1,500 a month from the paycheck or the shortfall if larger, surplus to the line, reno-2 ($100k for the lower level) redraws when the line first reaches $100k, brokerage at 8%, a ${usd(F.floor)} brokerage floor (⚠ marks a breach), rental sold the month the mortgage settles. "2046, net of paycheck" is net worth in June 2046 minus everything the paycheck contributed, the workbook's own yardstick; the residence and the equipment aren't counted.`;
+}
+
+function debtChart() {
+  const el = $('#debt'), W = Math.max(300, el.clientWidth), H = 240, m = { l: 48, r: 130, t: 10, b: 24 };
+  const S3 = [['base', 'No energy', 'var(--s0)'], ['solarGift', 'Solar from gift 1', 'var(--s1)'], ['cGifts', 'C-capable by 2027', 'var(--s2)']];
+  const hi = 400000, x = t => m.l + t / F.months * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+  let g = '';
+  for (let v = 0; v <= hi; v += 100000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 3.5}" text-anchor="end">${k$(v)}</text>`;
+  for (let yr = 2027; yr <= 2046; yr += 2) { const t = (yr - 2026) * 12 - 5; g += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${yr}</text>`; }
+  const ends = [];
+  for (const [id, lab, col] of S3) {
+    const s = P[id].series;
+    g += `<polyline points="${s.map(p => `${x(p.t).toFixed(1)},${y(Math.min(hi, p.loc + p.mtg + p.other)).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.8"/>`;
+    const last = s.find(p => p.loc + p.mtg + p.other < 1) ?? s.at(-1);
+    ends.push({ lab, col, t: last.t });
+  }
+  ends.sort((a, b) => a.t - b.t);
+  ends.forEach((e, i) => { g += `<text class="lbl" x="${x(e.t) + 6}" y="${y(0) - 6 - i * 14}" fill="${e.col}">${e.lab}: debt-free ${P[S3.find(q => q[1] === e.lab)[0]].debtFree}</text>`; });
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  const xh = el.querySelector('.xh');
+  el.querySelector('.hit').addEventListener('pointermove', e => {
+    const b = el.getBoundingClientRect(), t = Math.max(3, Math.round((e.clientX - b.left - m.l) / (W - m.l - m.r) * F.months / 3) * 3);
+    xh.setAttribute('x1', x(t)); xh.setAttribute('x2', x(t)); xh.setAttribute('visibility', 'visible');
+    const yr = 2026 + Math.floor((t + 5) / 12), mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][(t + 5) % 12];
+    showTip(e, `<div>${mo} ${yr}</div>` + S3.map(([id, lab, col]) => { const p = P[id].series.find(q => q.t === t); return p ? `<div><i style="display:inline-block;width:10px;height:2px;background:${col};margin-right:6px;vertical-align:middle"></i><b>${k$(p.loc + p.mtg + p.other)}</b> ${lab} · HELOC ${k$(p.loc)}, brokerage ${k$(p.brok)}</div>` : ''; }).join(''));
+  });
+  el.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  $('#debt-legend').innerHTML = S3.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
+}
+
+function notes() {
+  const items = [
+    ['Engine', `The workbook's S13 path, month by month from July 2026: truck on autopay at 8.99%, the two cards paid in full at their 0% deadlines from brokerage, the rental mortgage at 2.875%, the HELOC at 7% interest-only with all surplus paying principal, reno-2 redrawing $100k when the line first reaches $100k, surplus prepaying the mortgage once the line is dead, and the rental (${usd(F.rental.value)} growing 3%/yr, less 4% commission, 15% capital gains and ${usd(F.rental.recapture)} recapture) sold the month it settles. Rental income ${usd(F.rental.net)} plus ${usd(F.rental.rent2)} second-dwelling rent, inflating 2.5%/yr, from month 1.`],
+    ['Changes from the workbook', `Reno-1 is $250k and fills the $250k line, so the $15k floated for closing is no longer reimbursed; gift 1 tops brokerage up by ${usd(F.floorTopUp)} to keep the floor. Two $50k gifts, Dec 2026 and Jun 2027. Energy bill savings enter as cash each month and shrink what the paycheck must cover.`],
+    ['Energy steps', `Solar: 21 kW on two refurbished 18kPVs, ${usd(S.solar.cost)}, ${usd(S.solar.saves)}/yr from the solar plan (electric bill ${usd(2205)} today). Heat pump, buffer and controls ${usd(S.hp.cost)}, ${usd(S.hp.saves)}/yr more. Batteries ${usd(S.batt.cost)}, no bill change. Wood boiler ${usd(S.wood.cost)} installed; it displaces about $473 of gas a year and burns about 7.3 cords, priced at a $150/cord blend of bought and cut wood. The bigger array and battery bank that only matter if you actually disconnect aren't included; you said you'd stay connected.`],
+    ['Not in the model', 'Living costs and utilities beyond the bill savings, property tax and insurance, income tax (Wyoming has none; no federal credit remains for solar), the resale value of any equipment, a 0% card fee other than the 3% assumed, appreciation of the residence, and the Airbnb and second-dwelling rent actually persisting to the sale (the workbook\'s own watch-list item). Everything is nominal at 8% brokerage returns; the 6% case is in the data file.'],
+  ];
+  $('#notes').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
+}
+
+doSection(); ladder(); cmp(); notes(); debtChart();
+let rz = 0; new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(debtChart); }).observe($('#debt'));
+</script>

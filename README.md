@@ -6,6 +6,7 @@ Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one 
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 - **`offgrid.html`**: off-grid questions sized hour by hour, in grid-down conservation mode: (A) batteries, generator and stored gas to carry the grid-tied house through its worst week; (B) full off grid with no gas on heat pumps, resistance and batteries; (C) the same with an outdoor wood boiler. `npm run offgrid` rebuilds `data/offgrid.json`.
+- **`finance.html`**: how to pay for the steps toward design C: the owner's cash-flow workbook rebuilt month by month with the $250k renovation and two gifts, and each energy step bought on different schedules. `npm run finance` rebuilds `data/finance.json`.
 
 All three read `model/params.js`: the plan dimensions, heights and the full door/window inventory.
 
