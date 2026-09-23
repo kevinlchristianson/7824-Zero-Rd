@@ -2,13 +2,15 @@
   "name": "7824-zero-rd",
   "private": true,
   "type": "module",
-  "description": "Parametric 3D massing model and hourly heating & cooling model of 7824 Zero Rd",
+  "description": "Parametric 3D massing model, hourly heating & cooling model, and solar/net-metering plan for 7824 Zero Rd",
   "scripts": {
     "serve": "npx http-server -c-1 .",
     "export": "node scripts/export.mjs",
     "thermal": "node scripts/thermal.mjs",
     "thermal:write": "node scripts/thermal.mjs --write",
-    "weather": "node scripts/epw-to-json.mjs"
+    "weather": "node scripts/epw-to-json.mjs",
+    "solar": "node scripts/solar.mjs",
+    "solar:write": "node scripts/solar.mjs --write"
   },
   "dependencies": {
     "three": "0.160.0"

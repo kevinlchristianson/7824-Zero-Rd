@@ -1,11 +1,12 @@
 # 7824 Zero Rd
 
-Two models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one set of geometry.
+Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one set of geometry.
 
 - **`index.html`**: parametric three.js massing model (3D viewer).
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
+- **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 
-Both read `model/params.js`: the plan dimensions, heights and the full door/window inventory.
+All three read `model/params.js`: the plan dimensions, heights and the full door/window inventory.
 
 ## The building
 
@@ -53,11 +54,26 @@ The center block and the shop are 48′ × 68′ inside (owner), with about 16�
   - window U-factor and SHGC
   - internal gains
 
+## Solar plan (`model/solar.js`)
+
+The plan runs hourly over the same TMY3 year:
+
+- **PV output.** Isotropic sky on a south-facing array tilted 40°. Faiman cell temperature. Each EG4 18kPV clips at 12 kW AC and takes up to 18 kW DC.
+- **Loads.** Heating and cooling come from the thermal model. Household electricity is 47 kWh/day. Hot water is 40 gal/day at 120°F.
+- **Heat pump option.** A new 6-ton Apollo air-to-water heat pump, using the COP and capacity curves from the owner's sheet. The Navien boiler or AHU strips cover what it can't.
+- **Net metering.** Rocky Mountain Power's Wyoming rules: kWh netted monthly, surplus banked at retail, leftover credit paid at avoided cost at the annual true-up, 25 kW AC cap.
+
+A greedy "ladder" adds the upgrade with the shortest payback at each step: panels, a second inverter, the heat pump, or a battery. It stops when the next step's net present value is negative.
+
+Costs and rates come from `Casper_Solar_Sizing_Model.xlsx`. Inputs the owner still needs to confirm are marked ASSUMED on the page.
+
 ```sh
 npm install
 npm run serve                   # http://localhost:8080/ (3D) and /thermal.html
 npm run thermal                 # print the model report
 npm run thermal:write           # refresh data/thermal-defaults.json for the page
+npm run solar                   # print the solar plan report
+npm run solar:write             # refresh data/solar-defaults.json for the page
 npm run weather                 # rebuild data/casper-tmy3.json from the EPW
 npm run export                  # export/7824-zero-rd.{obj,mtl,glb}
 node scripts/export.mjs --no-context   # building only, no ground/trees
