@@ -8,7 +8,7 @@ const wx = JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.me
 const ctx = offgridContext(wx);
 const $ = v => '$' + Math.round(v).toLocaleString('en-US');
 const slim = x => { const { mon, daySoc, ...rest } = x; return rest; };
-const show = x => `${x.tons}-ton ${x.kw} kW on ${x.ni}, ${x.nb} batt (${Math.round(x.battKwh)} kWh): up front ${$(x.capex)}, gas hours ${x.gasH}, gen ${Math.round(x.genKwh)} kWh, Navien ${Math.round(x.navTh)} thm, resistance ${Math.round(x.resKwh)} kWh, behind setpoint ${x.behindH} h (longest ${x.longestBehind} h), spilled ${Math.round(x.spill / 1000)} MWh, bills ${$(x.annual)}/yr, 25-yr ${$(x.life)}`;
+const show = x => `${x.tons}-ton ${x.kw} kW on ${x.ni}, ${x.nb} batt (${Math.round(x.battKwh)} kWh): up front ${$(x.capex)}, gas hours ${x.gasH}, gen ${Math.round(x.genKwh)} kWh, Navien ${Math.round(x.navTh)} thm + hot water ${Math.round(x.dhwTh || 0)} thm, resistance ${Math.round(x.resKwh)} kWh, behind setpoint ${x.behindH} h (longest ${x.longestBehind} h), spilled ${Math.round(x.spill / 1000)} MWh, bills ${$(x.annual)}/yr, 25-yr ${$(x.life)}`;
 
 // Grid-tied reference: the solar plan's pick (3.5-ton, smart heating, 21 kW).
 const gctx = buildContext(wx, SOLAR_INPUTS); gctx.m = 'sma77';
@@ -28,7 +28,7 @@ for (const rule of ['A', 'B']) {
   const rows = [];
   for (const t of Object.keys(OFFGRID_INPUTS.tons)) {
     const b = cheapest(ctx, rule, t);
-    const short = ((ctx._ae ??= {})[rule + t] ??= ctx.allElectric(OFFGRID_INPUTS.tons[t].tons, rule === 'B', OFFGRID_INPUTS.hpwhCop)).short;
+    const short = ((ctx._ae ??= {})[rule + t] ??= ctx.allElectric(OFFGRID_INPUTS.tons[t].tons, rule)).short;
     rows.push({ tons: t, label: OFFGRID_INPUTS.tons[t].label, hpShortH: short, design: b ? slim(b) : null });
     console.log(`${rule} ${t}-ton (short ${short} h):`, b ? show(b) : 'none in range');
   }

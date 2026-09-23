@@ -6,12 +6,13 @@
 //   P  practical: gas stays. The Navien heats (the heat pump only on surplus
 //      solar), the Modine heats the shop, and a gas generator covers any hour
 //      the batteries run dry.
-//   A  gas for about one week a year: the heat pumps carry all heat, electric
-//      resistance in the buffer covers what they can't while the batteries
-//      last, and only then do the Navien and generator run. No more than 168
-//      gas hours a year.
-//   B  no gas and no electric resistance: heat pumps only (space heat through
-//      the buffer, hot water from a heat pump water heater), batteries only.
+//   A  gas for about one week a year: the heat pumps carry all space heat,
+//      electric resistance in the buffer covers what they can't while the
+//      batteries last, and only then do the Navien (space heat) and generator
+//      run: no more than 168 such hours a year. The Navien still makes hot
+//      water on gas every day, from buffer-preheated cold water (owner).
+//   B  no gas: space heat from heat pumps only, batteries only. Hot water
+//      from the owner's electric tankless, fed buffer-preheated cold water.
 //   A also needs at least 21 kW of panels (owner).
 
 import { buildContext, loadsFor, SOLAR_INPUTS } from './solar.js';
@@ -22,7 +23,7 @@ export const OFFGRID_INPUTS = {
   battLife: 15, battReplaceShare: 0.6,                        // assumed: replaced once, at 60% of today's price
   gen: 10000, genKw: 22, genKwhPerTherm: 5.3, genMaint: 300,  // 22 kW NG standby, installed; 203 cfh at half load
   elecBoiler: 2500,                                           // assumed: resistance element in the buffer (design A)
-  hpwh: 2500, hpwhCop: 2.8,                                   // assumed: 80-gal heat pump water heater (design B)
+  tankless: 0,                                                // owner: electric tankless already installed (design B)
   minKwA: 21,                                                 // owner: design A starts from at least 21 kW
   maxBehindH: 30,                                             // assumed: design B may run behind setpoint up to ~a day, in the worst cold snap
   tons: {                                                     // heat pump sets (MBTEK less 20%) with install
@@ -49,8 +50,11 @@ export function offgridContext(wx, s = SOLAR_INPUTS) {
   const distKW = (pl.fanW + pl.pumpW) / 1000, coolRate = 72000;
   // All-electric loads for a heat pump size: electricity for everything the
   // heat pumps can do (hot-water top-up on an element), and the heat left.
-  ctx.allElectric = (tons, hpwh = false, hpwhCop = 2.8) => {
-    const n = ctx.n, e = new Float64Array(n), left = new Float64Array(n);
+  // rule 'A': hot-water top-up on the Navien (gas); 'B': on the electric
+  // tankless, and heat the heat pumps owe is carried forward.
+  ctx.allElectric = (tons, rule) => {
+    const hpwh = rule === 'B';
+    const n = ctx.n, e = new Float64Array(n), left = new Float64Array(n), dhwGas = new Float64Array(n);
     // With heat pumps only (B), heat they can't deliver this hour is owed and
     // delivered later: warm-ups and cold snaps just take longer.
     let short = 0, debt = 0, run = 0, longest = 0, behindH = 0, maxDebt = 0;
@@ -60,10 +64,12 @@ export function offgridContext(wx, s = SOLAR_INPUTS) {
       const space = ctx.zone.shop[i] + ctx.zone.ground[i] + ctx.zone.upper[i], dhw = ctx.dhw[i];
       x += space / pl.ahuHeatBtuh * distKW;
       const cap = T >= hp.minT ? capAt(T) * tons / 6 * capF(Tw) : 0, cop = Math.max(1, copAt(T) * copF(Tw));
-      // Hot water: buffer preheat plus an element (A), or a heat pump water heater (B).
-      const pre = hpwh ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - 10) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
+      // Hot water: the buffer preheats the cold feed; the Navien (A) or the
+      // electric tankless (B) takes it the rest of the way.
+      const pre = cool > 0 ? 0 : dhw * clamp((Math.min(s.dhw.setF, Tw - 10) - ctx.tin[i]) / (s.dhw.setF - ctx.tin[i]), 0, 1);
       const want = space + pre + (hpwh ? debt : 0), q = Math.min(want, cap);
-      x += q / (cop * BTU) + (hpwh ? dhw / (hpwhCop * BTU) : (dhw - pre) / BTU);
+      x += q / (cop * BTU);
+      if (rule === 'A') dhwGas[i] = (dhw - pre) / s.dhw.eff / 1e5; else x += (dhw - pre) / BTU;
       e[i] = x;
       if (hpwh) {
         debt = want - q; left[i] = 0;
@@ -71,7 +77,7 @@ export function offgridContext(wx, s = SOLAR_INPUTS) {
       } else left[i] = space + pre - q;
       if (left[i] > 1000) short++;
     }
-    return { e, left, short: hpwh ? behindH : short, behindH, longest, maxDebt };
+    return { e, left, dhwGas, short: hpwh ? behindH : short, behindH, longest, maxDebt };
   };
   return ctx;
 }
@@ -84,11 +90,11 @@ export function simulate(ctx, design, O = OFFGRID_INPUTS, trace = false) {
   const gen = rule !== 'B';
   let P = null, H = null, L = null;
   if (rule === 'P') { P = loadsFor(ctx, `c35.cool.1`); H = loadsFor(ctx, `c35.hp.1`); }
-  else L = (ctx._ae ??= {})[rule + design.tons] ??= ctx.allElectric(T.tons, rule === 'B', O.hpwhCop);
+  else L = (ctx._ae ??= {})[rule + design.tons] ??= ctx.allElectric(T.tons, rule);
   let soc = cap, st;
   const n = ctx.n;
   for (let pass = 0; pass < 2; pass++) {
-    st = { gasH: 0, genKwh: 0, navTh: 0, unserved: 0, unH: 0, resKwh: 0, spill: 0, prod: 0, used: 0, load: 0, hpBtu: 0 };
+    st = { gasH: 0, genKwh: 0, navTh: 0, unserved: 0, unH: 0, resKwh: 0, spill: 0, prod: 0, used: 0, load: 0, hpBtu: 0, dhwTh: 0 };
     const mon = trace ? { prod: Array(12).fill(0), load: Array(12).fill(0), gen: Array(12).fill(0), spill: Array(12).fill(0), gas: Array(12).fill(0) } : null;
     const daySoc = trace ? Array(365).fill(1) : null;
     for (let i = 0; i < n; i++) {
@@ -96,7 +102,7 @@ export function simulate(ctx, design, O = OFFGRID_INPUTS, trace = false) {
       const p = Math.min(kw * ctx.pvDC[i] * O.eff, ac);
       let load, g = 0, gasHour = false, res = 0;
       if (rule === 'P') { load = P.elec[i]; g = P.gas[i]; }
-      else if (rule === 'A') { load = L.e[i]; res = L.left[i] / BTU; }
+      else if (rule === 'A') { load = L.e[i]; res = L.left[i] / BTU; g = L.dhwGas[i]; st.dhwTh += g; }
       else {
         load = L.e[i];
       }
@@ -124,7 +130,7 @@ export function simulate(ctx, design, O = OFFGRID_INPUTS, trace = false) {
           } else { st.unserved += need; st.unH++; }
         }
       }
-      if (rule === 'P') st.navTh += g;
+      if (rule !== 'B') st.navTh += rule === 'P' ? g : 0;
       if (gasHour) st.gasH++;
       st.prod += p; st.load += load + res;
       if (mon) { mon.prod[m] += p; mon.load[m] += load + res; mon.gas[m] += g; }
@@ -133,9 +139,9 @@ export function simulate(ctx, design, O = OFFGRID_INPUTS, trace = false) {
     if (trace) { st.mon = mon; st.daySoc = daySoc; }
   }
   const capex = kw * s.capex.pvPerKw + s.capex.fixed + ni * O.inv + nb * O.batt + (gen ? O.gen : 0)
-    + (rule === 'P' ? loadsFor(ctx, 'c35.cool.1').cost : T.cost + s.hp.buffer + s.hp.controls + (rule === 'A' ? O.elecBoiler : O.hpwh));
+    + (rule === 'P' ? loadsFor(ctx, 'c35.cool.1').cost : T.cost + s.hp.buffer + s.hp.controls + (rule === 'A' ? O.elecBoiler : O.tankless));
   const genTh = st.genKwh / O.genKwhPerTherm;
-  const annual = rule === 'B' ? 0 : (st.navTh + genTh) * r.gas + 12 * r.gasFixed + O.genMaint;
+  const annual = rule === 'B' ? 0 : (st.navTh + st.dhwTh + genTh) * r.gas + 12 * r.gasFixed + O.genMaint;
   let pvf = 0; for (let y = 1; y <= f.horizon; y++) pvf += (1 + r.escalation) ** (y - 1) / (1 + f.discount) ** y;
   const life = capex + nb * O.batt * O.battReplaceShare / (1 + f.discount) ** O.battLife + annual * pvf;
   return { ...design, ni, battKwh: nb * O.battKwh, capex, annual, life, genTh, ...st,
