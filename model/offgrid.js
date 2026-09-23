@@ -14,13 +14,14 @@
 import { buildContext, loadsFor, SOLAR_INPUTS } from './solar.js';
 import { INPUTS as THERMAL } from './thermal.js';
 
-// Grid-down conservation mode (owner): shop and downstairs held at their
-// minimums with no warm-ups, upstairs at 65 °F, household electricity cut
-// 60%. Cooling, if an outage lands in summer, rises to 78 °F (assumed).
+// Grid-down conservation mode (owner): the shop unheated, downstairs held
+// at its minimum with no warm-ups, upstairs at 65 °F, household lights and
+// plug loads cut 60%. Cooling, if an outage lands in summer, rises to 78 °F
+// (assumed).
 export function conservation(s = SOLAR_INPUTS, t = THERMAL) {
   const s2 = JSON.parse(JSON.stringify(s)), t2 = JSON.parse(JSON.stringify(t));
   s2.domestic.kWhPerDay = s.domestic.kWhPerDay * 0.4;
-  t2.shop.hoursPerWeek = 0; t2.shop.occF = t2.shop.minF;
+  t2.shop.hoursPerWeek = 0; t2.shop.minF = -60; t2.shop.occF = -60;   // unheated: floats
   t2.ground.hoursPerWeek = 0; t2.ground.occF = t2.ground.minF;
   t2.upper.heatF = 65; t2.upper.unoccDays = 0; t2.upper.coolF = 78;
   return { s: s2, t: t2 };
