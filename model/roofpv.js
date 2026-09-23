@@ -7,11 +7,16 @@ import { DEFAULTS, wallsOf, gableOf } from './params.js';
 import { pvPerKw, SOLAR_INPUTS } from './solar.js';
 
 export const ROOFPV_INPUTS = {
-  panel: { watts: 600, longIn: 2279 / 25.4, shortIn: 1134 / 25.4 },   // Philadelphia Solar 600 W bifacial (owner's kit), 2279 x 1134 mm
-  gapIn: 1,          // between panels
+  panel: { watts: 440, longIn: 1722 / 25.4, shortIn: 1134 / 25.4 },   // owner's Indepwr 440 W bifacial, two pallets of 31; 1722 x 1134 mm
+  gapIn: 0.5,        // between panels (IronRidge UFO clamps)
   edgeFt: 1,         // clear of the eaves and gable ends
   ridgeFt: 1.5,      // off the ridge: the fire-code setback while panels cover under a third of the roof
-  maxLoss: 0.10,     // leave out spots that lose more than this share of their sun to shade
+  maxLoss: 0.10,     // a spot pays when shade costs it at most this share of its sun
+  // The owner's arrays: panels per row from the eave up, landscape, from the
+  // west end. The shop has the owner's IronRidge layout (57 panels, rows of
+  // 10, 10, 9, 8, 7, 7, 6 from the ridge down) plus five more on its shorter
+  // rows; the garage has none yet. A roof not listed gets every spot that pays.
+  rows: { north: [7, 8, 8, 9, 10, 10, 10], south: [] },
 };
 
 const KEYS = ['center', 'north', 'south'];
@@ -96,9 +101,9 @@ function shadeLoss(pt, sl, hours, solids, albedo) {
   return lost / all;
 }
 
-// Fill each south slope with panels in rows, portrait or landscape,
-// whichever holds more that pay; a spot is left out when shade costs it
-// more than maxLoss of its sun. wx is prepared weather.
+// Each south slope: the owner's rows where given, otherwise every spot that
+// pays, in rows, portrait or landscape, whichever holds more. `room` is how
+// many spots on the slope pay. wx is prepared weather.
 export function roofPV(wx, p = DEFAULTS, s = ROOFPV_INPUTS, pv = SOLAR_INPUTS.pv) {
   const solids = solidsOf(p), hours = sunHours(wx), kw = s.panel.watts / 1000;
   const gap = s.gapIn / 12, long = s.panel.longIn / 12, short = s.panel.shortIn / 12;
@@ -113,28 +118,38 @@ export function roofPV(wx, p = DEFAULTS, s = ROOFPV_INPUTS, pv = SOLAR_INPUTS.pv
       if (!memo.has(id)) memo.set(id, shadeLoss(sl.at(x, w), sl, hours, solids, pv.albedo));
       return memo.get(id);
     };
-    let best = null;
+    // The panel at column i (from the west) and row j (from the eave), or
+    // null where the slope isn't there.
+    const spot = (i, j, w, l) => {
+      const x0 = sl.x0 + s.edgeFt + i * (w + gap), w0 = s.edgeFt + j * (l + gap);
+      const pts = [[x0 + 0.3, w0 + 0.3], [x0 + w - 0.3, w0 + 0.3], [x0 + 0.3, w0 + l - 0.3], [x0 + w - 0.3, w0 + l - 0.3], [x0 + w / 2, w0 + l / 2]];
+      if (!pts.every(([x, y]) => onRoof(p, key, sl.at(x, y)))) return null;
+      const L = sum(pts.map(([x, y]) => loss(x, y))) / pts.length;
+      return { c: sl.at(x0 + w / 2, w0 + l / 2), col: i, row: j, loss: L, kept: L <= s.maxLoss };
+    };
+    let open = null;
     for (const [orient, w, l] of [['portrait', short, long], ['landscape', long, short]]) {
       const cols = Math.floor((sl.x1 - sl.x0 - 2 * s.edgeFt + gap) / (w + gap));
       const rows = Math.floor((sl.length - s.edgeFt - s.ridgeFt + gap) / (l + gap));
       const panels = [];
-      for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-        const x0 = sl.x0 + s.edgeFt + i * (w + gap), w0 = s.edgeFt + j * (l + gap);
-        const pts = [[x0 + 0.3, w0 + 0.3], [x0 + w - 0.3, w0 + 0.3], [x0 + 0.3, w0 + l - 0.3], [x0 + w - 0.3, w0 + l - 0.3], [x0 + w / 2, w0 + l / 2]];
-        if (!pts.every(([x, y]) => onRoof(p, key, sl.at(x, y)))) continue;
-        const L = sum(pts.map(([x, y]) => loss(x, y))) / pts.length;
-        panels.push({ c: sl.at(x0 + w / 2, w0 + l / 2), loss: L, kept: L <= s.maxLoss });
-      }
-      const kept = panels.filter(q => q.kept);
-      const res = { orient, rows, cols, w, l, panels, n: kept.length, kw: kept.length * kw, kwh: sum(kept.map(q => kw * perKw * (1 - q.loss))) };
-      if (!best || res.kw > best.kw) best = res;
+      for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const q = spot(i, j, w, l); if (q) panels.push(q); }
+      const n = panels.filter(q => q.kept).length;
+      if (!open || n > open.n) open = { orient, rows, cols, w, l, panels, n };
     }
-    slopes.push({ key, name: p[key].name, south: true, tilt: sl.tilt, normal: sl.normal, widthFt: sl.x1 - sl.x0, lengthFt: sl.length, perKw, ...best });
+    const plan = s.rows?.[key];
+    const layout = plan
+      ? { orient: 'landscape', rows: plan.length, cols: Math.max(0, ...plan), w: long, l: short, planned: true,
+          panels: plan.flatMap((n, j) => Array.from({ length: n }, (_, i) => spot(i, j, long, short))).filter(Boolean).map(q => ({ ...q, kept: true })) }
+      : { ...open, planned: false };
+    const placed = layout.panels.filter(q => q.kept);
+    slopes.push({ key, name: p[key].name, south: true, tilt: sl.tilt, normal: sl.normal, widthFt: sl.x1 - sl.x0, lengthFt: sl.length, perKw,
+      ...layout, n: placed.length, kw: placed.length * kw, kwh: sum(placed.map(q => kw * perKw * (1 - q.loss))),
+      worstLoss: Math.max(0, ...placed.map(q => q.loss)), room: open.n });
   }
   const on = slopes.filter(x => x.south);
   return {
     inputs: s, pitch: p.pitch, ridges: Object.fromEntries(KEYS.map(k => [k, p[k].ridge])),
     slopes,
-    totals: { fit: sum(on.map(x => x.panels.length)), panels: sum(on.map(x => x.n)), kw: sum(on.map(x => x.kw)), kwh: sum(on.map(x => x.kwh)) },
+    totals: { panels: sum(on.map(x => x.n)), kw: sum(on.map(x => x.kw)), kwh: sum(on.map(x => x.kwh)) },
   };
 }
