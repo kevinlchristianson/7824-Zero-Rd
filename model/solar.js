@@ -359,12 +359,14 @@ export function evaluate(ctx, cfg) {
   therms -= flexTherms; for (let m = 0; m < 12; m++) monGas[m] -= flexGas[m];
   const gasService = therms > 0.5 || s.backup !== 'strips';
   const gasBill = therms * r.gas + (gasService ? 12 * r.gasFixed : 0);
+  // Swapping the Modine for a Navien-fed unit heater: buy one, sell the other.
+  const shopSwap = s.shop.heater === 'navien' ? s.hp.shopHeater - s.modine.resale : 0;
   const solarCapex = (cfg.kw > 0 ? cfg.kw * c.pvPerKw + c.fixed : 0) + invCost(M, cfg) + (cfg.battery ? c.batteryKwh * c.batteryPerKwh : 0);
   return {
     cfg, prod, imp: sumA(monImp), exp: sumA(monExp), bought, paidOut, therms, gasService,
     hpShare: L.heatTot ? L.hpShare + flexBtu / L.heatTot : 0,
     elecBill, gasBill, total: elecBill + gasBill,
-    capex: solarCapex * (1 - c.incentive) + L.cost, solarCapex: solarCapex * (1 - c.incentive), hpCapex: L.cost,
+    capex: solarCapex * (1 - c.incentive) + L.cost + shopSwap, solarCapex: solarCapex * (1 - c.incentive), hpCapex: L.cost,
     monProd, monLoad, monImp, monExp, monBill, monBank, monGas,
     loadKWh: sumA(monLoad),
   };
