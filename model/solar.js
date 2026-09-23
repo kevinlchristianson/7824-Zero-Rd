@@ -512,7 +512,7 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
       capex: best.res.capex, bills: best.res.total, billsNoPv: best.res0.total, cost: best.cost,
       modes: Object.fromEntries(mine.map(r => [r.mode, r.cost])),
       hpShare: best.res.hpShare, coolUnmetHrs: Lb.coolUnmetHrs, coolUnmet: Lb.coolUnmet / Math.max(1, Lb.coolTot),
-      therms: best.res.therms,
+      therms: best.res.therms, unmet: Lb.unmet,
     });
   }
   setupRows.sort((a, b) => (b.allowed - a.allowed) || (a.cost - b.cost));
