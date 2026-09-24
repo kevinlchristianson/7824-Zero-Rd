@@ -68,7 +68,7 @@ export const FIN_INPUTS = {
     // setting away.
     sell: 'afterPayoff',     // 'afterPayoff': sell the month the rental mortgage is prepaid; 'onDate'; 'never'
     sellOn: '2026-12',
-    prepayMortgage: true,    // once every phase is paid, surplus prepays the rental mortgage
+    prepayMortgage: false,   // owner: once the other debts are paid, rent and surplus flow into brokerage; the 2.875% mortgage just amortizes    // once every phase is paid, surplus prepays the rental mortgage
     refillFloor: true,       // surplus, and gifts, refill brokerage first while it is under the floor
     shortfall: 'brokerage',  // when rent, bill savings and out of pocket don't cover the payments (the overage): 'savings' (the savings account, then brokerage once it's empty), 'brokerage', or 'paycheck' (workbook: the paycheck covers it all)
     floor: 20000, ret: 0.08,
