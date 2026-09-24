@@ -59,11 +59,12 @@ export const FIN_INPUTS = {
   // Phases after the renovation, in order. status: pending | open (bal is its
   // line's balance) | done. saves: yearly bill change at today's rates.
   // via: 'line' takes out a new HELOC once the renovation line is gone;
-  // 'heloc' draws on the renovation HELOC as soon as it has room (not before
-  // `from`), and the line isn't closed until it has.
+  // 'heloc' draws on the renovation HELOC once its balance is down to `at`
+  // (and the limit has room, not before `from`), and the line isn't closed
+  // until it has.
   phases: [
     { id: 'solar', name: 'Solar: 72 × 440 W on the shop roof, two 18kPVs', amount: 29891, saves: 2691, status: 'pending', bal: 0 },
-    { id: 'reno2', name: 'Lower-level renovation', amount: 100000, saves: 0, status: 'pending', bal: 0, via: 'heloc', from: '2026-07' },   // owner: on this HELOC
+    { id: 'reno2', name: 'Lower-level renovation', amount: 100000, saves: 0, status: 'pending', bal: 0, via: 'heloc', at: 100000, from: '2026-07' },   // owner: on this HELOC, once it is down to $100k
     { id: 'hp', name: 'Heat pump, buffer and controls', amount: 10028, saves: 173, status: 'pending', bal: 0 },
     { id: 'batt', name: 'Batteries (32 kWh outage kit)', amount: 6800, saves: 0, status: 'pending', bal: 0 },
     { id: 'wood', name: 'Outdoor wood boiler', amount: 18000, saves: -622, status: 'pending', bal: 0 },
@@ -193,7 +194,7 @@ function simCore(inp) {
     if (S.mode === 'separate') {
       // Phases set to ride the renovation HELOC draw on it once it has room.
       for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'heloc' && helocClosed == null)) {
-        if (cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5) continue;
+        if (cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5 || (ph.at != null && heloc > ph.at + 0.5)) continue;
         heloc += ph.amount; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
         row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
         ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });

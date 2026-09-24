@@ -457,7 +457,7 @@ function stepsList() {
     if (e.kind === 'gift') { const set = inputs.gifts.find(g => calOf(g.month) === e.cal)?.keep ?? 0; push(e.cal, `Gift arrives: ${usd(e.amt)}`, `${e.keep > 0.5 ? `Keep ${usd(e.keep)} in brokerage${e.keep > set + 1 ? ` (${usd(e.keep - set)} more than you set, to hold the ${usd(I.strategy.floor)} floor through the low in ${L(SIM.summary.minBrok.cal)})` : ''}; ` : ''}${e.to.map(([k, v]) => `${usd(v)} to ${k === 'heloc' ? 'the HELOC' : 'the ' + acctName(k)}`).join(', ') || 'the rest to brokerage'}.`); }
     else if (e.kind === 'card') push(e.cal, e.what, `Its 0% ends this month. Pay the ${usd(e.amt)} balance in full from brokerage; don't let it roll to the regular rate.`);
     else if (e.kind === 'close') push(e.cal, e.what, /HELOC/.test(e.what) ? 'Ask the bank to close the line (or freeze it at $0) so it can’t be redrawn.' : 'Close the line; the next phase opens.');
-    else if (e.kind === 'open' && e.onHeloc) push(e.cal, e.what, `The HELOC has room now: draw ${usd(e.amt)} and start it. Surplus keeps paying the HELOC down afterward.`);
+    else if (e.kind === 'open' && e.onHeloc) push(e.cal, e.what, `The HELOC is down to your trigger: draw ${usd(e.amt)} and start it. Surplus keeps paying the HELOC down afterward.`);
     else if (e.kind === 'open') push(e.cal, e.what, I.strategy.mode === 'separate' ? `Take out a new ${nf(I.strategy.phaseApr * 100, 2)}% HELOC for ${usd(e.amt)}, buy it, and send every month's surplus to it.` : `Draw ${usd(e.amt)} on the HELOC and buy it.`);
     else if (e.kind === 'sale') push(e.cal, I.strategy.sell === 'onDate' ? 'Close on the rental sale: kill the HELOC' : 'Sell the rental', `About ${usd(e.amt)} after ${nf(I.rental.commission * 100)}% commission, capital gains and recapture${e.toLine ? `; ${usd(e.toLine)} of it to the HELOC` : ''}${e.toTruck ? `, ${usd(e.toTruck)} to the truck` : ''}. The rest goes to brokerage.`);
     else if (e.kind === 'brok') push(e.cal, e.what, `Brokerage can pay it and still keep ${usd(I.strategy.cushion)}.`);
@@ -504,7 +504,7 @@ function renderTriggers() {
     row(`Gift of ${usd(g.amount)} arrives (${L(c)})`, `Keep ${usd(g.keep)} in brokerage, the rest to the debt being paid down.`, L(c), pill('wait', 'Expected'));
   }
   if (St.sell === 'onDate' && !A.rentalSold) { const e = SIM.events.find(x => x.kind === 'sale'); row(`Rental sale closes (${L(calOf(St.sellOn))})`, 'Priority one: the equity pays off the truck, then goes straight onto the HELOC. What’s left goes to brokerage.', e ? `${usd(e.toLine)} to the HELOC${e.toTruck ? `, ${usd(e.toTruck)} to the truck` : ''}` : '—', pill('wait', `${usd(A.rentalValue)} value`)); }
-  for (const ph of I.phases.filter(p => p.status === 'pending' && p.via === 'heloc')) { const e = SIM.events.find(x => x.id === ph.id); row(`HELOC falls to ${usd(A.helocLimit - ph.amount)} or less`, `Draw ${usd(ph.amount)} on it for the ${ph.name.toLowerCase()}. The HELOC isn't closed until this is done.`, e ? L(e.cal) : '—', A.heloc + ph.amount <= A.helocLimit ? pill('ok', 'Room now') : pill('wait', `${usd(A.heloc + ph.amount - A.helocLimit)} to go`)); }
+  for (const ph of I.phases.filter(p => p.status === 'pending' && p.via === 'heloc')) { const e = SIM.events.find(x => x.id === ph.id); const at = Math.min(ph.at ?? Infinity, A.helocLimit - ph.amount); row(`HELOC falls to ${usd(at)} or less`, `Draw ${usd(ph.amount)} on it for the ${ph.name.toLowerCase()}. The HELOC isn't closed until this is done.`, e ? L(e.cal) : '—', A.heloc <= at ? pill('ok', 'Ready now') : pill('wait', `${usd(A.heloc - at)} to go`)); }
   row('HELOC reaches $0', St.mode === 'separate' ? `Close it. Take out a new ${nf(St.phaseApr * 100, 2)}% HELOC for the next phase and send all surplus there.` : 'Nothing: phases redraw it when it falls to the trigger.', L(S.helocClosed), A.heloc > 0.5 ? pill('wait', `${usd(A.heloc)} to go`) : pill('ok', 'Closed'));
   if (St.mode === 'redraw') row(`HELOC falls to ${usd(St.redrawAt)}`, 'Draw the next phase on it.', L(SIM.events.find(e => e.kind === 'open')?.cal), pill('wait', `${usd(A.heloc)} now`));
   const open = I.phases.find(p => p.status === 'open');
@@ -852,7 +852,7 @@ function buildForm() {
     if (g.phases) inputs.phases.forEach((ph, i) => {
       const h = el('div', 'subhead'); const sw = el('i'); sw.style.cssText = 'width:8px;height:8px;border-radius:2px;display:inline-block;background:var(--c-phase)'; h.append(sw, document.createTextNode(`${i + 1}. ${ph.name.split(':')[0]}`)); d.append(h);
       d.append(field(`phases.${i}.amount`, 'Cost', 'usd'), field(`phases.${i}.saves`, 'Saves per year', 'usd'),
-        field(`phases.${i}.via`, 'Pay with', 'select', [['line', 'A new HELOC after this one'], ['heloc', 'Draw on this HELOC']]), field(`phases.${i}.from`, 'Not before', 'month'),
+        field(`phases.${i}.via`, 'Pay with', 'select', [['line', 'A new HELOC after this one'], ['heloc', 'Draw on this HELOC']]), field(`phases.${i}.at`, 'Draw once the HELOC is down to', 'usd'), field(`phases.${i}.from`, 'Not before', 'month'),
         field(`phases.${i}.status`, 'Status', 'select', [['pending', 'Not yet'], ['open', 'Bought: line open'], ['done', 'Done']]), field(`phases.${i}.bal`, 'Its own line owes', 'usd'));
     });
     if (g.gifts) inputs.gifts.forEach((gf, i) => {
