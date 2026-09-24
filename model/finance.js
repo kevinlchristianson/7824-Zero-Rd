@@ -232,14 +232,14 @@ function simCore(inp) {
     if (S.mode === 'separate') {
       // Phases set to ride the renovation HELOC draw on it once it has room.
       for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'heloc' && helocClosed == null)) {
-        if (cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5 || (ph.at != null && heloc > ph.at + 0.5)) continue;
+        if (renoOn(cal) || cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5 || (ph.at != null && heloc > ph.at + 0.5)) continue;   // never while the renovation is still drawing
         heloc += ph.amount; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
         row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
         ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });
       }
       // Phases on their own HELOC open alongside the renovation HELOC once it is down to their trigger.
       for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'own')) {
-        if (openPhase() || cal < calOf(ph.from || I.asOf) || (ph.at != null && heloc > ph.at + 0.5)) continue;
+        if (openPhase() || renoOn(cal) || cal < calOf(ph.from || I.asOf) || (ph.at != null && heloc > ph.at + 0.5)) continue;
         ph.status = 'open'; ph.bal = ph.amount; amort['ph:' + ph.id][k].draw = ph.amount;
         row.lumps.push({ what: `Take out a separate ${pct(S.phaseApr)} HELOC for: ${ph.name}`, amt: ph.amount, from: 'new line' });
         ev(t, 'open', `${ph.name}: take out its own HELOC`, ph.amount, { id: ph.id, own: true });

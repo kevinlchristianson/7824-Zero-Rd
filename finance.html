@@ -913,7 +913,7 @@ function field(path, label, type, opts) {
     else { val = Number(c.value); if (c.value === '' || !Number.isFinite(val)) return; if (type === 'pct') val = pctOut(val); if (type === 'int') val = Math.max(1, Math.min(40, Math.round(val))); }
     if (getIn(inputs, path) === val) return;
     setIn(inputs, path, val); edited = true; scheduleSave(); rerun();
-    if (path === 'strategy.mode') buildForm();
+    if (path === 'strategy.mode' || /^phases\.\d+\.via$/.test(path)) buildForm();
   };
   c.addEventListener('change', on);
   if (c.tagName === 'INPUT' && c.type !== 'checkbox') c.addEventListener('input', on);
@@ -933,7 +933,9 @@ function buildForm() {
     if (g.phases) inputs.phases.forEach((ph, i) => {
       const h = el('div', 'subhead'); const sw = el('i'); sw.style.cssText = `width:8px;height:8px;border-radius:2px;display:inline-block;background:${loanColor('ph:' + ph.id)}`; h.append(sw, document.createTextNode(`${i + 1}. ${ph.name.split(':')[0]}`)); d.append(h);
       d.append(field(`phases.${i}.amount`, 'Cost', 'usd'), field(`phases.${i}.saves`, 'Saves per year', 'usd'),
-        field(`phases.${i}.via`, 'Pay with', 'select', [['line', 'A new HELOC after this one'], ['own', 'Its own HELOC, alongside this one'], ['heloc', 'Draw on this HELOC']]), field(`phases.${i}.at`, 'Draw once the HELOC is down to', 'usd'), field(`phases.${i}.from`, 'Not before', 'month'),
+        field(`phases.${i}.via`, 'Pay with', 'select', [['line', 'A new HELOC after this one'], ['own', 'Its own HELOC, alongside this one'], ['heloc', 'Draw on this HELOC']]),
+        // The trigger and start month only apply to phases that don't wait for this HELOC to close.
+        ...(ph.via === 'heloc' || ph.via === 'own' ? [field(`phases.${i}.at`, 'Draw once the HELOC is down to', 'usd'), field(`phases.${i}.from`, 'Not before', 'month')] : []),
         field(`phases.${i}.status`, 'Status', 'select', [['pending', 'Not yet'], ['open', 'Bought: line open'], ['done', 'Done']]), field(`phases.${i}.bal`, 'Its own line owes', 'usd'));
     });
     if (g.gifts) inputs.gifts.forEach((gf, i) => {
