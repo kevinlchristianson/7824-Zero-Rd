@@ -421,7 +421,7 @@ function renderFlag() {
   f.hidden = !gap.length;
   if (!gap.length) return;
   const worst = gap.reduce((a, r) => r.fromBrok > a.fromBrok ? r : a);
-  f.replaceChildren(el('strong', null, 'Too much debt'), el('p', null, `In ${gap.length} month${gap.length > 1 ? 's' : ''} (${L(gap[0].cal)}${gap.length > 1 ? ` to ${L(gap.at(-1).cal)}` : ''}) the required payments run past rent plus your ${usd(I.income.paycheck)} paycheck, by ${usd(sum(gap.map(r => r.fromBrok)))} in all; the worst is ${usd(worst.fromBrok)} in ${L(worst.cal)}. ${I.strategy.shortfall === 'brokerage' ? 'Brokerage covers it for now' : 'The paycheck is set to cover it'}, but the debt's monthly cost is more than the income can carry: pay a balance down, push a draw later or hold off on new debt until this clears.`));
+  f.replaceChildren(el('strong', null, 'Too much debt'), el('p', null, `In ${gap.length} month${gap.length > 1 ? 's' : ''} (${L(gap[0].cal)}${gap.length > 1 ? ` to ${L(gap.at(-1).cal)}` : ''}) the required payments run past rent plus what you put in out of pocket, by ${usd(sum(gap.map(r => r.fromBrok)))} in all; the worst is ${usd(worst.fromBrok)} in ${L(worst.cal)}. ${I.strategy.shortfall === 'brokerage' ? 'Brokerage covers it for now' : 'The paycheck is set to cover it'}, but the debt's monthly cost is more than the income can carry: pay a balance down, push a draw later or hold off on new debt until this clears.`));
 }
 
 function renderKpis() {
@@ -796,7 +796,7 @@ function renderNotes() {
   const I = SIM.inputs, S = I.strategy, A = I.accounts;
   const items = [
     ['Each month', `Interest accrues on the truck (${nf(A.truckApr * 100, 2)}%), the rental mortgage (${nf(A.mortgageApr * 100, 3)}%), the HELOC (${nf(A.helocApr * 100, 2)}%, interest-only) and any open phase line (${nf(S.phaseApr * 100, 2)}%, interest-only). The cards are 0% with minimums until their due month, when the balance is paid in full from brokerage. Rent (${usd(I.income.rentalNet, 2)} net, plus ${usd(I.income.rent2)} second-dwelling rent from ${L(calOf(I.income.rent2From))}) grows ${nf(I.income.inflation * 100, 1)}% a year; energy savings from finished phases grow ${nf(I.escalation * 100, 1)}%.`],
-    ['The paycheck', S.shortfall === 'brokerage' ? `Your contribution stays at ${usd(I.income.paycheck)} a month (${usd(I.income.paycheckSold)} once the rental is sold). When rent and savings don't cover the payments, brokerage covers the gap; that is the main reason brokerage dips.` : `The workbook rule: ${usd(I.income.paycheck)} a month, or the whole shortfall if that's larger.`],
+    ['Out of pocket', S.shortfall === 'brokerage' ? `You put in ${usd(I.income.paycheck)} a month (${usd(I.income.paycheckSold)} once the rental is sold)${I.income.oopGrowth ? `, rising ${nf(I.income.oopGrowth * 100, 1)}% each January` : ''}, and no more. When rent and savings don't cover the payments, brokerage covers the gap; that is the main reason brokerage dips.` : `The workbook rule: ${usd(I.income.paycheck)} a month, or the whole shortfall if that's larger.`],
     ['Surplus', `What's left after the payments goes, in order: ${S.refillFloor ? `brokerage until it's back at ${usd(S.floor)}, ` : ''}${S.truckFirst ? 'the truck (8.99%, and paying it off frees its payment), ' : ''}the HELOC, the open phase line, ${S.prepayMortgage ? 'the rental mortgage once every phase is paid, ' : ''}then brokerage, which earns ${nf(S.ret * 100, 1)}%.`],
     ['Phases', S.mode === 'separate' ? `Your priority one: nothing new is bought until the renovation HELOC is at $0. Then each phase gets a new ${nf(S.phaseApr * 100, 2)}% HELOC in turn, and all surplus pays it off before the next opens. Set a phase to open (with its balance) or done at a check-in and the plan picks up from there.` : `Workbook rule: each phase redraws the HELOC once it falls to ${usd(S.redrawAt)} and the limit allows.`],
     ['Gifts', `Each gift first keeps what's set for brokerage${S.autoKeep ? ' (raised automatically when brokerage would otherwise dip under the floor before the next gift)' : ''}, then pays down the debt being worked on.`],
@@ -818,11 +818,12 @@ const GROUPS = () => [
     ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],
     ['accounts.usb', 'US Bank card owed', 'usd'], ['accounts.usbMin', 'US Bank minimum', 'usd'], ['accounts.usbDue', 'US Bank 0% ends', 'month'],
     ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
+    ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },
   { name: 'Phases', open: true, note: 'Each is either drawn on this HELOC once it has room, or bought on a new HELOC after this one closes, in order. Mark one open with its line balance once you’ve bought it, or done once it’s paid.', phases: true },
   { name: 'Income', fields: [
     ['income.rentalNet', 'Rental net, per month', 'usd'], ['income.rent2', 'Second dwelling rent', 'usd'], ['income.rent2From', 'Second rent starts', 'month'],
-    ['income.paycheck', 'From your paycheck, per month', 'usd'], ['income.paycheckSold', 'From the paycheck once sold', 'usd'], ['income.inflation', 'Rent growth per year', 'pct'],
+    ['income.inflation', 'Rent growth per year', 'pct'],
   ] },
   { name: 'Gifts', gifts: true, note: 'Keep: what stays in brokerage; the rest pays down debt.' },
   { name: 'Rules', fields: [

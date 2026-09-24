@@ -41,7 +41,8 @@ export const FIN_INPUTS = {
   income: {
     rentalNet: 1586.77,                                   // $1,986.77 less $400 reserve
     rent2: 1100, rent2From: '2027-02',                    // owner: second-dwelling rent from Feb 2027
-    paycheck: 1500, paycheckSold: 2000,                   // owner: $1,500 is about the real maximum; the workbook's sell-now case uses $2,000
+    paycheck: 1500, paycheckSold: 2000,                   // out of pocket per month; owner: $1,500 today; the workbook's sell-now case uses $2,000
+    oopGrowth: 0,                                         // out of pocket rises this much each January
     inflation: 0.025,
   },
   gifts: [                                                // owner: free to allocate; the rest goes to the debt being paid down
@@ -159,7 +160,8 @@ function simCore(inp) {
     const rent = sold ? 0 : I.income.rentalNet * infl, rent2 = !sold && cal >= rent2From ? I.income.rent2 * infl : 0;
     let save = 0; for (const p of phases) if (p.status !== 'pending' && p.saves) save += p.saves / 12 * esc;
     saved += save;
-    const base = sold ? I.income.paycheckSold : I.income.paycheck;
+    const oop = (1 + (I.income.oopGrowth || 0)) ** (Math.floor(cal / 12) - Math.floor((n0 + 1) / 12));   // steps up each January
+    const base = (sold ? I.income.paycheckSold : I.income.paycheck) * oop;
     const pay = S.shortfall === 'paycheck' ? Math.max(base, reqTotal - rent - rent2 - save) : base;
     paycheckIn += pay;
     let surplus = rent + rent2 + save + pay - reqTotal;
