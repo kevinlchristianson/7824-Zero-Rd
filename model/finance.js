@@ -33,6 +33,10 @@ export const FIN_INPUTS = {
     usb: 23431, usbMin: 235, usbDue: '2028-02',
     rentalValue: 400000, rentalSold: false,
     renoLeft: 0, renoBy: '2026-12',                       // renovation still to draw on the HELOC, spread evenly over the months through renoBy
+    // Owner: no HELOC payments until the renovation is done. Its interest is
+    // added to the balance meanwhile, the last draw fills the line to its
+    // limit, and anything that would have paid it down waits in brokerage
+    // until the month after renoBy.
   },
   income: {
     rentalNet: 1586.77,                                   // $1,986.77 less $400 reserve
@@ -108,7 +112,8 @@ function simCore(inp) {
   const I = clone(inp), A = I.accounts, S = I.strategy, R = I.rental, n0 = calOf(I.asOf), T = I.horizonYears * 12;
   const wfDue = calOf(A.wfDue), usbDue = calOf(A.usbDue), rent2From = calOf(I.income.rent2From), sellOn = calOf(S.sellOn);
   const renoEnd = calOf(A.renoBy || I.asOf), renoMonths = Math.max(1, renoEnd - n0);
-  let renoLeft = A.renoLeft || 0;
+  let renoLeft = A.renoLeft || 0, held = 0;
+  const renoOn = cal => (A.renoLeft || 0) > 0.5 && cal <= renoEnd;
   let brok = A.brokerage, heloc = A.heloc, mtg = A.mortgage, truck = A.truck, wf = A.wf, usb = A.usb, sold = !!A.rentalSold;
   const phases = I.phases.map(p => ({ ...p, bal: p.status === 'open' ? p.bal : 0 }));
   let helocClosed = heloc <= 0.5 && I.strategy.mode === 'separate' ? n0 : null;
@@ -137,13 +142,16 @@ function simCore(inp) {
     if (!sold && mtg > 0) { const p = Math.min(A.mortgagePmt, mtg + iMtg); req.mortgage = p; amort.mortgage[k].interest = iMtg; amort.mortgage[k].principal = p - iMtg; mtg += iMtg - p; }
     if (wf > 0 && cal < wfDue) { const p = Math.min(A.wfMin, wf); req.wf = p; amort.wf[k].principal = p; wf -= p; }
     if (usb > 0 && cal < usbDue) { const p = Math.min(A.usbMin, usb); req.usb = p; amort.usb[k].principal = p; usb -= p; }
-    if (heloc > 0) { req.heloc = iHeloc; amort.heloc[k].interest = iHeloc; }
+    const reno = renoOn(cal);
+    if (heloc > 0 && reno) { heloc += iHeloc; amort.heloc[k].interest = iHeloc; amort.heloc[k].draw += iHeloc; row.lumps.push({ what: 'HELOC interest added to the balance (no payment during the renovation)', amt: iHeloc, from: 'HELOC' }); }
+    else if (heloc > 0) { req.heloc = iHeloc; amort.heloc[k].interest = iHeloc; }
     for (const p of phases) if (p.bal > 0) { const ip = p.bal * S.phaseApr / 12; req['ph:' + p.id] = ip; amort['ph:' + p.id][k].interest = ip; }
     const reqTotal = Object.values(req).reduce((a, b) => a + b, 0);
     // Renovation draws still to come land on the HELOC (their interest starts next month).
     if (renoLeft > 0.5) {
-      const d = Math.min(cal >= renoEnd ? renoLeft : (A.renoLeft || 0) / renoMonths, renoLeft, Math.max(0, A.helocLimit - heloc));
-      if (d > 0.5) { heloc += d; renoLeft -= d; amort.heloc[k].draw += d; row.lumps.push({ what: 'Renovation draw on the HELOC', amt: d, from: 'HELOC' }); ev(t, 'draw', 'Renovation draw on the HELOC', d); }
+      const d = cal >= renoEnd ? Math.max(0, A.helocLimit - heloc) : Math.min((A.renoLeft || 0) / renoMonths, renoLeft, Math.max(0, A.helocLimit - heloc));
+      if (d > 0.5) { heloc += d; renoLeft -= d; amort.heloc[k].draw += d; row.lumps.push({ what: 'Renovation draw on the HELOC', amt: d, from: 'HELOC' }); ev(t, 'draw', cal >= renoEnd ? 'Last renovation draw: the HELOC is at its limit' : 'Renovation draw on the HELOC', d); }
+      if (cal >= renoEnd) renoLeft = 0;
     }
     interestPaid += iTruck + iMtg + iHeloc + phases.reduce((a, p) => a + (p.bal > 0 ? p.bal * S.phaseApr / 12 : 0), 0);
 
@@ -179,7 +187,7 @@ function simCore(inp) {
       ev(t, 'sale', 'Rental sold', gross - tax, { toTruck, toLine, tax, gross });
     };
     if (!sold && S.sell === 'onDate' && cal === sellOn) sell(' (on the date you set)');
-    const target = () => (S.truckFirst && truck > 0.005 ? 'truck' : heloc > 0 ? 'heloc' : openPhase() ? 'ph:' + openPhase().id : null);
+    const target = () => (S.truckFirst && truck > 0.005 ? 'truck' : heloc > 0 && !reno ? 'heloc' : openPhase() ? 'ph:' + openPhase().id : null);
     const payDown = (key, amt) => {
       if (key === 'truck') { const p = Math.min(amt, truck); truck -= p; amort.truck[k].principal += p; return p; }
       if (key === 'heloc') { const p = Math.min(amt, heloc); heloc -= p; amort.heloc[k].principal += p; return p; }
@@ -189,7 +197,7 @@ function simCore(inp) {
       const keep = Math.min(g.amount, Math.max(g.keep, S.refillFloor ? S.floor - brok : 0, 0)); brok += keep;
       let left = g.amount - keep, to = [];
       while (left > 0.5 && target()) { const key = target(), p = payDown(key, left); left -= p; to.push([key, p]); if (!p) break; }
-      brok += left;
+      brok += left; if (reno && left > 0.5) held += left;
       row.lumps.push({ what: `Gift: ${keep ? `$${Math.round(keep).toLocaleString('en-US')} to brokerage, ` : ''}${to.map(([key, p]) => `$${Math.round(p).toLocaleString('en-US')} to ${nameOf(key, phases)}`).join(', ')}${left > 0.5 ? `${to.length ? ', ' : ''}$${Math.round(left).toLocaleString('en-US')} to brokerage` : ''}`, amt: g.amount, from: 'gift' });
       ev(t, 'gift', 'Gift arrives', g.amount, { keep, to });
     }
@@ -198,7 +206,13 @@ function simCore(inp) {
     // phase line, then the mortgage once every phase is paid, then brokerage.
     if (surplus > 0 && S.refillFloor && brok < S.floor) { const p = Math.min(surplus, S.floor - brok); brok += p; surplus -= p; row.extra.brokerage = p; floorHits++; }
     if (surplus > 0 && S.truckFirst && truck > 0.005) { const p = payDown('truck', surplus); surplus -= p; row.extra.truck = p; }
-    if (surplus > 0 && heloc > 0) { const p = payDown('heloc', surplus); surplus -= p; row.extra.heloc = p; }
+    // The month after the renovation: what waited in brokerage goes onto the HELOC.
+    if (held > 0.5 && !reno && heloc > 0) {
+      const p = Math.min(held, heloc, Math.max(0, brok - S.floor)); brok -= p; payDown('heloc', p); held = 0;
+      if (p > 0.5) { row.lumps.push({ what: 'Renovation done: pay the HELOC what waited in brokerage', amt: p, from: 'brokerage' }); ev(t, 'held', 'Renovation done: pay down the HELOC from brokerage', p); }
+    }
+    if (surplus > 0 && heloc > 0 && !reno) { const p = payDown('heloc', surplus); surplus -= p; row.extra.heloc = p; }
+    if (surplus > 0 && reno) held += surplus;
     if (surplus > 0 && openPhase()) { const key = 'ph:' + openPhase().id, p = payDown(key, surplus); surplus -= p; row.extra[key] = p; }
     const allDone = phases.every(p => p.status === 'done');
     if (surplus > 0 && S.prepayMortgage && allDone && heloc <= 0 && !sold && mtg > 0) { const p = Math.min(surplus, mtg); mtg -= p; surplus -= p; amort.mortgage[k].principal += p; row.extra.mortgage = p; }
