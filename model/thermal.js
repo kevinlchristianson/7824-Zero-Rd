@@ -54,7 +54,10 @@ export const INPUTS = {
   brickR: 2.0,
   // Share of the foam's R-value the wall actually gets: 1 for continuous
   // foam, about 0.6 with wood studs through it, about 0.4 with steel studs.
-  framing: 0.6,
+  // Owner: the shop is studs against the brick (foam between them); the
+  // center has floating interior framing with continuous foam behind it.
+  // The south leg's walls and the shop-center wall take the shop's.
+  framing: { shop: 0.6, center: 1 },
   site: { shelter: 2, wind: true, groundRefl: 0.2 },
   // Navien condensing combi-boiler heats; MBTEK Apollo 3.5-ton air-to-water
   // heat pump cools; both through an MBTEK AP-AHU-6T air handler.
@@ -148,7 +151,8 @@ export const SCHEMA = [
     ['glass.garageDoorU', 'Overhead door U', 'U', 'assumed', 0.1, 1.5, 0.01],
   ] },
   { group: 'Walls, slab & masonry', items: [
-    ['framing', 'Foam effectiveness (1 continuous, 0.6 wood studs, 0.4 steel)', '×', 'assumed', 0.2, 1, 0.05],
+    ['framing.shop', 'Foam effectiveness, shop (studs on brick)', '×', 'assumed', 0.2, 1, 0.05],
+    ['framing.center', 'Foam effectiveness, center (continuous)', '×', 'given', 0.2, 1, 0.05],
     ['slab.F', 'Slab edge F-factor', 'Btu/h·ft·°F', 'assumed', 0.1, 1.2, 0.01],
     ['brickR', '12″ brick', 'R', 'assumed', 0.5, 5, 0.1],
   ] },
@@ -290,11 +294,11 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   }
 
   // Opaque walls.
-  const fx = inp.framing;
+  const fx = inp.framing.shop, fc = inp.framing.center;
   const wallRcore = {
     shop: inp.shop.wallR * fx + inp.brickR + GYP,
-    ground: inp.ground.wallR * fx + inp.brickR + GYP,
-    upper: inp.upper.wallR * fx + inp.brickR + GYP,
+    ground: inp.ground.wallR * fc + inp.brickR + GYP,
+    upper: inp.upper.wallR * fc + inp.brickR + GYP,
     garage: inp.garage.wallR * fx + inp.brickR,
   };
   // The 2' floor structure between the levels has an exterior edge too; each
@@ -327,7 +331,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   link('shop', 'ground', 'walls', pShop * hSG - doorA('shop', 'ground'), shopParty);
   link('shop', 'upper', 'walls', pShop * Math.max(0, p.north.wall - hSG), shopParty);
   link('garage', 'ground', 'walls', pGar * Math.min(p.south.wall, c.ground + c.floor / 2) - doorA('garage', 'ground'),
-    inp.party.garageCenterR * fx + inp.brickR + GYP + 2 * R_IN);
+    inp.party.garageCenterR * fc + inp.brickR + GYP + 2 * R_IN);
 
   // Slab-on-grade perimeter to outdoors (F-factor, vs 24 h mean outdoor air).
   const slabLen = Object.fromEntries(ZONES.map(z => [z, z === 'upper' ? 0 :
@@ -1002,7 +1006,7 @@ const scaleGains = (i, k) => {
 };
 export const SENSITIVITY = [
   { key: 'center', label: 'Center airtightness', fmt: v => `ACH50 ${v}`, better: i => i.center.achLow, worse: i => i.center.achHigh, set: (i, v) => { i.center.ach50 = v; }, sim: true },
-  { key: 'framing', label: 'Foam effectiveness in walls', fmt: v => `×${v}`, better: () => 1, worse: () => 0.4, set: (i, v) => { i.framing = v; }, sim: true },
+  { key: 'framing', label: 'Foam effectiveness in shop walls', fmt: v => `×${v}`, better: () => 1, worse: () => 0.4, set: (i, v) => { i.framing.shop = v; }, sim: true },
   { key: 'gas', label: 'Gas price over the winter', fmt: v => `$${v.toFixed(2)}/therm`, better: i => i.rates.gasWinter ?? i.rates.gas, worse: i => Math.max(i.rates.gasWinter ?? i.rates.gas, 0.80), set: (i, v) => { i.rates.gasWinter = v; }, sim: false },
   { key: 'dist', label: 'Duct and piping losses', fmt: v => `${Math.round(v * 100)}%`, better: () => 0, worse: () => 0.2, set: (i, v) => { i.plant.distLoss = v; }, sim: false },
   { key: 'boiler', label: 'Boiler seasonal efficiency', fmt: v => `${Math.round(v * 100)}%`, better: () => 0.93, worse: () => 0.82, set: (i, v) => { i.plant.boilerEff = v; }, sim: false },
