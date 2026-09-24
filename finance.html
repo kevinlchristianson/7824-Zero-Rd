@@ -252,7 +252,8 @@
     <aside class="inputs" aria-label="Accounts and plan inputs">
       <h2>Accounts &amp; plan</h2>
       <div class="checkin">
-        <div class="row"><label for="asof">Balances as of the end of</label><input type="month" id="asof"></div>
+        <div class="row"><label for="asof">Balances as of</label><input type="date" id="asof"></div>
+        <p class="saveline" style="margin:0">The day you read your statements. The plan picks up with the next month, so this month's payments count as made.</p>
         <input type="text" id="note" placeholder="Note for this check-in" aria-label="Check-in note">
         <div class="btns">
           <button type="button" class="btn primary" id="save">Save check-in</button>
@@ -267,7 +268,7 @@
 <div class="tip" id="tip" hidden></div>
 
 <script type="module">
-import { FIN_INPUTS, DEBTS, simulate, projectInputs, seriesOf, variants, calOf, ymOf, labelOf, MON } from './model/finance.js';
+import { FIN_INPUTS, DEBTS, simulate, projectInputs, seriesOf, variants, calOf, ymOf, labelOf, MON, dayOf, dateLabel } from './model/finance.js';
 
 const $ = s => document.querySelector(s);
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -290,6 +291,7 @@ function merge(base, over) {
     else if (base[k] && typeof base[k] === 'object') merge(base[k], over[k]);
     else base[k] = over[k];
   }
+  if (base.asOf) base.asOf = dayOf(base.asOf);
   return base;
 }
 let inputs = clone(FIN_INPUTS), SIM = null, checkins = [], db = null, edited = false;
@@ -322,7 +324,7 @@ async function saveCheckin() {
   const sim = SIM, id = inputs.asOf;
   const doc = { asOf: id, note: inputs.note || '', savedAt: new Date().toISOString(), inputs: clone(inputs), ...seriesOf(sim) };
   saveline.textContent = 'Saving check-in…';
-  try { await db.doc('checkins/' + id).set(doc); saveline.textContent = `Check-in for ${L(calOf(id))} saved.`; flushSave(); }
+  try { await db.doc('checkins/' + id).set(doc); saveline.textContent = `Check-in for ${dateLabel(id)} saved.`; flushSave(); }
   catch (e) { saveline.textContent = e?.code === 'quota_exceeded' ? 'The history is full; delete an old check-in first.' : 'Couldn’t save the check-in. Try again.'; }
 }
 async function deleteCheckin(id) {
@@ -338,7 +340,7 @@ const use = n => (window.claude && typeof window.claude.use === 'function' ? win
   } catch { /* the snapshot below still tries */ }
   let first = true;
   db.collection('checkins').onSnapshot(snap => {
-    checkins = snap.docs.map(d => d.data()).filter(c => c && c.asOf).sort((a, b) => a.asOf.localeCompare(b.asOf));
+    checkins = snap.docs.map(d => d.data()).filter(c => c && c.asOf).sort((a, b) => dayOf(a.asOf).localeCompare(dayOf(b.asOf)));
     if (first) {
       first = false;
       // No working copy yet: start from the latest check-in.
@@ -353,7 +355,7 @@ let pathsTimer = 0;
 function run() {
   try { SIM = simulate(inputs); }
   catch (e) { setStatus('Check the inputs: ' + (e.message || e), 'err'); return; }
-  setStatus(`As of ${L(SIM.n0)}`, 'ok');
+  setStatus(`As of ${dateLabel(SIM.inputs.asOf)}`, 'ok');
   renderKpis(); renderNow(); renderSteps(); renderTriggers(); renderFlow(); renderDebt(); renderBrok(); renderAmort(); renderHistory(); renderNotes();
   clearTimeout(pathsTimer); pathsTimer = setTimeout(renderPaths, 250);
 }
@@ -446,7 +448,7 @@ function renderNow() {
   const R = SIM.rows;
   $('#months').replaceChildren(...R.slice(0, 3).map((r, j) => monthCard(r, j === 0)));
   const r = R[0], I = SIM.inputs;
-  $('#now-sub').textContent = `From the balances you entered for the end of ${L(SIM.n0)}. Autopays first, then whatever is left goes where the plan says: ${I.strategy.refillFloor ? `brokerage until it's back at the ${usd(I.strategy.floor)} floor, then ` : ''}${I.strategy.truckFirst && I.accounts.truck > 0 ? 'the truck, then ' : ''}the HELOC, then the open phase line${I.strategy.prepayMortgage && I.strategy.sell !== 'onDate' ? ', then the rental mortgage once every phase is paid' : ''}. Pay to the cent when you can; a few dollars either way washes out at the next check-in.`;
+  $('#now-sub').textContent = `From the balances you entered for ${dateLabel(I.asOf)}; the plan picks up with ${L(SIM.n0 + 1)}. Autopays first, then whatever is left goes where the plan says: ${I.strategy.refillFloor ? `brokerage until it's back at the ${usd(I.strategy.floor)} floor, then ` : ''}${I.strategy.truckFirst && I.accounts.truck > 0 ? 'the truck, then ' : ''}the HELOC, then the open phase line${I.strategy.prepayMortgage && I.strategy.sell !== 'onDate' ? ', then the rental mortgage once every phase is paid' : ''}. Pay to the cent when you can; a few dollars either way washes out at the next check-in.`;
 }
 
 // ---------------------------------------------------------------- steps
@@ -480,7 +482,7 @@ function renderSteps() {
     const d = el('details', 'more'); d.append(el('summary', null, `${list.length - 10} more, to ${L(list.at(-1).cal)}`));
     const inner = el('ol', 'steps'); inner.append(...list.slice(10).map(item)); d.append(inner); li.append(d); ol.append(li);
   }
-  $('#steps-sub').textContent = `Every move the plan makes from ${L(SIM.n0)} on, in order. Dates move as check-ins come in ahead of or behind the plan.`;
+  $('#steps-sub').textContent = `Every move the plan makes after ${dateLabel(SIM.inputs.asOf)}, in order. Dates move as check-ins come in ahead of or behind the plan.`;
 }
 
 // ---------------------------------------------------------------- triggers
@@ -613,7 +615,7 @@ function renderDebt() {
     showTip(e, L(c), rows.length ? rows : [{ label: 'before this check-in', value: '' }]);
   });
   node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
-  legend($('#debt-legend'), [...lay.map(([l, , c]) => ({ label: l, color: c })), ...(plan?.pts?.length > 1 ? [{ label: `First plan (${L(calOf(plan.base.asOf))}), all debt`, kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins, all debt', kind: 'dot' }] : [])]);
+  legend($('#debt-legend'), [...lay.map(([l, , c]) => ({ label: l, color: c })), ...(plan?.pts?.length > 1 ? [{ label: `First plan (${dateLabel(plan.base.asOf)}), all debt`, kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins, all debt', kind: 'dot' }] : [])]);
   const yearly = R.filter(r => r.cal % 12 === 11);
   table($('#debt-table'), ['Year end', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'All debt', 'Brokerage', 'Net worth'], yearly.map(r => ({ cells: [L(r.cal), usd(r.mtg), usd(r.truck + r.wf + r.usb), usd(r.heloc), usd(r.phaseBal), usd(r.debt), usd(r.brok), usd(r.nw)] })), { num: j => j > 0 });
   const S = SIM.summary;
@@ -752,11 +754,11 @@ function renderHistory() {
     const del = el('button', 'btn small danger', 'Delete'); del.type = 'button';
     del.addEventListener('click', () => { if (del.dataset.armed) { deleteCheckin(c.asOf); } else { del.dataset.armed = '1'; del.textContent = 'Confirm'; setTimeout(() => { delete del.dataset.armed; del.textContent = 'Delete'; }, 4000); } });
     acts.append(load, del);
-    const note = el('span', null, L(cal)); if (c.note) note.append(el('span', 'cellnote', c.note));
-    return { cells: [note, usd(A.brokerage), usd(A.heloc), usd(sum(c.inputs.phases.map(p => p.status === 'open' ? p.bal : 0))), usd(A.mortgage), usd(A.truck + A.wf + A.usb), usd(debt), vsCell, L(c.summary?.debtFree), acts], cls: c.asOf === inputs.asOf ? 'pick' : '' };
+    const note = el('span', null, dateLabel(c.asOf)); if (c.note) note.append(el('span', 'cellnote', c.note));
+    return { cells: [note, usd(A.brokerage), usd(A.heloc), usd(sum(c.inputs.phases.map(p => p.status === 'open' ? p.bal : 0))), usd(A.mortgage), usd(A.truck + A.wf + A.usb), usd(debt), vsCell, L(c.summary?.debtFree), acts], cls: dayOf(c.asOf) === inputs.asOf ? 'pick' : '' };
   });
   table(node, ['As of', 'Brokerage', 'HELOC', 'Phase lines', 'Mortgage', 'Truck + cards', 'All debt', 'vs first plan', 'Debt-free then', ''], rows, { num: j => j > 0 && j < 9 });
-  $('#hist-sub').textContent = `${checkins.length} saved. "vs first plan" is your net position (brokerage less every debt) against what the plan from ${L(calOf(plan.base.asOf))} expected for that month. "Debt-free then" is when that check-in's projection finished. Load puts a check-in's balances and settings back in the inputs.`;
+  $('#hist-sub').textContent = `${checkins.length} saved. "vs first plan" is your net position (brokerage less every debt) against what the plan from ${dateLabel(plan.base.asOf)} expected for that month. "Debt-free then" is when that check-in's projection finished. Load puts a check-in's balances and settings back in the inputs.`;
 }
 
 // ---------------------------------------------------------------- other paths
@@ -786,7 +788,7 @@ function renderNotes() {
 // ---------------------------------------------------------------- inputs form
 const pctIn = v => Math.round(v * 1e5) / 1e3, pctOut = v => v / 100;
 const GROUPS = () => [
-  { name: 'Accounts', open: true, note: 'Balances at the end of the check-in month, from your statements.', fields: [
+  { name: 'Accounts', open: true, note: 'Balances on the as-of day, from your statements.', fields: [
     ['accounts.brokerage', 'Brokerage', 'usd'],
     ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'],
     ['accounts.mortgage', 'Rental mortgage owed', 'usd'], ['accounts.mortgageApr', 'Mortgage rate', 'pct'], ['accounts.mortgagePmt', 'Mortgage payment', 'usd'],
@@ -861,13 +863,13 @@ function buildForm() {
     form.append(d);
   }
 }
-$('#asof').addEventListener('change', e => { if (!/^\d{4}-\d{2}$/.test(e.target.value)) return; inputs.asOf = e.target.value; edited = true; scheduleSave(); rerun(); });
+$('#asof').addEventListener('change', e => { if (!/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return; inputs.asOf = e.target.value; edited = true; scheduleSave(); rerun(); });
 $('#note').addEventListener('input', e => { inputs.note = e.target.value; edited = true; scheduleSave(); });
 $('#save').addEventListener('click', saveCheckin);
 $('#next').addEventListener('click', () => {
   const p = projectInputs(SIM, SIM.n0 + 1); if (!p) return;
   inputs = p; edited = true; buildForm(); run(); scheduleSave();
-  saveline.textContent = `Filled in ${L(SIM.n0)} as the plan expects. Correct it from your statements, then save.`;
+  saveline.textContent = `Filled in ${dateLabel(inputs.asOf)} as the plan expects. Correct it from your statements, then save.`;
 });
 
 buildForm();

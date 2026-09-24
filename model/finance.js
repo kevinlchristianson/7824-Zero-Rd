@@ -10,10 +10,18 @@ export const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 export const calOf = ym => { const [y, m] = ym.split('-').map(Number); return y * 12 + m - 1; };
 export const ymOf = n => `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, '0')}`;
 export const labelOf = n => `${MON[n % 12]} ${Math.floor(n / 12)}`;
+// The as-of date is a day (YYYY-MM-DD). The month-by-month plan picks up with
+// the next month, so this month's payments are taken as already made. An
+// older month-only value (YYYY-MM) reads as that month's last day.
+const lastDay = ym => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+export const dayOf = a => (/^\d{4}-\d{2}$/.test(a) ? `${a}-${String(lastDay(a)).padStart(2, '0')}` : a);
+export const dateLabel = a => { const d = dayOf(a), [y, m, dd] = d.split('-').map(Number); return `${MON[m - 1]} ${dd}, ${y}`; };
+// The same day of the month after `a`, clamped to that month's length.
+export const nextMonthDay = a => { const d = dayOf(a), [, , dd] = d.split('-').map(Number), ym = ymOf(calOf(d) + 1); return `${ym}-${String(Math.min(dd, lastDay(ym))).padStart(2, '0')}`; };
 
-// Balances are at the end of `asOf`. Workbook values unless marked.
+// Balances are as of the day `asOf`. Workbook values unless marked.
 export const FIN_INPUTS = {
-  asOf: '2026-06',
+  asOf: '2026-06-30',
   note: 'Workbook starting balances',
   horizonYears: 20,
   accounts: {
@@ -261,7 +269,7 @@ export function projectInputs(sim, cal) {
   const r = sim.rows.find(x => x.cal === cal);
   if (!r) return null;
   const I = clone(sim.inputs);
-  I.asOf = ymOf(cal); I.note = '';
+  I.asOf = cal === calOf(sim.inputs.asOf) + 1 ? nextMonthDay(sim.inputs.asOf) : dayOf(ymOf(cal)); I.note = '';
   Object.assign(I.accounts, { brokerage: round2(r.brok), heloc: round2(r.heloc), mortgage: round2(r.mtg), truck: round2(r.truck), wf: round2(r.wf), usb: round2(r.usb), rentalValue: Math.round(r.value), rentalSold: r.sold });
   I.phases = I.phases.map(p => { const q = r.phases.find(x => x.id === p.id); return { ...p, status: q.status, bal: round2(q.bal) }; });
   const yrs = (cal - sim.n0) / 12;
