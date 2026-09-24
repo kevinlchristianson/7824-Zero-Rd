@@ -174,7 +174,6 @@
   /* Calibrate to bills */
   .row .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; max-width: 100%; font-size: 12.5px; color: var(--ink-2); }
   .row .ctl select { flex: 1 1 200px; min-width: 0; max-width: 100%; }
-  .row .ctl input[type="number"] { width: 72px; box-sizing: border-box; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; font: 500 13px var(--mono); text-align: right; }
   .bills { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px 10px; margin: 0 0 14px; }
   .bill { display: grid; gap: 3px; }
   .bill label { font: 600 11px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
@@ -267,18 +266,25 @@
         <p class="fine" id="rates-note"></p>
       </section>
 
+      <section id="sec-bills">
+        <h2>What the bills will say</h2>
+        <p class="sub" id="bills-sub"></p>
+        <div class="callouts" id="bills-callouts"></div>
+        <div class="table-wrap"><table id="bills-table"></table></div>
+        <p class="fine" id="bills-note"></p>
+      </section>
+
       <section id="sec-calib">
         <h2>Calibrate to your bills</h2>
         <p class="sub">Enter each Black Hills bill's therms under the month most of its days fall in. The page takes off hot water and cooking, then finds the center block's airtightness whose modeled months match best. TMY3 is a typical year, so one month can miss by a fifth on weather alone; three or more heating months make a fair fit.</p>
         <div class="row">
           <label class="ctl">Bills are from <select id="calib-state"></select></label>
-          <label class="ctl">Hot water and cooking, therms a month <input id="calib-base" type="number" min="0" max="200" step="1" inputmode="numeric"></label>
           <button type="button" class="btn" id="calib-clear">Clear</button>
         </div>
         <div class="bills" id="bills" aria-label="Billed therms by month"></div>
         <div class="callouts" id="calib-callouts"></div>
         <details class="tv"><summary>Table view</summary><div class="table-wrap" id="calib-table"></div></details>
-        <p class="fine">The default 18 therms a month for hot water and cooking is Palmer Dr's summer floor on the September 2026 bill. A bill covers the whole premise, so the modeled therms include the shop.</p>
+        <p class="fine">Hot water and cooking are taken off at the figure under Household in Inputs. A bill covers the whole premise, so the modeled therms include the shop.</p>
       </section>
 
       <section id="sec-zones">
@@ -338,7 +344,7 @@
 <div class="tip" id="tip" hidden></div>
 
 <script type="module">
-import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, CALIB_STATES, getIn, setIn, sessionSummary } from './model/thermal.js';
+import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, CALIB_STATES, getIn, setIn, sessionSummary, billEstimate } from './model/thermal.js';
 import { DEFAULTS, wallsOf, vestibuleDepth, openings } from './model/params.js';
 
 const $ = s => document.querySelector(s);
@@ -370,12 +376,11 @@ const atDefaults = () => JSON.stringify(inputs) === JSON.stringify(INPUTS);
 // Billed therms by month for the calibration panel, kept apart from the
 // model inputs so typing a bill does not rerun the year.
 const BILLS = 'zero-rd-thermal-bills-v1';
-let bills = { state: 'asis', base: 18, therms: Array(12).fill(null) };
+let bills = { state: 'asis', therms: Array(12).fill(null) };
 try {
   const b = JSON.parse(localStorage.getItem(BILLS) || 'null');
   if (b && typeof b === 'object') {
     if (b.state in CALIB_STATES) bills.state = b.state;
-    if (Number.isFinite(b.base) && b.base >= 0) bills.base = b.base;
     if (Array.isArray(b.therms)) bills.therms = Array.from({ length: 12 }, (_, m) => (Number.isFinite(b.therms[m]) && b.therms[m] >= 0 ? b.therms[m] : null));
   }
 } catch { /* storage unavailable */ }
@@ -477,6 +482,7 @@ const Vdesign = () => R.design.heating.wsDb996Ms * 2.23694;
 // ---------------------------------------------------------------- KPIs
 function renderKpis() {
   const c = R.cost.totals, i = inputs;
+  const bill = billEstimate(R.cost, i), billAsis = R.asis ? billEstimate(R.asis.cost, i) : null;
   const lo = R.range.low.cost.totals.total, hi = R.range.high.cost.totals.total;
   const heat = sum(R.main.heatTot), calm = R.calm ? sum(R.calm.heatTot) : null;
   const windPct = calm ? (heat / calm - 1) * 100 : null;
@@ -491,6 +497,7 @@ function renderKpis() {
     ['', 'Gas for heat', `$${nf(c.gas)}`, `${nf(c.therms)} therms, $${i.rates.gasWinter.toFixed(3)} Nov–Mar and $${i.rates.gas.toFixed(3)} Apr–Oct, Navien at ${nf(i.plant.boilerEff * 100)}%`],
     ['', 'Electric for cooling', `$${nf(c.cooling)}`, `${nf(c.compKWh)} kWh for the Apollo at COP ${i.plant.coolCOP}, plus the AHU and pumps`],
     ['', 'AHU and pumps for heat', `$${nf(c.heatElec)}`, `${nf(c.heatHours)} hours at ${nf(i.plant.fanW + i.plant.pumpW)} W`],
+    ['', 'All bills, per month', `$${nf(bill.year.total / 12)}`, `renovated, with ${nf(i.household.kWhPerDay)} kWh a day of household electricity, hot water and both customer charges${billAsis ? `; $${nf(billAsis.year.total / 12)} this winter as-is` : ''}`],
     ['', 'Wind adds', windPct == null ? 'off' : `+${nf(windPct)}%`, windPct == null ? 'Wind is switched off in Inputs' : `to heating, against the same year in still air`],
   ];
   $('#kpis').replaceChildren(...tiles.map(([cls, label, value, subText]) => {
@@ -1045,7 +1052,9 @@ function onInput(path, ctl) {
   }
   if (getIn(inputs, path) === v) return;
   setIn(inputs, path, v);
-  saveInputs(); markChanged(); scheduleRun();
+  saveInputs(); markChanged();
+  if (path.startsWith('household.')) { if (R) { renderKpis(); renderBills(); renderCalib(); } return; }
+  scheduleRun();
 }
 function markChanged() {
   document.querySelectorAll('.field').forEach(f => f.classList.toggle('changed', getIn(inputs, f.dataset.path) !== getIn(INPUTS, f.dataset.path)));
@@ -1053,6 +1062,37 @@ function markChanged() {
 $('#reset').addEventListener('click', () => {
   inputs = clone(INPUTS); saveInputs(); buildForm(); scheduleRun(0);
 });
+
+// ---------------------------------------------------------------- what the bills will say
+function renderBills() {
+  const i = inputs, hh = i.household, rt = i.rates;
+  const reno = billEstimate(R.cost, i), asis = R.asis ? billEstimate(R.asis.cost, i) : null;
+  $('#bills-sub').textContent = `Gas and electric bills by month at your rates and customer charges: the model's heating and cooling, plus ${nf(hh.kWhPerDay)} kWh a day of household electricity and ${nf(hh.dhwTherms)} therms a month for hot water and cooking, set under Household in Inputs. The renovated building${asis ? ` and this winter's, ${R.asis.upperDone ? 'with the upper level renovated' : 'before the renovation'}` : ''}. Dollars.`;
+  const peak = b => b.months.reduce((k, x, m) => (x.total > b.months[k].total ? m : k), 0);
+  const low = b => b.months.reduce((k, x, m) => (x.total < b.months[k].total ? m : k), 0);
+  const items = [
+    [`$${nf(reno.year.total / 12)} a month`, `renovated: $${nf(reno.year.total)} a year, gas $${nf(reno.year.gas)} and electric $${nf(reno.year.elec)}. ${MON[peak(reno)]} is the biggest month at $${nf(reno.months[peak(reno)].total)}, ${MON[low(reno)]} the smallest at $${nf(reno.months[low(reno)].total)}.`],
+  ];
+  if (asis) items.push([`$${nf(asis.year.total / 12)} a month`, `this winter${R.asis.upperDone ? ', upper level renovated' : ', as-is'}: $${nf(asis.year.total)} a year, gas $${nf(asis.year.gas)} and electric $${nf(asis.year.elec)}. ${MON[peak(asis)]} is the biggest month at $${nf(asis.months[peak(asis)].total)}.`]);
+  items.push([`$${nf(reno.year.elec - (R.cost.totals.heatElec + R.cost.totals.coolElec))} a year`, `of the electric bill is household use and the basic charge, not heating or cooling. The heating and cooling headline above leaves it out.`]);
+  $('#bills-callouts').replaceChildren(...items.map(([big, small]) => {
+    const d = document.createElement('div'); d.className = 'callout';
+    const b = document.createElement('b'); b.textContent = big;
+    const sp = document.createElement('span'); sp.textContent = small;
+    d.append(b, sp); return d;
+  }));
+  const t = $('#bills-table');
+  t.innerHTML = `<thead><tr><th rowspan="2">Month</th><th class="num" colspan="5">Renovated</th>${asis ? `<th class="num" colspan="3">This winter${R.asis.upperDone ? ', upper done' : ', as-is'}</th>` : ''}</tr><tr><th class="num">Therms</th><th class="num">kWh</th><th class="num">Gas $</th><th class="num">Electric $</th><th class="num">Total $</th>${asis ? '<th class="num">Gas $</th><th class="num">Electric $</th><th class="num">Total $</th>' : ''}</tr></thead>`;
+  const tb = t.createTBody();
+  const line = (label, r, a, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls; tr.insertCell().textContent = label;
+    const vals = [r.therms, r.kWh, r.gas, r.elec, r.total, ...(a ? [a.gas, a.elec, a.total] : [])];
+    vals.forEach(v => { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v); });
+  };
+  MON.forEach((mo, m) => line(mo, reno.months[m], asis ? asis.months[m] : null));
+  line('Year', reno.year, asis ? asis.year : null, 'total');
+  $('#bills-note').textContent = `Zero Rd is billed on Rocky Mountain Power Schedule 25, Small General Service, at $${rt.elec.toFixed(4)}/kWh all-in with a $${rt.elecMonthly.toFixed(2)} basic charge, and on Black Hills RGS GCA at $${rt.gasWinter.toFixed(3)}/therm November–March and $${rt.gas.toFixed(3)} April–October with a $${rt.gasMonthly.toFixed(2)} customer charge. Household electricity is the solar plan's ${nf(hh.kWhPerDay)} kWh a day; Palmer Dr measured 33 kWh a day over the year to July 2026, and 68 a day that July for air conditioning, which the model's cooling covers here.`;
+}
 
 // ---------------------------------------------------------------- calibrate to bills
 function buildBills() {
@@ -1074,7 +1114,7 @@ function buildBills() {
 function fitBills() {
   if (!CAL || CAL.state !== bills.state || !CAL.rows || !CAL.rows.length) return null;
   const rows = CAL.rows, lo = rows[0].ach50, hi = rows.at(-1).ach50;
-  const target = bills.therms.map(v => (v == null ? null : Math.max(0, v - bills.base)));
+  const target = bills.therms.map(v => (v == null ? null : Math.max(0, v - inputs.household.dhwTherms)));
   const idx = target.map((v, m) => (v == null ? -1 : m)).filter(m => m >= 0);
   if (!idx.length) return null;
   const at = a => {
@@ -1105,7 +1145,7 @@ function renderCalib() {
   const label = CALIB_STATES[bills.state], n = fit.idx.length;
   const items = [
     [`ACH50 ${nf(fit.ach50, 1)}`, `implied airtightness of the center block from ${n} billed month${n > 1 ? 's' : ''}, for ${label}${fit.edge ? `. That is the ${fit.edge} end of the ACH50 ${CAL.rows[0].ach50}–${CAL.rows.at(-1).ach50} range the page tests, so the true value may lie beyond it` : ''}.`],
-    [`${nf(fit.modeled)} vs ${nf(fit.billed)} therms`, `modeled against billed over those months, after ${nf(bills.base)} therms a month for hot water and cooking. TMY3 is a typical year, so a single month can miss by a fifth on weather alone.`],
+    [`${nf(fit.modeled)} vs ${nf(fit.billed)} therms`, `modeled against billed over those months, after ${nf(inputs.household.dhwTherms)} therms a month for hot water and cooking (Household, in Inputs). TMY3 is a typical year, so a single month can miss by a fifth on weather alone.`],
     [`$${nf(fit.total)} a year`, `heating and cooling in a typical year at that airtightness, for ${label}${bills.state !== 'reno' ? `. The forecast assumes ACH50 ${inputs.center.ach50} after foam and new windows; this fit describes the shell before them` : ''}.`],
   ];
   out.replaceChildren(...items.map(([big, small]) => {
@@ -1130,8 +1170,6 @@ function renderCalib() {
   sel.replaceChildren(...Object.entries(CALIB_STATES).map(([k, label]) => Object.assign(document.createElement('option'), { value: k, textContent: label })));
   sel.value = bills.state;
   sel.addEventListener('change', () => { bills.state = sel.value; saveBills(); requestCalib(); });
-  const base = $('#calib-base'); base.value = bills.base;
-  base.addEventListener('input', () => { const v = Number(base.value); if (base.value !== '' && Number.isFinite(v) && v >= 0) { bills.base = v; saveBills(); renderCalib(); } });
   $('#calib-clear').addEventListener('click', () => { bills.therms = Array(12).fill(null); saveBills(); buildBills(); renderCalib(); });
 }
 
@@ -1139,7 +1177,7 @@ function renderCalib() {
 function renderAll() {
   if (!R) return;
   renderKpis(); renderMonthly(); renderCosts(); renderSensitivity(); renderZoneTable(); renderPlan(); renderBalance(); renderWind();
-  fillWeeks(); renderWeek(); renderMethod(); renderCalib();
+  fillWeeks(); renderWeek(); renderMethod(); renderBills(); renderCalib();
 }
 let rz = 0;
 new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (R) { renderMonthly(); renderWind(); renderWeek(); } }); }).observe(resultsEl);

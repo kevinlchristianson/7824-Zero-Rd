@@ -83,6 +83,11 @@ export const INPUTS = {
   // revenue adj + 0.0203 integrity rider + 0.3449 commodity + 0.0088 EE,
   // plus 5% sales tax. `gas` is the Apr-Oct rate.
   rates: { gas: 0.576, gasWinter: 0.598, winterMonths: [10, 11, 0, 1, 2], elec: 0.1017, gasMonthly: 34.65, elecMonthly: 37.46 },
+  // Beyond heating and cooling, for the bill estimate: household electricity
+  // (the solar plan's figure; Palmer Dr measured 33 kWh a day over the year
+  // to July 2026) and the gas for hot water and cooking (Palmer Dr's summer
+  // floor on the September 2026 bill).
+  household: { kWhPerDay: 47, dhwTherms: 18 },
 };
 
 // Input schema for forms and reports. src: 'given' = from the owner,
@@ -150,6 +155,10 @@ export const SCHEMA = [
     ['rates.elec', 'Electricity, per kWh, all-in', '$', 'given', 0, 1, 0.0001],
     ['rates.gasMonthly', 'Gas customer charge, per month', '$', 'given', 0, 200, 0.01],
     ['rates.elecMonthly', 'Electric basic charge, per month', '$', 'given', 0, 200, 0.01],
+  ] },
+  { group: 'Household (for the bill estimate)', note: 'Electricity beyond heating and cooling, and gas beyond space heat. Palmer Dr measured 33 kWh a day over a year and 18 therms a month in summer. These change the bill estimate and the bill calibration, not the model.', items: [
+    ['household.kWhPerDay', 'Household electricity', 'kWh/day', 'given', 0, 300, 1],
+    ['household.dhwTherms', 'Hot water and cooking', 'therms/mo', 'assumed', 0, 300, 1],
   ] },
   { group: 'South leg', items: [
     ['garage.wallR', 'Wall insulation (no foam)', 'R', 'given', 0, 60, 0.5],
@@ -1115,4 +1124,28 @@ export function calibrationGrid(base, state = 'asis', p = DEFAULTS) {
       months: Array.from({ length: 12 }, (_, m) => ZONES.reduce((sum, z) => sum + c.monthly[z][m].therms, 0)),
     };
   });
+}
+
+// ---------------------------------------------------------------- bills
+
+// What the bills would say, month by month: the model's heating and cooling
+// (a costs() result), plus household electricity and the gas for hot water
+// and cooking, at the all-in rates and the monthly customer charges.
+const MDAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+export function billEstimate(cost, inp) {
+  const rt = inp.rates, hh = inp.household || { kWhPerDay: 0, dhwTherms: 0 };
+  const gasAt = m => ((rt.winterMonths ?? []).includes(m) ? rt.gasWinter ?? rt.gas : rt.gas);
+  const months = Array.from({ length: 12 }, (_, m) => {
+    let hvacTherms = 0, hvacGas = 0, hvacKWh = 0;
+    for (const z of ZONES) {
+      const x = cost.monthly[z][m];
+      hvacTherms += x.therms; hvacGas += x.gas; hvacKWh += x.compKWh + x.distKWh;
+    }
+    const therms = hvacTherms + hh.dhwTherms, kWh = hvacKWh + hh.kWhPerDay * MDAYS[m];
+    const gas = hvacGas + hh.dhwTherms * gasAt(m) + rt.gasMonthly, elec = kWh * rt.elec + rt.elecMonthly;
+    return { therms, kWh, gas, elec, total: gas + elec, hvacTherms, hvacKWh };
+  });
+  const year = {};
+  for (const x of months) for (const k of Object.keys(x)) year[k] = (year[k] || 0) + x[k];
+  return { months, year };
 }

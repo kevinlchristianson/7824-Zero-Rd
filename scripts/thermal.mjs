@@ -1,7 +1,7 @@
 // Runs the heating and cooling model and prints a report.
 // Usage: npm run thermal [-- --json]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary, SENSITIVITY, sensitivityCase, calibrationGrid } from '../model/thermal.js';
+import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary, SENSITIVITY, sensitivityCase, calibrationGrid, billEstimate } from '../model/thermal.js';
 
 const wx = JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.meta.url), 'utf8'));
 const t0 = performance.now();
@@ -59,6 +59,12 @@ if (r.asis) {
   console.log(`\nThis winter, ${a.upperDone ? 'upper level renovated and ground level as-is' : 'center block before the renovation'} (foam R-${ai.wallR} on brick, R-${ai.roofR} attic, U-${ai.windowU} windows, ACH50 ${ai.ach50}; shop as given; same setpoints and equipment)`);
   for (const [kk, z] of ZONES.entries()) if (z !== 'garage') console.log(`  ${pad(ZONE_NAMES[z], 22)} heat ${lpad(mm(a.heatTot[kk]), 6)} MMBtu  cool ${lpad(mm(a.coolTot[kk]), 5)}  design ${lpad(k(a.heatDesign[z].load), 5)} kBtu/h  peakH ${k(a.peakHeat[kk])}  Tmin ${a.Tmin[kk].toFixed(1)}°F  unmet ${a.unmet[kk]} h`);
   console.log(`  COST: heating $${(at.gas + at.heatElec).toFixed(0)} (${at.therms.toFixed(0)} therms), cooling $${at.cooling.toFixed(0)}, total $${at.total.toFixed(0)}/yr; ACH50 ${a.range.low.ach50}: $${a.range.low.cost.totals.total.toFixed(0)}, ACH50 ${a.range.high.ach50}: $${a.range.high.cost.totals.total.toFixed(0)}`);
+}
+{
+  const hh = INPUTS.household, line = (label, b) => console.log(`  ${label} $${b.year.total.toFixed(0)}/yr = $${(b.year.total / 12).toFixed(0)}/month (gas $${b.year.gas.toFixed(0)}, ${b.year.therms.toFixed(0)} therms; electric $${b.year.elec.toFixed(0)}, ${b.year.kWh.toFixed(0)} kWh); by month $${b.months.map(x => x.total.toFixed(0)).join(' ')}`);
+  console.log(`\nBills at ${hh.kWhPerDay} kWh/day household electricity and ${hh.dhwTherms} therms/month hot water, customer charges included`);
+  line('renovated:', billEstimate(r.cost, INPUTS));
+  if (r.asis) line('as-is:    ', billEstimate(r.asis.cost, INPUTS));
 }
 console.log('\nAnnual net heat flow out of each zone, MMBtu');
 console.log('  ' + pad('', 22) + GROUPS.map(([g]) => lpad(g, 8)).join('') + lpad('solar', 8) + lpad('intern', 8) + lpad('heat', 8) + lpad('cool', 8) + lpad('resid', 8));

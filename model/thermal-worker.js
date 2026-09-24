@@ -18,7 +18,8 @@ self.onmessage = async ({ data }) => {
       prepared = prepareWeather(wxRaw);
     }
     if (latest !== data.id) return;
-    const key = JSON.stringify(data.inputs);
+    // Household figures only feed the page's bill arithmetic, so they don't make a new run.
+    const key = JSON.stringify({ ...data.inputs, household: undefined });
     if (data.calibOnly && last && last.key === key) {
       const state = calibState;
       self.postMessage({ id: data.id, calib: { state, rows: calibrationGrid(last.r, state) } });
