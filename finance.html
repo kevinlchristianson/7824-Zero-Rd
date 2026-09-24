@@ -724,45 +724,64 @@ function amortAccounts() {
 }
 function renderAmort() {
   const keys = amortAccounts();
-  if (!keys.includes(amortKey)) amortKey = keys[0];
+  if (amortKey !== 'all' && !keys.includes(amortKey)) amortKey = keys[0];
   const tabs = $('#amort-tabs');
-  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = loanColor(k); b.append(i, document.createTextNode(k === 'truck' ? 'Truck loan' : acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
+  const tab = (k, label, color) => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = color; b.append(i, document.createTextNode(label)); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; };
+  tabs.replaceChildren(...(keys.length > 1 ? [tab('all', 'All loans', 'var(--ink)')] : []), ...keys.map(k => tab(k, k === 'truck' ? 'Truck loan' : acctName(k), loanColor(k))));
   if (!amortKey) return;
-  const A = SIM.amort[amortKey], I = SIM.inputs, rows = SIM.rows;
+  const I = SIM.inputs, rows = SIM.rows, all = amortKey === 'all';
+  // Stack bottom to top the way the debt chart does: mortgage, truck, cards, HELOC, phase lines.
+  const order = ['mortgage', 'truck', 'wf', 'usb', 'heloc'];
+  const partKeys = all ? [...order.filter(k => keys.includes(k)), ...keys.filter(k => !order.includes(k))] : [amortKey];
+  const parts = partKeys.map(k => ({ k, A: SIM.amort[k], col: loanColor(k), name: k === 'truck' ? 'Truck loan' : acctName(k) }));
+  const A = parts[0].A.map((_, i) => { const o = { bal0: 0, draw: 0, interest: 0, principal: 0, bal: 0 }; for (const p of parts) for (const f in o) o[f] += p.A[i][f]; return o; });
   const apr = amortKey === 'heloc' ? I.accounts.helocApr : amortKey === 'mortgage' ? I.accounts.mortgageApr : amortKey === 'truck' ? I.accounts.truckApr : amortKey.startsWith('ph:') ? I.strategy.phaseApr : 0;
   const lastIdx = A.reduce((j, x, i) => (x.bal0 > 0.5 || x.draw > 0.5 ? i : j), 0), end = Math.min(A.length - 1, lastIdx + 3);
   const paidOff = A.findIndex((x, i) => i >= A.findIndex(q => q.bal0 > 0.5 || q.draw > 0.5) && x.bal < 0.5 && (x.bal0 > 0.5 || x.draw > 0.5));
   const totInt = sum(A.map(x => x.interest)), totPrin = sum(A.map(x => x.principal)), drawn = sum(A.map(x => x.draw));
-  const facts = [['Owed now', usd(A[0].bal0)], ...(drawn ? [['Drawn later', usd(drawn)]] : []), ['Rate', apr ? `${nf(apr * 100, 3)}%` : '0% until due'], ['Paid off', paidOff >= 0 ? L(rows[paidOff].cal) : 'after the horizon'], ['Interest from here', usd(totInt)], ['Principal from here', usd(totPrin)]];
+  const facts = [['Owed now', usd(A[0].bal0)], ...(drawn ? [['Drawn later', usd(drawn)]] : []), all ? ['Loans', String(parts.length)] : ['Rate', apr ? `${nf(apr * 100, 3)}%` : '0% until due'], [all ? 'All paid off' : 'Paid off', paidOff >= 0 ? L(rows[paidOff].cal) : 'after the horizon'], ['Interest from here', usd(totInt)], ['Principal from here', usd(totPrin)]];
   $('#amort-facts').replaceChildren(...facts.map(([l, v]) => { const s = el('span'); s.append(document.createTextNode(l + ' '), el('b', null, v)); return s; }));
-  const col = loanColor(amortKey);
-  // Balance over time.
+  const col = all ? 'var(--ink-2)' : parts[0].col;
+  // Balance over time (stacked by loan on "All loans").
   {
     const node = $('#amort-bal'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
-    const series = [{ cal: SIM.n0, v: A[0].bal0 }, ...A.slice(0, end + 1).map((x, i) => ({ cal: rows[i].cal, v: x.bal }))];
+    const cals = [SIM.n0, ...rows.slice(0, end + 1).map(r => r.cal)];
+    const balAt = (p, j) => (j === 0 ? p.A[0].bal0 : p.A[j - 1].bal);
+    const series = cals.map((cal, j) => ({ cal, v: j === 0 ? A[0].bal0 : A[j - 1].bal }));
     const hi = niceTicks(0, Math.max(...series.map(s => s.v), 1), 4).at(-1), ticks = niceTicks(0, hi, 4);
-    const c0 = series[0].cal, c1 = series.at(-1).cal;
+    const c0 = cals[0], c1 = cals.at(-1);
     const x = c => m.l + (c - c0) / Math.max(1, c1 - c0) * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
     let g = '';
     for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
     const step = Math.max(1, Math.ceil((c1 - c0) / 12 / 6));
     for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += step) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
-    g += `<path d="M${x(c0)},${y(0)}L${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join('L')}L${x(c1)},${y(0)}Z" fill="${col}" fill-opacity="0.22"/>`;
-    g += `<polyline points="${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2"/>`;
+    if (all) {
+      const base = cals.map(() => 0);
+      for (const p of parts) {
+        const topv = cals.map((_, j) => base[j] + balAt(p, j));
+        if (topv.some((v, j) => v - base[j] > 0.5)) g += `<path d="M${cals.map((c, j) => `${x(c).toFixed(1)},${y(topv[j]).toFixed(1)}`).join('L')}L${cals.map((c, j) => [c, j]).reverse().map(([c, j]) => `${x(c).toFixed(1)},${y(base[j]).toFixed(1)}`).join('L')}Z" fill="${p.col}" stroke="var(--sheet)" stroke-width="0.5"/>`;
+        topv.forEach((v, j) => { base[j] = v; });
+      }
+    } else {
+      g += `<path d="M${x(c0)},${y(0)}L${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join('L')}L${x(c1)},${y(0)}Z" fill="${col}" fill-opacity="0.22"/>`;
+      g += `<polyline points="${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2"/>`;
+    }
     g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
     node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
     const xh = node.querySelector('.xh');
     node.querySelector('.hit').addEventListener('pointermove', e => {
-      const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), s = series.find(q => q.cal === c) ?? series.at(-1);
+      const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), j = Math.max(0, Math.min(cals.length - 1, c - c0)), s = series[j];
       xh.setAttribute('x1', x(s.cal)); xh.setAttribute('x2', x(s.cal)); xh.setAttribute('visibility', 'visible');
-      const k = s.cal - SIM.n0 - 1, a = A[k];
-      showTip(e, L(s.cal), [{ label: 'Balance', value: usd(s.v), color: col }, ...(a ? [{ label: 'Interest', value: usd(a.interest, 2), color: COLOR.int }, { label: 'Principal', value: usd(a.principal, 2), color: col }, ...(a.draw ? [{ label: 'Drawn', value: usd(a.draw) }] : [])] : [])]);
+      const a = A[j - 1];
+      const lines = all ? [...parts.filter(p => balAt(p, j) > 0.5).reverse().map(p => ({ label: p.name, value: usd(balAt(p, j)), color: p.col })), { label: 'All loans', value: usd(s.v) }]
+        : [{ label: 'Balance', value: usd(s.v), color: col }];
+      showTip(e, L(s.cal), [...lines, ...(a ? [{ label: 'Interest', value: usd(a.interest, 2), color: COLOR.int }, { label: 'Principal', value: usd(a.principal, 2), color: all ? undefined : col }, ...(a.draw ? [{ label: 'Drawn', value: usd(a.draw) }] : [])] : [])]);
     });
     node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
   }
-  // Payments per calendar year.
+  // Payments per calendar year (principal stacked by loan on "All loans").
   const years = new Map();
-  A.slice(0, end + 1).forEach((x, i) => { const yr = Math.floor(rows[i].cal / 12); const o = years.get(yr) ?? { yr, start: x.bal0, draw: 0, interest: 0, principal: 0, end: 0 }; o.draw += x.draw; o.interest += x.interest; o.principal += x.principal; o.end = x.bal; years.set(yr, o); });
+  A.slice(0, end + 1).forEach((x, i) => { const yr = Math.floor(rows[i].cal / 12); const o = years.get(yr) ?? { yr, start: x.bal0, draw: 0, interest: 0, principal: 0, end: 0, by: parts.map(() => 0) }; o.draw += x.draw; o.interest += x.interest; o.principal += x.principal; o.end = x.bal; parts.forEach((p, n) => { o.by[n] += p.A[i].principal; }); years.set(yr, o); });
   const Y = [...years.values()].filter(o => o.start > 0.5 || o.draw > 0.5 || o.principal > 0.5);
   {
     const node = $('#amort-yr'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
@@ -771,16 +790,17 @@ function renderAmort() {
     let g = '';
     for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
     Y.forEach((o, i) => {
-      const x0 = m.l + band * i + (band - bw) / 2, yb = y(0), yi = y(o.interest), yp = y(o.interest + o.principal);
+      const x0 = m.l + band * i + (band - bw) / 2, yb = y(0), yi = y(o.interest);
       if (yb - yi > 0.3) g += `<rect x="${x0}" y="${yi}" width="${bw}" height="${yb - yi}" fill="${COLOR.int}"/>`;
-      if (yi - yp > 0.3) g += `<rect x="${x0}" y="${yp}" width="${bw}" height="${Math.max(0, yi - yp - 1)}" fill="${col}"/>`;
+      let acc = o.interest;
+      parts.forEach((p, n) => { const v = o.by[n]; if (v <= 0.5) return; const y1 = y(acc), y2 = y(acc + v); if (y1 - y2 > 0.3) g += `<rect x="${x0}" y="${y2}" width="${bw}" height="${Math.max(0, y1 - y2 - 1)}" fill="${p.col}"/>`; acc += v; });
       if (Y.length <= 14 || i % 2 === 0) g += `<text x="${x0 + bw / 2}" y="${H - 8}" text-anchor="middle">${String(o.yr).slice(2)}</text>`;
       g += `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${H - m.t - m.b}" fill="transparent"/>`;
     });
     node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
-    node.querySelectorAll('.hit').forEach(h => { const o = Y[+h.dataset.i]; h.addEventListener('pointermove', e => showTip(e, String(o.yr), [{ label: 'Principal', value: usd(o.principal), color: col }, { label: 'Interest', value: usd(o.interest), color: COLOR.int }, { label: 'Balance at year end', value: usd(o.end) }])); h.addEventListener('pointerleave', hideTip); });
+    node.querySelectorAll('.hit').forEach(h => { const o = Y[+h.dataset.i]; h.addEventListener('pointermove', e => showTip(e, String(o.yr), [...(all ? parts.map((p, n) => ({ label: `${p.name} principal`, value: usd(o.by[n]), color: p.col, v: o.by[n] })).filter(r => r.v > 0.5).reverse() : [{ label: 'Principal', value: usd(o.principal), color: col }]), { label: 'Interest', value: usd(o.interest), color: COLOR.int }, { label: 'Balance at year end', value: usd(o.end) }])); h.addEventListener('pointerleave', hideTip); });
   }
-  legend($('#amort-legend'), [{ label: 'Principal', color: col }, { label: 'Interest', color: COLOR.int }]);
+  legend($('#amort-legend'), all ? [...parts.map(p => ({ label: p.name, color: p.col })), { label: 'Interest, all loans', color: COLOR.int }] : [{ label: 'Principal', color: col }, { label: 'Interest', color: COLOR.int }]);
   table($('#amort-table'), ['Year', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], Y.map(o => ({ cells: [String(o.yr), usd(o.start), o.draw ? usd(o.draw) : '—', usd(o.interest), usd(o.principal), usd(o.end)] })), { num: j => j > 0 });
   table($('#amort-months'), ['Month', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], A.slice(0, 24).map((x, i) => ({ cells: [L(rows[i].cal), usd(x.bal0, 2), x.draw ? usd(x.draw) : '—', usd(x.interest, 2), usd(x.principal, 2), usd(x.bal, 2)] })), { num: j => j > 0 });
 }
