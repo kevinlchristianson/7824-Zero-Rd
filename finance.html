@@ -9,7 +9,7 @@
     --rule: #d9d3c9; --grid: #e8e3da; --accent: #8a4f35; --accent-wash: rgba(138, 79, 53, 0.10);
     --focus: #2f6f8f; --warn: #b3261e; --warn-wash: rgba(179, 38, 30, 0.08); --good: #0a7d0a;
     /* Series follow the account: rental blue, HELOC orange, phase lines violet, brokerage aqua, paycheck yellow; truck and cards are the neutral "other debt". */
-    --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6; --c-sav: #7cc9ad;
+    --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6; --c-sav: #7cc9ad; --c-home: #8a6d4b;
     /* Each loan's own colour in the amortization tabs: phase lines keep violet as a family but each gets its own hue; truck and cards split the neutrals. */
     --a-solar: #c98a00; --a-reno2: #4a3aa7; --a-hp: #c2417a; --a-batt: #0f8a94; --a-wood: #8a5a2b; --a-truck: #4f6475; --a-wf: #b0463a; --a-usb: #6e7f2e;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
@@ -22,7 +22,7 @@
       --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
       --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
       --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
-      --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a;
+      --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a; --c-home: #b08e66;
       --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
     }
   }
@@ -31,7 +31,7 @@
     --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
     --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
     --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
-    --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a;
+    --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a; --c-home: #b08e66;
     --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
   }
   body { margin: 0; background: var(--sheet); color: var(--ink); font: 14px/1.5 var(--body); }
@@ -227,6 +227,14 @@
         <div class="chart" id="brok" role="img" aria-label="Brokerage balance against the floor, with the first plan and the check-ins"></div>
       </section>
 
+      <section id="sec-nw">
+        <h2>Net worth</h2>
+        <p class="sub" id="nw-sub"></p>
+        <div class="legend" id="nw-legend"></div>
+        <div class="chart" id="nw" role="img" aria-label="Assets stacked above the line, debt below, and net worth as a line, over time"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="nw-table"></div></details>
+      </section>
+
       <section id="sec-amort">
         <h2>Amortization</h2>
         <p class="sub">Each loan on its own: the balance month by month, and what each year's payments go to. The HELOC and the phase lines are interest-only, so their principal is whatever surplus the plan sends them.</p>
@@ -248,7 +256,7 @@
 
       <section id="sec-paths">
         <h2>Other paths from here</h2>
-        <p class="sub">The same balances run under other rules. "Net of paycheck" is net worth at the end of the horizon, including the rental until it sells, minus everything the paycheck put in: the workbook's own yardstick. The residence and the equipment aren't counted.</p>
+        <p class="sub">The same balances run under other rules. "Net of paycheck" is net worth at the end of the horizon, including the rental until it sells, minus everything the paycheck put in: the workbook's own yardstick. Zero Rd counts once you enter its value; the equipment doesn't.</p>
         <div class="table-wrap"><table class="data" id="paths"></table></div>
       </section>
 
@@ -364,7 +372,7 @@ const use = n => (window.claude && typeof window.claude.use === 'function' ? win
       // No working copy yet: start from the latest check-in.
       db.doc('state/current').get().then(c => { if (!c.exists && !edited && checkins.length) { inputs = merge(clone(FIN_INPUTS), checkins.at(-1).inputs); buildForm(); run(); } }).catch(() => {});
     }
-    renderHistory(); renderDebt(); renderBrok();
+    renderHistory(); renderDebt(); renderBrok(); renderNw();
   }, () => { saveline.textContent = 'History unavailable right now.'; });
 })();
 
@@ -374,7 +382,7 @@ function run() {
   try { SIM = simulate(inputs); }
   catch (e) { setStatus('Check the inputs: ' + (e.message || e), 'err'); return; }
   setStatus(`As of ${dateLabel(SIM.inputs.asOf)}`, 'ok');
-  renderFlag(); renderKpis(); renderNow(); renderSteps(); renderTriggers(); renderFlow(); renderDebt(); renderBrok(); renderAmort(); renderHistory(); renderNotes();
+  renderFlag(); renderKpis(); renderNow(); renderSteps(); renderTriggers(); renderFlow(); renderDebt(); renderBrok(); renderNw(); renderAmort(); renderHistory(); renderNotes();
   clearTimeout(pathsTimer); pathsTimer = setTimeout(renderPaths, 250);
 }
 let runTimer = 0;
@@ -679,6 +687,51 @@ function renderDebt() {
 }
 
 // ---------------------------------------------------------------- brokerage
+// Net worth: what you own stacked above the line, what you owe below it, and the difference as a line.
+const nwOf = inp => { const A = inp.accounts; return (A.homeValue || 0) + A.brokerage + (A.savings || 0) + (A.rothIra || 0) + (A.roth401k || 0) + (A.stable || 0) + (A.rentalSold ? 0 : A.rentalValue) - actualDebt(inp); };
+function renderNw() {
+  if (!SIM) return;
+  const node = $('#nw'), W = Math.max(300, node.clientWidth), H = 300, m = { l: 56, r: 12, t: 12, b: 26 };
+  const I = SIM.inputs, A = I.accounts, S = SIM.summary, plan = planPoints();
+  const first = { cal: SIM.n0, value: A.rentalSold ? 0 : A.rentalValue, sold: !!A.rentalSold, brok: A.brokerage, sav: A.savings || 0, inv: { rothIra: A.rothIra || 0, roth401k: A.roth401k || 0, stable: A.stable || 0 }, home: A.homeValue || 0, debt: actualDebt(I), nw: nwOf(I) };
+  const R = [first, ...SIM.rows];
+  const up = [['Zero Rd (value)', r => r.home || 0, 'var(--c-home)'], ['Rental (value)', r => (r.sold ? 0 : r.value), COLOR.rental], ['Brokerage', r => r.brok, COLOR.brok], ['Savings account', r => r.sav || 0, COLOR.sav],
+    ['Roth IRA + Roth 401(k)', r => (r.inv?.rothIra || 0) + (r.inv?.roth401k || 0), COLOR.phase], ['STABLE', r => r.inv?.stable || 0, loanColor('batt')]].filter(([, f]) => R.some(r => f(r) > 0.5));
+  const c0 = Math.min(SIM.n0, plan?.base ? calOf(plan.base.asOf) : SIM.n0), c1 = R.at(-1).cal;
+  const hist = checkins.map(c => ({ cal: calOf(c.asOf), v: nwOf(merge(clone(FIN_INPUTS), c.inputs)) }));
+  const ppts = (plan?.pts ?? []).filter(p => p.nw != null);
+  const top = Math.max(...R.map(r => sum(up.map(([, f]) => f(r)))), ...R.map(r => r.nw), ...hist.map(h => h.v), 1);
+  const bot = -Math.max(...R.map(r => r.debt), 1);
+  const ticks = niceTicks(bot, top, 6), lo = ticks[0], hi = ticks.at(-1);
+  const x = c => m.l + (c - c0) / Math.max(1, c1 - c0) * (W - m.l - m.r), y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="${Math.abs(t) < 1 ? 'var(--ink-2)' : 'var(--grid)'}"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${(t < 0 ? '−' : '') + (Math.abs(t) >= 1e6 ? '$' + nf(Math.abs(t) / 1e6, 1) + 'M' : k$(Math.abs(t)).replace('$0k', '$0'))}</text>`;
+  const step = Math.max(1, Math.ceil((c1 - c0) / 12 / 8));
+  for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += step) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
+  const band = (lowF, highF, col) => `<path d="M${R.map(r => `${x(r.cal).toFixed(1)},${y(highF(r)).toFixed(1)}`).join('L')}L${[...R].reverse().map(r => `${x(r.cal).toFixed(1)},${y(lowF(r)).toFixed(1)}`).join('L')}Z" fill="${col}" stroke="var(--sheet)" stroke-width="0.5"/>`;
+  up.forEach(([, f, col], i) => { const below = r => sum(up.slice(0, i).map(([, h]) => h(r))); g += band(below, r => below(r) + f(r), col); });
+  g += band(() => 0, r => -r.debt, COLOR.other);
+  if (ppts.length > 1) g += `<polyline points="${ppts.filter(p => p.cal <= c1).map(p => `${x(p.cal).toFixed(1)},${y(p.nw).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  g += `<polyline points="${R.map(r => `${x(r.cal).toFixed(1)},${y(r.nw).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="2.5"/>`;
+  for (const h of hist) g += `<circle cx="${x(h.cal)}" cy="${y(h.v)}" r="4.5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/>`;
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  const xh = node.querySelector('.xh');
+  node.querySelector('.hit').addEventListener('pointermove', e => {
+    const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), r = R.find(q => q.cal === c);
+    xh.setAttribute('x1', x(c)); xh.setAttribute('x2', x(c)); xh.setAttribute('visibility', 'visible');
+    if (!r) { showTip(e, L(c), [{ label: 'before this check-in', value: '' }]); return; }
+    const pl = atPlan(plan?.pts, c), h = hist.find(q => q.cal === c);
+    showTip(e, L(c), [{ label: 'Net worth', value: usd(r.nw), color: 'var(--ink)' }, ...[...up].reverse().map(([l, f, col]) => ({ label: l, value: usd(f(r)), color: col, v: f(r) })).filter(q => q.v > 0.5), { label: 'All debt', value: `−${usd(r.debt)}`, color: COLOR.other },
+      ...(pl?.nw != null ? [{ label: 'First plan', value: usd(pl.nw), dash: true }] : []), ...(h ? [{ label: 'Checked in', value: usd(h.v), color: 'var(--ink)' }] : [])]);
+  });
+  node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  legend($('#nw-legend'), [{ label: 'Net worth', color: 'var(--ink)', kind: 'line' }, ...up.map(([l, , c]) => ({ label: l, color: c })), { label: 'All debt (below the line)', color: COLOR.other }, ...(ppts.length > 1 ? [{ label: 'First plan', kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins', kind: 'dot' }] : [])]);
+  const yr = R.filter(r => r.cal % 12 === 11);
+  table($('#nw-table'), ['Year end', ...up.map(([l]) => l), 'All debt', 'Net worth'], yr.map(r => ({ cells: [L(r.cal), ...up.map(([, f]) => usd(f(r))), `−${usd(r.debt)}`, usd(r.nw)] })), { num: j => j > 0 });
+  const df = S.debtFree, atDf = df ? R.find(r => r.cal === df) : null, end = R.at(-1);
+  $('#nw-sub').textContent = `Everything you own above the line (Zero Rd and the rental at their estimated values, brokerage, savings and the Roth and STABLE accounts), everything you owe below it, and net worth as the line between. ${usd(first.nw)} today${atDf ? `, ${usd(atDf.nw)} when the last debt is paid in ${L(df)}` : ''}, and ${k$(end.nw)} by ${Math.floor(end.cal / 12)}.${S.sold ? ` The rental turns into brokerage at the sale in ${L(S.sold)}.` : ''}`;
+}
 function renderBrok() {
   if (!SIM) return;
   const node = $('#brok'), W = Math.max(300, node.clientWidth), H = 220, m = { l: 52, r: 12, t: 12, b: 26 };
@@ -861,7 +914,7 @@ function renderNotes() {
     ['Gifts', `Each gift first keeps what's set for brokerage${S.autoKeep ? ' (raised automatically when brokerage would otherwise dip under the floor before the next gift)' : ''}, then pays down the debt being worked on.`],
     ['The rental', S.sell === 'afterPayoff' ? `Sold the month its mortgage is prepaid: ${usd(A.rentalValue)} growing ${nf(I.rental.appr * 100, 1)}% a year, less ${nf(I.rental.commission * 100)}% commission, ${nf(I.rental.capGains * 100)}% capital gains over the ${usd(I.rental.basis)} basis and ${usd(I.rental.recapture)} recapture.` : S.sell === 'never' ? 'Kept for good; rent keeps coming in and its value counts in net worth.' : `Sold in ${L(calOf(S.sellOn))}; the equity pays the truck, then the HELOC.`],
     ['Check-ins', 'Your edits save as you type, to this page’s own database (and to this browser). Save check-in files a dated copy of every balance and setting, with the plan it makes. "Start next month" fills in next month as the plan expects it; correct what differs from your statements, then save. The first check-in is the plan the later ones are measured against.'],
-    ['Not in it', 'Living costs beyond this system, property tax and insurance, income tax, the residence’s value, and resale of equipment. The phase costs and savings come from the solar, heat pump and off-grid pages.'],
+    ['Not in it', 'Living costs beyond this system, property tax and insurance, income tax, and resale of equipment. Zero Rd’s value counts in net worth once you enter it under Accounts. The phase costs and savings come from the solar, heat pump and off-grid pages.'],
   ];
   $('#notes').replaceChildren(...items.map(([k, v]) => { const li = el('li'); li.append(el('b', null, k + '. '), document.createTextNode(v)); return li; }));
 }
@@ -880,6 +933,7 @@ const GROUPS = () => [
     ['accounts.rothIra', 'Roth IRA', 'usd'], ['accounts.rothIraAdd', 'Roth IRA, added per month', 'usd'], ['accounts.rothIraRet', 'Roth IRA return', 'pct'],
     ['accounts.roth401k', 'Roth 401(k)', 'usd'], ['accounts.roth401kAdd', 'Roth 401(k), added per month', 'usd'], ['accounts.roth401kRet', 'Roth 401(k) return', 'pct'],
     ['accounts.stable', 'STABLE account', 'usd'], ['accounts.stableAdd', 'STABLE, added per month', 'usd'], ['accounts.stableRet', 'STABLE return', 'pct'],
+    ['accounts.homeValue', 'Zero Rd worth', 'usd'], ['accounts.homeAppr', 'Zero Rd appreciation per year', 'pct'],
     ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
     ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },
@@ -967,5 +1021,5 @@ $('#next').addEventListener('click', () => {
 buildForm();
 run();
 let rz = 0;
-new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (SIM) { renderFlow(); renderDebt(); renderBrok(); renderAmort(); } }); }).observe($('#results'));
+new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (SIM) { renderFlow(); renderDebt(); renderBrok(); renderNw(); renderAmort(); } }); }).observe($('#results'));
 </script>
