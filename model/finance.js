@@ -40,8 +40,11 @@ export const FIN_INPUTS = {
     redrawAt: 100000,
     phaseApr: 0.07,          // owner: a new HELOC for each phase, taken out once the renovation line is gone
     // Owner: killing the renovation HELOC is priority one, even if it means
-    // selling the rental. December 2026 is assumed as the first realistic close.
-    sell: 'onDate',          // 'onDate'; 'afterPayoff': sell the month the rental mortgage is prepaid; 'never'
+    // selling the rental; but the lower level goes on this HELOC too, and then
+    // a sale closes it only ~10 months sooner for ~$885k of 2046 net worth. So
+    // keep the rental; selling in Dec 2026 (the first realistic close) is one
+    // setting away.
+    sell: 'afterPayoff',     // 'afterPayoff': sell the month the rental mortgage is prepaid; 'onDate'; 'never'
     sellOn: '2026-12',
     prepayMortgage: true,    // once every phase is paid, surplus prepays the rental mortgage
     refillFloor: true,       // surplus, and gifts, refill brokerage first while it is under the floor
@@ -55,9 +58,12 @@ export const FIN_INPUTS = {
   escalation: 0.033,         // energy savings grow with utility rates
   // Phases after the renovation, in order. status: pending | open (bal is its
   // line's balance) | done. saves: yearly bill change at today's rates.
+  // via: 'line' takes out a new HELOC once the renovation line is gone;
+  // 'heloc' draws on the renovation HELOC as soon as it has room (not before
+  // `from`), and the line isn't closed until it has.
   phases: [
     { id: 'solar', name: 'Solar: 72 × 440 W on the shop roof, two 18kPVs', amount: 29891, saves: 2691, status: 'pending', bal: 0 },
-    { id: 'reno2', name: 'Lower-level renovation', amount: 100000, saves: 0, status: 'pending', bal: 0 },
+    { id: 'reno2', name: 'Lower-level renovation', amount: 100000, saves: 0, status: 'pending', bal: 0, via: 'heloc', from: '2026-07' },   // owner: on this HELOC
     { id: 'hp', name: 'Heat pump, buffer and controls', amount: 10028, saves: 173, status: 'pending', bal: 0 },
     { id: 'batt', name: 'Batteries (32 kWh outage kit)', amount: 6800, saves: 0, status: 'pending', bal: 0 },
     { id: 'wood', name: 'Outdoor wood boiler', amount: 18000, saves: -622, status: 'pending', bal: 0 },
@@ -185,9 +191,17 @@ function simCore(inp) {
     // Lines close and phases open.
     for (const p of phases) if (p.status === 'open' && p.bal <= 0.5) { p.status = 'done'; p.bal = 0; ev(t, 'close', `${p.name} line paid off`); }
     if (S.mode === 'separate') {
-      if (heloc <= 0.5 && helocClosed == null) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Renovation HELOC paid off: close it'); }
+      // Phases set to ride the renovation HELOC draw on it once it has room.
+      for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'heloc' && helocClosed == null)) {
+        if (cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5) continue;
+        heloc += ph.amount; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
+        row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
+        ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });
+      }
+      const waiting = phases.some(p => p.status === 'pending' && p.via === 'heloc');
+      if (heloc <= 0.5 && helocClosed == null && !waiting) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Renovation HELOC paid off: close it'); }
       if (helocClosed != null && !openPhase()) {
-        const next = phases.find(p => p.status === 'pending');
+        const next = phases.find(p => p.status === 'pending' && p.via !== 'heloc');
         if (next) { next.status = 'open'; next.bal = next.amount; amort['ph:' + next.id][k].draw = next.amount; row.lumps.push({ what: `Take out a new ${pct(S.phaseApr)} HELOC and buy: ${next.name}`, amt: next.amount, from: 'new line' }); ev(t, 'open', `${next.name}: take out a new HELOC`, next.amount, { id: next.id }); }
       }
     } else {
@@ -273,7 +287,8 @@ export function variants(inp) {
     v('As entered', () => {}),
     ...(inp.strategy.sell === 'onDate'
       ? [v('Keep the rental; sell once its mortgage is prepaid (workbook)', I => { I.strategy.sell = 'afterPayoff'; }), v('Keep the rental for good', I => { I.strategy.sell = 'never'; })]
-      : [v('Sell the rental next month, equity to the truck and HELOC', I => { I.strategy.sell = 'onDate'; I.strategy.sellOn = ymOf(calOf(I.asOf) + 1); }), v('Keep the rental for good', I => { I.strategy.sell = 'never'; })]),
+      : [v(`Sell the rental in ${labelOf(Math.max(calOf(inp.strategy.sellOn), calOf(inp.asOf) + 1))}, equity to the truck and HELOC`, I => { I.strategy.sell = 'onDate'; I.strategy.sellOn = ymOf(Math.max(calOf(I.strategy.sellOn), calOf(I.asOf) + 1)); }), v('Keep the rental for good', I => { I.strategy.sell = 'never'; })]),
+    ...(inp.phases.some(p => p.via === 'heloc' && p.status === 'pending') ? [v('Lower level on a new HELOC after this one closes', I => { for (const p of I.phases) if (p.via === 'heloc') p.via = 'line'; })] : []),
     v('Phases redraw the HELOC at $100k instead (workbook)', I => { I.strategy.mode = 'redraw'; }),
     v('Brokerage pays a line off when it can keep $50k', I => { I.strategy.brokPayoff = true; }),
     v(inp.strategy.truckFirst ? 'Gifts and surplus to the HELOC before the truck' : 'Gifts and surplus pay off the truck first', I => { I.strategy.truckFirst = !I.strategy.truckFirst; }),
