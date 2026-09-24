@@ -47,6 +47,7 @@ export const FIN_INPUTS = {
     floor: 20000, ret: 0.08,
     brokPayoff: false, cushion: 50000,   // workbook rule: brokerage pays a line off when it can keep the cushion
     autoKeep: true,          // hold back enough of the gift before a brokerage low to keep the floor
+    truckFirst: true,        // gifts and surplus pay off the 8.99% truck before the 7% HELOC (owner asked)
   },
   rental: { appr: 0.03, commission: 0.04, basis: 299000, capGains: 0.15, recapture: 12500 },
   escalation: 0.033,         // energy savings grow with utility rates
@@ -153,8 +154,9 @@ function simCore(inp) {
       ev(t, 'sale', 'Rental sold', gross - tax, { toTruck, toLine, tax, gross });
     };
     if (!sold && S.sell === 'onDate' && cal === sellOn) sell(' (on the date you set)');
-    const target = () => (heloc > 0 ? 'heloc' : openPhase() ? 'ph:' + openPhase().id : null);
+    const target = () => (S.truckFirst && truck > 0.005 ? 'truck' : heloc > 0 ? 'heloc' : openPhase() ? 'ph:' + openPhase().id : null);
     const payDown = (key, amt) => {
+      if (key === 'truck') { const p = Math.min(amt, truck); truck -= p; amort.truck[k].principal += p; return p; }
       if (key === 'heloc') { const p = Math.min(amt, heloc); heloc -= p; amort.heloc[k].principal += p; return p; }
       const ph = phases.find(q => 'ph:' + q.id === key); const p = Math.min(amt, ph.bal); ph.bal -= p; amort[key][k].principal += p; return p;
     };
@@ -170,6 +172,7 @@ function simCore(inp) {
     // Surplus waterfall: refill the floor, then the HELOC, then the open
     // phase line, then the mortgage once every phase is paid, then brokerage.
     if (surplus > 0 && S.refillFloor && brok < S.floor) { const p = Math.min(surplus, S.floor - brok); brok += p; surplus -= p; row.extra.brokerage = p; floorHits++; }
+    if (surplus > 0 && S.truckFirst && truck > 0.005) { const p = payDown('truck', surplus); surplus -= p; row.extra.truck = p; }
     if (surplus > 0 && heloc > 0) { const p = payDown('heloc', surplus); surplus -= p; row.extra.heloc = p; }
     if (surplus > 0 && openPhase()) { const key = 'ph:' + openPhase().id, p = payDown(key, surplus); surplus -= p; row.extra[key] = p; }
     const allDone = phases.every(p => p.status === 'done');
@@ -199,7 +202,7 @@ function simCore(inp) {
 
     // Workbook rule: brokerage pays a line off when it can keep the cushion.
     if (S.brokPayoff) {
-      const key = target(), bal = key === 'heloc' ? heloc : key ? openPhase().bal : 0;
+      const key = target(), bal = key === 'truck' ? truck : key === 'heloc' ? heloc : key ? openPhase().bal : 0;
       if (key && brok >= bal + S.cushion) { brok -= bal; payDown(key, bal); row.lumps.push({ what: `Pay off ${nameOf(key, phases)} from brokerage`, amt: bal, from: 'brokerage' }); ev(t, 'brok', `Brokerage pays off ${nameOf(key, phases)}`, bal); }
     }
 
@@ -231,6 +234,7 @@ function simCore(inp) {
 const pct = v => `${+(v * 100).toFixed(2)}%`;
 export function nameOf(key, phases) {
   if (key === 'heloc') return 'the HELOC';
+  if (key === 'truck') return 'the truck';
   const p = phases.find(q => 'ph:' + q.id === key);
   return p ? `the ${p.name.split(':')[0].toLowerCase()} line` : key;
 }
@@ -269,6 +273,7 @@ export function variants(inp) {
     v('Keep the rental for good', I => { I.strategy.sell = 'never'; }),
     v('Phases redraw the HELOC at $100k instead (workbook)', I => { I.strategy.mode = 'redraw'; }),
     v('Brokerage pays a line off when it can keep $50k', I => { I.strategy.brokPayoff = true; }),
+    v(inp.strategy.truckFirst ? 'Gifts and surplus to the HELOC before the truck' : 'Gifts and surplus pay off the truck first', I => { I.strategy.truckFirst = !I.strategy.truckFirst; }),
     v('$250/mo more from the paycheck', I => { I.income.paycheck += 250; I.income.paycheckSold += 250; }),
   ];
 }

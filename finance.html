@@ -399,7 +399,7 @@ function table(node, head, rows, opts = {}) {
 }
 const phaseName = id => SIM.inputs.phases.find(p => p.id === id)?.name ?? id;
 const shortPhase = id => phaseName(id).split(':')[0];
-const acctName = key => key.startsWith('ph:') ? `${shortPhase(key.slice(3))} line` : Object.fromEntries(DEBTS)[key];
+const acctName = key => key === 'truck' ? 'truck' : key.startsWith('ph:') ? `${shortPhase(key.slice(3))} line` : Object.fromEntries(DEBTS)[key];
 const acctColor = key => key === 'heloc' ? COLOR.heloc : key === 'mortgage' ? COLOR.rental : key.startsWith('ph:') ? COLOR.phase : COLOR.other;
 
 // ---------------------------------------------------------------- KPIs
@@ -446,7 +446,7 @@ function renderNow() {
   const R = SIM.rows;
   $('#months').replaceChildren(...R.slice(0, 3).map((r, j) => monthCard(r, j === 0)));
   const r = R[0], I = SIM.inputs;
-  $('#now-sub').textContent = `From the balances you entered for the end of ${L(SIM.n0)}. Autopays first, then whatever is left goes where the plan says: ${I.strategy.refillFloor ? `brokerage until it's back at the ${usd(I.strategy.floor)} floor, then ` : ''}the HELOC, then the open phase line${I.strategy.prepayMortgage ? ', then the rental mortgage once every phase is paid' : ''}. Pay to the cent when you can; a few dollars either way washes out at the next check-in.`;
+  $('#now-sub').textContent = `From the balances you entered for the end of ${L(SIM.n0)}. Autopays first, then whatever is left goes where the plan says: ${I.strategy.refillFloor ? `brokerage until it's back at the ${usd(I.strategy.floor)} floor, then ` : ''}${I.strategy.truckFirst && I.accounts.truck > 0 ? 'the truck, then ' : ''}the HELOC, then the open phase line${I.strategy.prepayMortgage ? ', then the rental mortgage once every phase is paid' : ''}. Pay to the cent when you can; a few dollars either way washes out at the next check-in.`;
 }
 
 // ---------------------------------------------------------------- steps
@@ -669,7 +669,7 @@ function renderAmort() {
   const keys = amortAccounts();
   if (!keys.includes(amortKey)) amortKey = keys[0];
   const tabs = $('#amort-tabs');
-  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = acctColor(k); b.append(i, document.createTextNode(acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
+  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = acctColor(k); b.append(i, document.createTextNode(k === 'truck' ? 'Truck loan' : acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
   if (!amortKey) return;
   const A = SIM.amort[amortKey], I = SIM.inputs, rows = SIM.rows;
   const apr = amortKey === 'heloc' ? I.accounts.helocApr : amortKey === 'mortgage' ? I.accounts.mortgageApr : amortKey === 'truck' ? I.accounts.truckApr : amortKey.startsWith('ph:') ? I.strategy.phaseApr : 0;
@@ -770,7 +770,7 @@ function renderNotes() {
   const items = [
     ['Each month', `Interest accrues on the truck (${nf(A.truckApr * 100, 2)}%), the rental mortgage (${nf(A.mortgageApr * 100, 3)}%), the HELOC (${nf(A.helocApr * 100, 2)}%, interest-only) and any open phase line (${nf(S.phaseApr * 100, 2)}%, interest-only). The cards are 0% with minimums until their due month, when the balance is paid in full from brokerage. Rent (${usd(I.income.rentalNet, 2)} net, plus ${usd(I.income.rent2)} second-dwelling rent from ${L(calOf(I.income.rent2From))}) grows ${nf(I.income.inflation * 100, 1)}% a year; energy savings from finished phases grow ${nf(I.escalation * 100, 1)}%.`],
     ['The paycheck', S.shortfall === 'brokerage' ? `Your contribution stays at ${usd(I.income.paycheck)} a month (${usd(I.income.paycheckSold)} once the rental is sold). When rent and savings don't cover the payments, brokerage covers the gap; that is the main reason brokerage dips.` : `The workbook rule: ${usd(I.income.paycheck)} a month, or the whole shortfall if that's larger.`],
-    ['Surplus', `What's left after the payments goes, in order: ${S.refillFloor ? `brokerage until it's back at ${usd(S.floor)}, ` : ''}the HELOC, the open phase line, ${S.prepayMortgage ? 'the rental mortgage once every phase is paid, ' : ''}then brokerage, which earns ${nf(S.ret * 100, 1)}%.`],
+    ['Surplus', `What's left after the payments goes, in order: ${S.refillFloor ? `brokerage until it's back at ${usd(S.floor)}, ` : ''}${S.truckFirst ? 'the truck (8.99%, and paying it off frees its payment), ' : ''}the HELOC, the open phase line, ${S.prepayMortgage ? 'the rental mortgage once every phase is paid, ' : ''}then brokerage, which earns ${nf(S.ret * 100, 1)}%.`],
     ['Phases', S.mode === 'separate' ? `Your HELOC-first rule: nothing new is bought until the renovation HELOC is at $0. Then each phase opens its own ${nf(S.phaseApr * 100, 2)}% line in turn, and all surplus pays it off before the next opens. Set a phase to open (with its balance) or done at a check-in and the plan picks up from there.` : `Workbook rule: each phase redraws the HELOC once it falls to ${usd(S.redrawAt)} and the limit allows.`],
     ['Gifts', `Each gift first keeps what's set for brokerage${S.autoKeep ? ' (raised automatically when brokerage would otherwise dip under the floor before the next gift)' : ''}, then pays down the debt being worked on.`],
     ['The rental', S.sell === 'afterPayoff' ? `Sold the month its mortgage is prepaid: ${usd(A.rentalValue)} growing ${nf(I.rental.appr * 100, 1)}% a year, less ${nf(I.rental.commission * 100)}% commission, ${nf(I.rental.capGains * 100)}% capital gains over the ${usd(I.rental.basis)} basis and ${usd(I.rental.recapture)} recapture.` : S.sell === 'never' ? 'Kept for good; rent keeps coming in and its value counts in net worth.' : `Sold in ${L(calOf(S.sellOn))}; the equity pays the truck, then the HELOC.`],
@@ -802,6 +802,7 @@ const GROUPS = () => [
     ['strategy.mode', 'After the renovation HELOC', 'select', [['separate', 'Close it; one line per phase'], ['redraw', 'Phases redraw the HELOC']]],
     ['strategy.redrawAt', 'Redraw once the HELOC is down to', 'usd'], ['strategy.phaseApr', 'Phase line rate', 'pct'],
     ['strategy.shortfall', 'When payments outrun rent + paycheck', 'select', [['brokerage', 'Brokerage covers it'], ['paycheck', 'Paycheck covers it (workbook)']]],
+    ['strategy.truckFirst', 'Gifts and surplus pay the truck first', 'bool'],
     ['strategy.floor', 'Brokerage floor', 'usd'], ['strategy.refillFloor', 'Refill brokerage to the floor first', 'bool'], ['strategy.autoKeep', 'Gifts keep enough to hold the floor', 'bool'],
     ['strategy.ret', 'Brokerage return', 'pct'],
     ['strategy.prepayMortgage', 'Prepay the mortgage after the phases', 'bool'],
