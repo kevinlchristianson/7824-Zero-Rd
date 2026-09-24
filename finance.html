@@ -751,6 +751,11 @@ function renderAmort() {
     const node = $('#amort-bal'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
     const cals = [SIM.n0, ...rows.slice(0, end + 1).map(r => r.cal)];
     const balAt = (p, j) => (j === 0 ? p.A[0].bal0 : p.A[j - 1].bal);
+    // Phases drawn on the renovation HELOC show as their own band inside it.
+    const partsAt = j => (j === 0 ? Object.fromEntries(I.accounts.helocParts || []) : rows[j - 1].helocParts ?? {});
+    const partIds = [...new Set(rows.slice(0, end + 1).flatMap(r => Object.keys(r.helocParts ?? {})))];
+    const bands = parts.flatMap(p => p.k !== 'heloc' || !partIds.length ? [{ name: p.name, col: p.col, v: j => balAt(p, j) }]
+      : [{ name: p.name, col: p.col, v: j => Math.max(0, balAt(p, j) - sum(Object.values(partsAt(j)))) }, ...partIds.map(id => ({ name: `${shortPhase(id)} (on HELOC 1)`, col: loanColor('ph:' + id), v: j => partsAt(j)[id] ?? 0 }))]);
     const series = cals.map((cal, j) => ({ cal, v: j === 0 ? A[0].bal0 : A[j - 1].bal }));
     const hi = niceTicks(0, Math.max(...series.map(s => s.v), 1), 4).at(-1), ticks = niceTicks(0, hi, 4);
     const c0 = cals[0], c1 = cals.at(-1);
@@ -759,10 +764,10 @@ function renderAmort() {
     for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
     const step = Math.max(1, Math.ceil((c1 - c0) / 12 / 6));
     for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += step) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
-    if (all) {
+    if (bands.length > 1) {
       const base = cals.map(() => 0);
-      for (const p of parts) {
-        const topv = cals.map((_, j) => base[j] + balAt(p, j));
+      for (const p of bands) {
+        const topv = cals.map((_, j) => base[j] + p.v(j));
         if (topv.some((v, j) => v - base[j] > 0.5)) g += `<path d="M${cals.map((c, j) => `${x(c).toFixed(1)},${y(topv[j]).toFixed(1)}`).join('L')}L${cals.map((c, j) => [c, j]).reverse().map(([c, j]) => `${x(c).toFixed(1)},${y(base[j]).toFixed(1)}`).join('L')}Z" fill="${p.col}" stroke="var(--sheet)" stroke-width="0.5"/>`;
         topv.forEach((v, j) => { base[j] = v; });
       }
@@ -777,7 +782,7 @@ function renderAmort() {
       const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), j = Math.max(0, Math.min(cals.length - 1, c - c0)), s = series[j];
       xh.setAttribute('x1', x(s.cal)); xh.setAttribute('x2', x(s.cal)); xh.setAttribute('visibility', 'visible');
       const a = A[j - 1];
-      const lines = all ? [...parts.filter(p => balAt(p, j) > 0.5).reverse().map(p => ({ label: p.name, value: usd(balAt(p, j)), color: p.col })), { label: 'Total', value: usd(s.v) }]
+      const lines = bands.length > 1 ? [...bands.filter(p => p.v(j) > 0.5).reverse().map(p => ({ label: p.name, value: usd(p.v(j)), color: p.col })), { label: 'Total', value: usd(s.v) }]
         : [{ label: 'Balance', value: usd(s.v), color: col }];
       showTip(e, L(s.cal), [...lines, ...(a ? [{ label: 'Interest', value: usd(a.interest, 2), color: COLOR.int }, { label: 'Principal', value: usd(a.principal, 2), color: all ? undefined : col }, ...(a.draw ? [{ label: 'Drawn', value: usd(a.draw) }] : [])] : [])]);
     });
