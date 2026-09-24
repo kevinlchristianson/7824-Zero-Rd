@@ -724,15 +724,15 @@ function amortAccounts() {
 }
 function renderAmort() {
   const keys = amortAccounts();
-  if (amortKey !== 'all' && !keys.includes(amortKey)) amortKey = keys[0];
+  if (amortKey !== 'all' && amortKey !== 'allx' && !keys.includes(amortKey)) amortKey = keys[0];
   const tabs = $('#amort-tabs');
   const tab = (k, label, color) => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = color; b.append(i, document.createTextNode(label)); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; };
-  tabs.replaceChildren(...(keys.length > 1 ? [tab('all', 'All loans', 'var(--ink)')] : []), ...keys.map(k => tab(k, k === 'truck' ? 'Truck loan' : acctName(k), loanColor(k))));
+  tabs.replaceChildren(...(keys.length > 1 ? [tab('all', 'All loans', 'var(--ink)')] : []), ...(keys.includes('mortgage') && keys.length > 2 ? [tab('allx', 'All but the rental', 'var(--muted)')] : []), ...keys.map(k => tab(k, k === 'truck' ? 'Truck loan' : acctName(k), loanColor(k))));
   if (!amortKey) return;
-  const I = SIM.inputs, rows = SIM.rows, all = amortKey === 'all';
+  const I = SIM.inputs, rows = SIM.rows, all = amortKey === 'all' || amortKey === 'allx';
   // Stack bottom to top the way the debt chart does: mortgage, truck, cards, HELOC, phase lines.
   const order = ['mortgage', 'truck', 'wf', 'usb', 'heloc'];
-  const partKeys = all ? [...order.filter(k => keys.includes(k)), ...keys.filter(k => !order.includes(k))] : [amortKey];
+  const partKeys = all ? [...order.filter(k => keys.includes(k)), ...keys.filter(k => !order.includes(k))].filter(k => amortKey === 'all' || k !== 'mortgage') : [amortKey];
   const parts = partKeys.map(k => ({ k, A: SIM.amort[k], col: loanColor(k), name: k === 'truck' ? 'Truck loan' : acctName(k) }));
   const A = parts[0].A.map((_, i) => { const o = { bal0: 0, draw: 0, interest: 0, principal: 0, bal: 0 }; for (const p of parts) for (const f in o) o[f] += p.A[i][f]; return o; });
   const apr = amortKey === 'heloc' ? I.accounts.helocApr : amortKey === 'mortgage' ? I.accounts.mortgageApr : amortKey === 'truck' ? I.accounts.truckApr : amortKey.startsWith('ph:') ? I.strategy.phaseApr : 0;
@@ -773,7 +773,7 @@ function renderAmort() {
       const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), j = Math.max(0, Math.min(cals.length - 1, c - c0)), s = series[j];
       xh.setAttribute('x1', x(s.cal)); xh.setAttribute('x2', x(s.cal)); xh.setAttribute('visibility', 'visible');
       const a = A[j - 1];
-      const lines = all ? [...parts.filter(p => balAt(p, j) > 0.5).reverse().map(p => ({ label: p.name, value: usd(balAt(p, j)), color: p.col })), { label: 'All loans', value: usd(s.v) }]
+      const lines = all ? [...parts.filter(p => balAt(p, j) > 0.5).reverse().map(p => ({ label: p.name, value: usd(balAt(p, j)), color: p.col })), { label: 'Total', value: usd(s.v) }]
         : [{ label: 'Balance', value: usd(s.v), color: col }];
       showTip(e, L(s.cal), [...lines, ...(a ? [{ label: 'Interest', value: usd(a.interest, 2), color: COLOR.int }, { label: 'Principal', value: usd(a.principal, 2), color: all ? undefined : col }, ...(a.draw ? [{ label: 'Drawn', value: usd(a.draw) }] : [])] : [])]);
     });
@@ -800,7 +800,7 @@ function renderAmort() {
     node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
     node.querySelectorAll('.hit').forEach(h => { const o = Y[+h.dataset.i]; h.addEventListener('pointermove', e => showTip(e, String(o.yr), [...(all ? parts.map((p, n) => ({ label: `${p.name} principal`, value: usd(o.by[n]), color: p.col, v: o.by[n] })).filter(r => r.v > 0.5).reverse() : [{ label: 'Principal', value: usd(o.principal), color: col }]), { label: 'Interest', value: usd(o.interest), color: COLOR.int }, { label: 'Balance at year end', value: usd(o.end) }])); h.addEventListener('pointerleave', hideTip); });
   }
-  legend($('#amort-legend'), all ? [...parts.map(p => ({ label: p.name, color: p.col })), { label: 'Interest, all loans', color: COLOR.int }] : [{ label: 'Principal', color: col }, { label: 'Interest', color: COLOR.int }]);
+  legend($('#amort-legend'), all ? [...parts.map(p => ({ label: p.name, color: p.col })), { label: 'Interest', color: COLOR.int }] : [{ label: 'Principal', color: col }, { label: 'Interest', color: COLOR.int }]);
   table($('#amort-table'), ['Year', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], Y.map(o => ({ cells: [String(o.yr), usd(o.start), o.draw ? usd(o.draw) : '—', usd(o.interest), usd(o.principal), usd(o.end)] })), { num: j => j > 0 });
   table($('#amort-months'), ['Month', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], A.slice(0, 24).map((x, i) => ({ cells: [L(rows[i].cal), usd(x.bal0, 2), x.draw ? usd(x.draw) : '—', usd(x.interest, 2), usd(x.principal, 2), usd(x.bal, 2)] })), { num: j => j > 0 });
 }
