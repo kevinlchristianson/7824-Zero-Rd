@@ -1,8 +1,7 @@
 // Heating and cooling model for 7824 Zero Rd.
 //
-// Five zones, simulated on the Casper TMY3 year in 15-minute steps:
+// Four zones, simulated on the Casper TMY3 year in 15-minute steps:
 //   shop    north leg main block        heated, deep setback
-//   vest    vestibule across its west end   unconditioned buffer
 //   ground  center block, ground level  heated, setback
 //   upper   center block, upper level   heated and cooled
 //   garage  south leg                   unconditioned
@@ -16,9 +15,9 @@
 
 import { DEFAULTS, wallsOf, vestibuleDepth, openings, openingArea } from './params.js';
 
-export const ZONES = ['shop', 'vest', 'ground', 'upper', 'garage'];
+export const ZONES = ['shop', 'ground', 'upper', 'garage'];
 export const ZONE_NAMES = {
-  shop: 'Shop', vest: 'Vestibule', ground: 'Center, ground level',
+  shop: 'Shop', ground: 'Center, ground level',
   upper: 'Center, upper level', garage: 'South leg',
 };
 export const GROUPS = [
@@ -34,7 +33,6 @@ export const INPUTS = {
     wallR: 15, ceilingR: 40, minF: 45, occF: 70, hoursPerWeek: 12,
     sessionHours: 6, startHour: 8, ach50: 1.5, gainsOn: 0.3, gainsOff: 0,
   },
-  vest: { wallR: 15, ceilingR: 40, ach50: 6 },          // owner: walls built like the shop's, 12" brick + R-15 CCF
   // Center block airtightness is unknown: a best guess for both levels,
   // plus the tight and leaky ends of a plausible range.
   center: { ach50: 5, achLow: 3, achHigh: 8 },
@@ -47,7 +45,7 @@ export const INPUTS = {
     gainsOn: 0.2, gainsOff: 0.05,
   },
   garage: { wallR: 0, ceilingR: 0, ach50: 15 },
-  party: { shopCenterR: 15, garageCenterR: 30, shopVestR: 15 },
+  party: { shopCenterR: 15, garageCenterR: 30 },
   glass: {
     windowU: 0.45, windowSHGC: 0.45, blinds: 0.85, doorU: 0.35,
     archU: 0.55, archSHGC: 0.55, garageDoorU: 1.0,
@@ -133,11 +131,6 @@ export const SCHEMA = [
     ['rates.gasMonthly', 'Gas customer charge, per month', '$', 'given', 0, 200, 0.01],
     ['rates.elecMonthly', 'Electric basic charge, per month', '$', 'given', 0, 200, 0.01],
   ] },
-  { group: 'Vestibule', items: [
-    ['vest.wallR', 'Wall foam (CCF)', 'R', 'given', 0, 60, 0.5],
-    ['vest.ceilingR', 'Attic insulation', 'R', 'assumed', 0, 100, 1],
-    ['vest.ach50', 'Airtightness', 'ACH50', 'assumed', 0.3, 40, 0.1],
-  ] },
   { group: 'South leg', items: [
     ['garage.wallR', 'Wall insulation (no foam)', 'R', 'given', 0, 60, 0.5],
     ['garage.ceilingR', 'Ceiling insulation', 'R', 'assumed', 0, 100, 1],
@@ -146,15 +139,12 @@ export const SCHEMA = [
   { group: 'Walls between zones', items: [
     ['party.shopCenterR', 'Shop ↔ center', 'R', 'assumed', 0, 60, 0.5],
     ['party.garageCenterR', 'South leg ↔ center', 'R', 'assumed', 0, 60, 0.5],
-    ['party.shopVestR', 'Shop ↔ vestibule', 'R', 'given', 0, 60, 0.5],
   ] },
   { group: 'Windows & doors', items: [
     ['glass.windowU', 'Window U-factor', 'U', 'assumed', 0.1, 1.3, 0.01],
     ['glass.windowSHGC', 'Window SHGC', '', 'assumed', 0.1, 0.9, 0.01],
     ['glass.blinds', 'Blinds pass-through', '×', 'assumed', 0.3, 1, 0.05],
     ['glass.doorU', 'Door U-factor', 'U', 'assumed', 0.1, 1.3, 0.01],
-    ['glass.archU', 'Vestibule arch glass U', 'U', 'assumed', 0.1, 1.3, 0.01],
-    ['glass.archSHGC', 'Vestibule arch SHGC', '', 'assumed', 0.1, 0.9, 0.01],
     ['glass.garageDoorU', 'Overhead door U', 'U', 'assumed', 0.1, 1.5, 0.01],
   ] },
   { group: 'Walls, slab & masonry', items: [
@@ -214,7 +204,9 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   const C = wallsOf(c.roof, p.overhang);
   const N = wallsOf(p.north.roof, p.overhang);
   const vd = vestibuleDepth(p);
-  const SHOP = { ...N, x0: N.x0 + vd }, VEST = { ...N, x1: N.x0 + vd };
+  // The vestibule across the north leg's west end is cosmetic (owner): it
+  // isn't modeled, and the shop's west wall counts as an outside wall.
+  const SHOP = { ...N, x0: N.x0 + vd };
   const GAR = wallsOf(p.south.roof, p.overhang);
   const plate = c.ground + c.floor + c.upper;
 
@@ -243,7 +235,6 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   const zones = {
     shop: { A: area(SHOP) - overlap(SHOP, C), H: p.north.wall, hStack: p.north.wall, hWind: p.north.wall, slabMass: true, furnish: 1.0 },
-    vest: { A: area(VEST), H: p.north.wall, hStack: p.north.wall, hWind: p.north.wall, slabMass: true, furnish: 0.2 },
     ground: { A: area(C), H: c.ground, hStack: c.ground, hWind: c.ground, slabMass: true, furnish: 1.0 },
     upper: { A: area(C), H: c.upper, hStack: c.upper, hWind: plate, slabMass: false, furnish: 2.0 },
     garage: { A: area(GAR) - overlap(GAR, C), H: p.south.wall, hStack: p.south.wall, hWind: p.south.wall, slabMass: true, furnish: 0.5 },
@@ -252,8 +243,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   // Exterior wall runs [ft] by zone and face ('L' = under the porch).
   const runs = {
-    shop: { N: faceLen(SHOP, 'N') - edgeIn(SHOP, 'N', C), E: faceLen(SHOP, 'E') - edgeIn(SHOP, 'E', C), S: faceLen(SHOP, 'S') - edgeIn(SHOP, 'S', C) },
-    vest: { N: faceLen(VEST, 'N'), S: faceLen(VEST, 'S'), W: faceLen(VEST, 'W') },
+    shop: { N: faceLen(SHOP, 'N') - edgeIn(SHOP, 'N', C), E: faceLen(SHOP, 'E') - edgeIn(SHOP, 'E', C), S: faceLen(SHOP, 'S') - edgeIn(SHOP, 'S', C), W: faceLen(SHOP, 'W') },
     ground: {
       N: faceLen(C, 'N') - edgeIn(C, 'N', SHOP) - edgeIn(C, 'N', GAR),
       E: faceLen(C, 'E') - edgeIn(C, 'E', SHOP) - edgeIn(C, 'E', GAR),
@@ -279,7 +269,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   };
 
   for (const o of openings(p)) {
-    if (o.kind === 'open') continue;
+    if (o.kind === 'open' || !ZONES.includes(o.zone)) continue;
     const A = openingArea(o);
     const glazed = o.kind === 'window' || o.kind === 'glassDoor' || o.kind === 'arch';
     const U = o.kind === 'arch' ? g.archU : glazed ? g.windowU : o.kind === 'garageDoor' ? g.garageDoorU : g.doorU;
@@ -303,7 +293,6 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   const fx = inp.framing;
   const wallRcore = {
     shop: inp.shop.wallR * fx + inp.brickR + GYP,
-    vest: inp.vest.wallR * fx + inp.brickR + GYP,
     ground: inp.ground.wallR * fx + inp.brickR + GYP,
     upper: inp.upper.wallR * fx + inp.brickR + GYP,
     garage: inp.garage.wallR * fx + inp.brickR,
@@ -323,7 +312,6 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   // Ceilings to vented attics.
   const ceil = (z, R) => els.push({ zone: z, group: 'ceiling', to: 'attic', face: 'H', A: zones[z].A, Rcore: R + GYP, Rin: R_CEIL_IN });
   ceil('shop', inp.shop.ceilingR);
-  ceil('vest', inp.vest.ceilingR);
   ceil('upper', inp.upper.roofR);
   ceil('garage', inp.garage.ceilingR);
 
@@ -340,10 +328,6 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   link('shop', 'upper', 'walls', pShop * Math.max(0, p.north.wall - hSG), shopParty);
   link('garage', 'ground', 'walls', pGar * Math.min(p.south.wall, c.ground + c.floor / 2) - doorA('garage', 'ground'),
     inp.party.garageCenterR * fx + inp.brickR + GYP + 2 * R_IN);
-  link('shop', 'vest', 'walls', faceLen(SHOP, 'W') * p.north.wall - doorA('shop', 'vest'),
-    inp.party.shopVestR * fx + inp.brickR + GYP + 2 * R_IN);
-  // Slab edge between shop and vestibule.
-  links.push({ a: 'shop', b: 'vest', group: 'slab', A: 0, G: inp.slab.F * faceLen(SHOP, 'W') });
 
   // Slab-on-grade perimeter to outdoors (F-factor, vs 24 h mean outdoor air).
   const slabLen = Object.fromEntries(ZONES.map(z => [z, z === 'upper' ? 0 :
@@ -637,7 +621,7 @@ export function simulate(env, wx, inp, opts = {}) {
   const sp = new Float64Array(nz), sc = new Float64Array(nz), gains = new Float64Array(nz);
   const Ginf = new Float64Array(nz), hourHeat = new Float64Array(nz), hourCool = new Float64Array(nz);
   const Q = new Float64Array(nz);
-  const hvac = [true, false, true, true, false];
+  const hvac = ZONES.map(z => z === 'shop' || z === 'ground' || z === 'upper');
   const capH = ZONES.map(z => (!idealLoads && capHeat[z] != null ? capHeat[z] : Infinity));
   const capC = ZONES.map(z => (!idealLoads && capCool[z] != null ? capCool[z] : Infinity));
 
@@ -784,7 +768,7 @@ export function simulate(env, wx, inp, opts = {}) {
 // ---------------------------------------------------------------- steady state
 
 // Steady heat loss with no sun and no internal gains. Heated zones held at
-// their in-use setpoints; the vestibule and south leg float.
+// their in-use setpoints; the south leg floats.
 export function steadyLoads(env, inp, { T, V, wd, windOn = true }) {
   const wx = {
     T: [T], T24: [T], V: [V / 1], WD: [wd], DNI: [0], DHI: [0], GHI: [0], alt: [-1], az: [0],
@@ -961,7 +945,7 @@ export function slimResult(r) {
     range: r.range, cost: r.cost,
     wx: { T: Float32Array.from(r.wx.T), V: Float32Array.from(r.wx.V), month: r.wx.month, dayMeanF: r.wx.dayMeanF },
     inp: r.inp,
-    coolDesignDay: { T: Array.from(r.coolDD.T[3]), Qc: Array.from(r.coolDD.Qc[3]) },
+    coolDesignDay: { T: Array.from(r.coolDD.T[ZI.upper]), Qc: Array.from(r.coolDD.Qc[ZI.upper]) },
   };
 }
 
