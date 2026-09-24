@@ -934,7 +934,7 @@ const GROUPS = () => [
     ['accounts.roth401k', 'Roth 401(k)', 'usd'], ['accounts.roth401kAdd', 'Roth 401(k), added per month', 'usd'], ['accounts.roth401kRet', 'Roth 401(k) return', 'pct'],
     ['accounts.stable', 'STABLE account', 'usd'], ['accounts.stableAdd', 'STABLE, added per month', 'usd'], ['accounts.stableRet', 'STABLE return', 'pct'],
     ['accounts.homeValue', 'Zero Rd worth', 'usd'], ['accounts.homeAppr', 'Zero Rd appreciation per year', 'pct'],
-    ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
+    ['accounts.rentalValue', 'Rental worth', 'usd'], ['rental.appr', 'Rental appreciation per year', 'pct'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
     ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },
   { name: 'Phases', open: true, note: 'Each is either drawn on this HELOC once it has room, or bought on a new HELOC after this one closes, in order. Mark one open with its line balance once you’ve bought it, or done once it’s paid.', phases: true },
@@ -958,7 +958,7 @@ const GROUPS = () => [
   { name: 'Rental sale', note: 'On a date: the equity pays off the truck, then the HELOC; the rest goes to brokerage.', fields: [
     ['strategy.sell', 'Sell the rental', 'select', [['afterPayoff', 'When its mortgage is paid'], ['onDate', 'On a date'], ['never', 'Never']]],
     ...(inputs.strategy.sell === 'onDate' ? [['strategy.sellOn', 'Sale date (closing month)', 'month']] : []),
-    ['rental.appr', 'Appreciation per year', 'pct'], ['rental.commission', 'Commission', 'pct'], ['rental.basis', 'Tax basis', 'usd'], ['rental.capGains', 'Capital gains rate', 'pct'], ['rental.recapture', 'Depreciation recapture', 'usd'], ['escalation', 'Energy savings growth', 'pct'],
+    ['rental.commission', 'Commission', 'pct'], ['rental.basis', 'Tax basis', 'usd'], ['rental.capGains', 'Capital gains rate', 'pct'], ['rental.recapture', 'Depreciation recapture', 'usd'], ['escalation', 'Energy savings growth', 'pct'],
   ] },
 ];
 function field(path, label, type, opts) {
