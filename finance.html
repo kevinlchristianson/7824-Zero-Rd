@@ -462,7 +462,7 @@ function renderKpis() {
     ['', 'Reno phase 1 HELOC gone', L(S.helocClosed), I.strategy.mode === 'separate' ? 'then a new HELOC for each phase' : 'phases redraw it along the way'],
     ['', 'Every debt gone', L(S.debtFree), S.sold ? `rental sold ${L(S.sold)}` : 'rental kept'],
     [lowWarn ? 'warn' : '', 'Lowest brokerage', usd(low.v), `${L(low.cal)}; floor ${usd(I.strategy.floor)}${lowWarn ? ' — breached' : ''}`],
-    ['', `Net worth ${Math.floor(SIM.rows.at(-1).cal / 12)}`, k$(S.nwEnd), `${k$(S.nwNet)} after the ${k$(S.paycheckIn)} the paycheck put in`],
+    ['', `Net worth ${Math.floor(SIM.rows.at(-1).cal / 12)}`, k$(S.nwEnd), `${k$(S.nwNet)} after the ${k$(S.paycheckIn)} out of pocket${S.contribIn > 0.5 ? ` and ${k$(S.contribIn)} of contributions` : ''} you put in${S.invEnd > 0.5 ? `; ${k$(S.invEnd)} of it in the Roths and STABLE` : ''}`],
   ];
   $('#kpis').replaceChildren(...tiles.map(([cls, l, v, s]) => { const d = el('div', 'kpi' + (cls ? ' ' + cls : '')); d.append(el('div', 'kpi-label', l), el('div', 'kpi-value', v), el('div', 'kpi-sub', s)); return d; }));
 }
@@ -877,6 +877,9 @@ const GROUPS = () => [
     ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],
     ['accounts.usb', 'US Bank card owed', 'usd'], ['accounts.usbMin', 'US Bank minimum', 'usd'], ['accounts.usbDue', 'US Bank 0% ends', 'month'],
     ['accounts.savings', 'Savings account', 'usd'], ['accounts.savingsApr', 'Savings rate', 'pct'],
+    ['accounts.rothIra', 'Roth IRA', 'usd'], ['accounts.rothIraAdd', 'Roth IRA, added per month', 'usd'], ['accounts.rothIraRet', 'Roth IRA return', 'pct'],
+    ['accounts.roth401k', 'Roth 401(k)', 'usd'], ['accounts.roth401kAdd', 'Roth 401(k), added per month', 'usd'], ['accounts.roth401kRet', 'Roth 401(k) return', 'pct'],
+    ['accounts.stable', 'STABLE account', 'usd'], ['accounts.stableAdd', 'STABLE, added per month', 'usd'], ['accounts.stableRet', 'STABLE return', 'pct'],
     ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
     ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },
