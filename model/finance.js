@@ -189,14 +189,19 @@ function simCore(inp) {
       }
     }
     const value = A.rentalValue * (1 + R.appr) ** (t / 12);
+    // Owner: a sale pays off every debt owed at the time (after commission and taxes); the rest goes to brokerage.
     const sell = why => {
       const gross = value * (1 - R.commission), tax = R.capGains * Math.max(0, gross - R.basis) + R.recapture;
-      let cash = gross - tax - mtg; amort.mortgage[k].principal += mtg; mtg = 0; sold = true;
-      const toTruck = S.sell === 'onDate' ? Math.min(cash, truck) : 0; truck -= toTruck; cash -= toTruck; amort.truck[k].principal += toTruck;
-      const toLine = S.sell === 'onDate' ? Math.min(cash, heloc) : 0; heloc -= toLine; cash -= toLine; amort.heloc[k].principal += toLine;
+      const mtgPaid = mtg; let cash = gross - tax - mtg; amort.mortgage[k].principal += mtg; mtg = 0; sold = true;
+      const take = (bal, key) => { const p = Math.max(0, Math.min(cash, bal)); cash -= p; if (amort[key]) amort[key][k].principal += p; return p; };
+      const toTruck = take(truck, 'truck'); truck -= toTruck;
+      const toCards = take(wf, 'wf') + take(usb, 'usb'); { const w = Math.min(wf, toCards); wf -= w; usb -= toCards - w; }
+      const toLine = take(heloc, 'heloc'); heloc -= toLine;
+      let toPhases = 0; for (const p of phases) if (p.bal > 0) { const x = take(p.bal, 'ph:' + p.id); p.bal -= x; toPhases += x; }
       brok += cash;
-      row.lumps.push({ what: `Rental sold${why}: ${toTruck ? 'truck paid off, ' : ''}${toLine ? 'HELOC paid down, ' : ''}the rest to brokerage`, amt: gross - tax, from: 'sale' });
-      ev(t, 'sale', 'Rental sold', gross - tax, { toTruck, toLine, tax, gross });
+      const paid = [toTruck && 'truck', toCards && 'cards', toLine && 'HELOC', toPhases && 'phase lines'].filter(Boolean);
+      row.lumps.push({ what: `Rental sold${why}: ${paid.length ? paid.join(', ') + ' paid off, ' : ''}the rest to brokerage`, amt: gross - tax, from: 'sale' });
+      ev(t, 'sale', 'Rental sold', gross - tax, { toTruck, toCards, toLine, toPhases, toBrok: cash, tax, gross, mtgPaid });
     };
     if (!sold && S.sell === 'onDate' && cal === sellOn) sell(' (on the date you set)');
     const target = () => (S.truckFirst && truck > 0.005 ? 'truck' : heloc > 0 && !reno ? 'heloc' : openPhase() ? 'ph:' + openPhase().id : null);
