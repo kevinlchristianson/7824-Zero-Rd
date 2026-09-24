@@ -10,6 +10,8 @@
     --focus: #2f6f8f; --warn: #b3261e; --warn-wash: rgba(179, 38, 30, 0.08); --good: #0a7d0a;
     /* Series follow the account: rental blue, HELOC orange, phase lines violet, brokerage aqua, paycheck yellow; truck and cards are the neutral "other debt". */
     --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6;
+    /* Each loan's own colour in the amortization tabs: phase lines keep violet as a family but each gets its own hue; truck and cards split the neutrals. */
+    --a-solar: #c98a00; --a-reno2: #4a3aa7; --a-hp: #c2417a; --a-batt: #0f8a94; --a-wood: #8a5a2b; --a-truck: #4f6475; --a-wf: #b0463a; --a-usb: #6e7f2e;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -21,6 +23,7 @@
       --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
       --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
       --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
+      --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
     }
   }
   :root[data-theme="dark"] {
@@ -29,6 +32,7 @@
     --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
     --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
     --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
+    --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
   }
   body { margin: 0; background: var(--sheet); color: var(--ink); font: 14px/1.5 var(--body); }
   .page { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
@@ -403,6 +407,8 @@ const phaseName = id => SIM.inputs.phases.find(p => p.id === id)?.name ?? id;
 const shortPhase = id => phaseName(id).split(':')[0];
 const acctName = key => key === 'truck' ? 'truck' : key.startsWith('ph:') ? `${shortPhase(key.slice(3))} line` : Object.fromEntries(DEBTS)[key];
 const acctColor = key => key === 'heloc' ? COLOR.heloc : key === 'mortgage' ? COLOR.rental : key.startsWith('ph:') ? COLOR.phase : COLOR.other;
+// One colour per loan, for the amortization tabs and charts where loans sit side by side.
+const loanColor = key => { const k = key.startsWith('ph:') ? key.slice(3) : key; return ['solar', 'reno2', 'hp', 'batt', 'wood', 'truck', 'wf', 'usb'].includes(k) ? `var(--a-${k})` : acctColor(key); };
 
 // ---------------------------------------------------------------- KPIs
 function renderKpis() {
@@ -677,7 +683,7 @@ function renderAmort() {
   const keys = amortAccounts();
   if (!keys.includes(amortKey)) amortKey = keys[0];
   const tabs = $('#amort-tabs');
-  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = acctColor(k); b.append(i, document.createTextNode(k === 'truck' ? 'Truck loan' : acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
+  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = loanColor(k); b.append(i, document.createTextNode(k === 'truck' ? 'Truck loan' : acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
   if (!amortKey) return;
   const A = SIM.amort[amortKey], I = SIM.inputs, rows = SIM.rows;
   const apr = amortKey === 'heloc' ? I.accounts.helocApr : amortKey === 'mortgage' ? I.accounts.mortgageApr : amortKey === 'truck' ? I.accounts.truckApr : amortKey.startsWith('ph:') ? I.strategy.phaseApr : 0;
@@ -686,7 +692,7 @@ function renderAmort() {
   const totInt = sum(A.map(x => x.interest)), totPrin = sum(A.map(x => x.principal)), drawn = sum(A.map(x => x.draw));
   const facts = [['Owed now', usd(A[0].bal0)], ...(drawn ? [['Drawn later', usd(drawn)]] : []), ['Rate', apr ? `${nf(apr * 100, 3)}%` : '0% until due'], ['Paid off', paidOff >= 0 ? L(rows[paidOff].cal) : 'after the horizon'], ['Interest from here', usd(totInt)], ['Principal from here', usd(totPrin)]];
   $('#amort-facts').replaceChildren(...facts.map(([l, v]) => { const s = el('span'); s.append(document.createTextNode(l + ' '), el('b', null, v)); return s; }));
-  const col = acctColor(amortKey);
+  const col = loanColor(amortKey);
   // Balance over time.
   {
     const node = $('#amort-bal'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
@@ -855,7 +861,7 @@ function buildForm() {
     if (g.note) d.append(el('p', 'groupnote', g.note));
     if (g.fields) for (const [p, l, t, o] of g.fields) d.append(field(p, l, t, o));
     if (g.phases) inputs.phases.forEach((ph, i) => {
-      const h = el('div', 'subhead'); const sw = el('i'); sw.style.cssText = 'width:8px;height:8px;border-radius:2px;display:inline-block;background:var(--c-phase)'; h.append(sw, document.createTextNode(`${i + 1}. ${ph.name.split(':')[0]}`)); d.append(h);
+      const h = el('div', 'subhead'); const sw = el('i'); sw.style.cssText = `width:8px;height:8px;border-radius:2px;display:inline-block;background:${loanColor('ph:' + ph.id)}`; h.append(sw, document.createTextNode(`${i + 1}. ${ph.name.split(':')[0]}`)); d.append(h);
       d.append(field(`phases.${i}.amount`, 'Cost', 'usd'), field(`phases.${i}.saves`, 'Saves per year', 'usd'),
         field(`phases.${i}.via`, 'Pay with', 'select', [['line', 'A new HELOC after this one'], ['heloc', 'Draw on this HELOC']]), field(`phases.${i}.at`, 'Draw once the HELOC is down to', 'usd'), field(`phases.${i}.from`, 'Not before', 'month'),
         field(`phases.${i}.status`, 'Status', 'select', [['pending', 'Not yet'], ['open', 'Bought: line open'], ['done', 'Done']]), field(`phases.${i}.bal`, 'Its own line owes', 'usd'));
