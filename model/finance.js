@@ -79,8 +79,8 @@ export const FIN_INPUTS = {
   // (and the limit has room, not before `from`), and the line isn't closed
   // until it has.
   phases: [
+    { id: 'reno2', name: 'Reno phase 2: lower level', amount: 100000, saves: 0, status: 'pending', bal: 0, via: 'line' },   // owner: reno phase 1's HELOC closes first, then phase 2 on its own new HELOC
     { id: 'solar', name: 'Solar: 72 × 440 W on the shop roof, two 18kPVs', amount: 29891, saves: 2691, status: 'pending', bal: 0 },
-    { id: 'reno2', name: 'Lower-level renovation', amount: 100000, saves: 0, status: 'pending', bal: 0, via: 'heloc', at: 100000, from: '2026-07' },   // owner: on this HELOC, once it is down to $100k
     { id: 'hp', name: 'Heat pump, buffer and controls', amount: 10028, saves: 173, status: 'pending', bal: 0 },
     { id: 'batt', name: 'Batteries (32 kWh outage kit)', amount: 6800, saves: 0, status: 'pending', bal: 0 },
     { id: 'wood', name: 'Outdoor wood boiler', amount: 18000, saves: -622, status: 'pending', bal: 0 },
@@ -89,7 +89,7 @@ export const FIN_INPUTS = {
 
 // Every debt the model tracks, for amortization.
 export const DEBTS = [
-  ['heloc', 'Renovation HELOC'], ['mortgage', 'Rental mortgage'], ['truck', 'Truck loan'], ['wf', 'Wells Fargo card'], ['usb', 'US Bank card'],
+  ['heloc', 'Reno phase 1 HELOC'], ['mortgage', 'Rental mortgage'], ['truck', 'Truck loan'], ['wf', 'Wells Fargo card'], ['usb', 'US Bank card'],
 ];
 
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -237,8 +237,15 @@ function simCore(inp) {
         row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
         ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });
       }
+      // Phases on their own HELOC open alongside the renovation HELOC once it is down to their trigger.
+      for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'own')) {
+        if (openPhase() || cal < calOf(ph.from || I.asOf) || (ph.at != null && heloc > ph.at + 0.5)) continue;
+        ph.status = 'open'; ph.bal = ph.amount; amort['ph:' + ph.id][k].draw = ph.amount;
+        row.lumps.push({ what: `Take out a separate ${pct(S.phaseApr)} HELOC for: ${ph.name}`, amt: ph.amount, from: 'new line' });
+        ev(t, 'open', `${ph.name}: take out its own HELOC`, ph.amount, { id: ph.id, own: true });
+      }
       const waiting = phases.some(p => p.status === 'pending' && p.via === 'heloc');
-      if (heloc <= 0.5 && helocClosed == null && !waiting) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Renovation HELOC paid off: close it'); }
+      if (heloc <= 0.5 && helocClosed == null && !waiting) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Reno phase 1 HELOC paid off: close it'); }
       if (helocClosed != null && !openPhase()) {
         const next = phases.find(p => p.status === 'pending' && p.via !== 'heloc');
         if (next) { next.status = 'open'; next.bal = next.amount; amort['ph:' + next.id][k].draw = next.amount; row.lumps.push({ what: `Take out a new ${pct(S.phaseApr)} HELOC and buy: ${next.name}`, amt: next.amount, from: 'new line' }); ev(t, 'open', `${next.name}: take out a new HELOC`, next.amount, { id: next.id }); }
