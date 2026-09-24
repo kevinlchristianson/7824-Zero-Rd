@@ -34,7 +34,7 @@ export const INPUTS = {
     wallR: 15, ceilingR: 40, minF: 45, occF: 70, hoursPerWeek: 12,
     sessionHours: 6, startHour: 8, ach50: 1.5, gainsOn: 0.3, gainsOff: 0,
   },
-  vest: { wallR: 6.5, ceilingR: 40, ach50: 6 },
+  vest: { wallR: 15, ceilingR: 40, ach50: 6 },          // owner: walls built like the shop's, 12" brick + R-15 CCF
   // Center block airtightness is unknown: a best guess for both levels,
   // plus the tight and leaky ends of a plausible range.
   center: { ach50: 5, achLow: 3, achHigh: 8 },
@@ -134,7 +134,7 @@ export const SCHEMA = [
     ['rates.elecMonthly', 'Electric basic charge, per month', '$', 'given', 0, 200, 0.01],
   ] },
   { group: 'Vestibule', items: [
-    ['vest.wallR', 'Wall foam (1″ CCF minimum)', 'R', 'assumed', 0, 60, 0.5],
+    ['vest.wallR', 'Wall foam (CCF)', 'R', 'given', 0, 60, 0.5],
     ['vest.ceilingR', 'Attic insulation', 'R', 'assumed', 0, 100, 1],
     ['vest.ach50', 'Airtightness', 'ACH50', 'assumed', 0.3, 40, 0.1],
   ] },
@@ -146,7 +146,7 @@ export const SCHEMA = [
   { group: 'Walls between zones', items: [
     ['party.shopCenterR', 'Shop ↔ center', 'R', 'assumed', 0, 60, 0.5],
     ['party.garageCenterR', 'South leg ↔ center', 'R', 'assumed', 0, 60, 0.5],
-    ['party.shopVestR', 'Shop ↔ vestibule', 'R', 'assumed', 0, 60, 0.5],
+    ['party.shopVestR', 'Shop ↔ vestibule', 'R', 'given', 0, 60, 0.5],
   ] },
   { group: 'Windows & doors', items: [
     ['glass.windowU', 'Window U-factor', 'U', 'assumed', 0.1, 1.3, 0.01],
