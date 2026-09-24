@@ -433,8 +433,10 @@ function renderFlag() {
   choice.append(el('span', 'kpi-label', 'Pay the overage from'), pick('savings', 'Savings'), pick('brokerage', 'Brokerage'));
   const src = St.shortfall === 'savings' ? `Now paid from savings${covers ? '' : ', then brokerage once it runs out'}.` : St.shortfall === 'brokerage' ? 'Now paid from brokerage.' : 'Now paid by raising the paycheck to cover it (workbook rule).';
   const tw = el('div', 'table-wrap');
-  table(tw, ['Month', 'Payments due', 'Rent + bill savings', 'Out of pocket', 'Overage', 'From savings', 'From brokerage'],
-    gap.map(r => ({ cells: [L(r.cal), usd(r.reqTotal), usd(r.rent + r.rent2 + r.save), usd(r.reqTotal - r.rent - r.rent2 - r.save - r.over), usd(r.over), r.fromSav > 0.5 ? usd(r.fromSav) : '—', r.fromBrok > 0.5 ? usd(r.fromBrok) : '—'] })), { num: j => j > 0 });
+  const due = (r, ...ks) => { const v = sum(ks.map(k => r.req[k] ?? 0)); return v > 0.5 ? usd(v) : '—'; };
+  const lines = r => sum(Object.entries(r.req).filter(([k]) => k === 'heloc' || k.startsWith('ph:')).map(([, v]) => v));
+  table(tw, ['Month', 'Truck', 'Mortgage', 'Card minimums', 'HELOC interest', 'Payments due', 'Rent + bill savings', 'Out of pocket', 'Overage', 'From savings', 'From brokerage'],
+    gap.map(r => ({ cells: [L(r.cal), due(r, 'truck'), due(r, 'mortgage'), due(r, 'wf', 'usb'), lines(r) > 0.5 ? usd(lines(r)) : '—', usd(r.reqTotal), usd(r.rent + r.rent2 + r.save), usd(r.reqTotal - r.rent - r.rent2 - r.save - r.over), usd(r.over), r.fromSav > 0.5 ? usd(r.fromSav) : '—', r.fromBrok > 0.5 ? usd(r.fromBrok) : '—'] })), { num: j => j > 0 });
   f.replaceChildren(el('strong', null, `Too much debt: ${usd(total)} over`),
     el('p', null, `In ${gap.length} month${gap.length > 1 ? 's' : ''} (${span}) the payments due run past rent, bill savings and your out-of-pocket, by ${usd(total)} in all; the worst is ${usd(worst.over)} in ${L(worst.cal)}. The debt's monthly cost is more than the income carries: pay a balance down, push a draw later or hold off on new debt until this clears.`),
     q, choice, el('p', 'kpi-sub', src), tw);
