@@ -515,6 +515,7 @@ function stepsList() {
     else if (e.kind === 'draw') push(e.cal, `${/Last/.test(e.what) ? 'Last renovation draw' : 'Renovation draw'}: ${usd(e.amt)}`, /Last/.test(e.what) ? 'This fills the HELOC to its limit. Until the renovation is done you make no HELOC payments; its interest is added to the balance.' : 'On the HELOC, as the work is billed. No HELOC payment yet; its interest is added to the balance.');
     else if (e.kind === 'held') push(e.cal, `Renovation done: ${usd(e.amt)} from brokerage to the HELOC`, `What would have paid the HELOC down during the renovation (gift money past the truck, any surplus) waited in brokerage. Pay it onto the HELOC now${I.accounts.helocPayFrom && calOf(I.accounts.helocPayFrom) > e.cal ? '' : ', and start the monthly interest payment'}.`);
     else if (e.kind === 'helocpay') push(e.cal, `HELOC payments start: ${usd(e.amt)} interest`, 'The no-payment period ends. Until now its interest was added to the balance; from here the monthly interest is due, and any surplus still pays it down.');
+    else if (e.kind === 'home') push(e.cal, `${e.what.replace('Zero Rd gains ', '').split(':')[0]} paid off: Zero Rd worth ${usd(e.amt)} more`, 'Its debt is closed, so the improvement now counts at its cost in Zero Rd’s value (and appreciates from here) on the net worth chart.');
     else if (e.kind === 'card') push(e.cal, e.what, `Its 0% ends this month. Pay the ${usd(e.amt)} balance in full from brokerage; don't let it roll to the regular rate.`);
     else if (e.kind === 'close') push(e.cal, e.what, /HELOC/.test(e.what) ? 'Ask the bank to close the line (or freeze it at $0) so it can’t be redrawn.' : 'Close the line; the next phase opens.');
     else if (e.kind === 'open' && e.own) push(e.cal, e.what, `The reno phase 1 HELOC is down to your trigger. Take out a separate ${nf(I.strategy.phaseApr * 100, 2)}% HELOC for ${usd(e.amt)} and start the work. Surplus keeps paying reno phase 1 first, then this line, interest-only until then.`);
@@ -933,7 +934,7 @@ const GROUPS = () => [
     ['accounts.rothIra', 'Roth IRA', 'usd'], ['accounts.rothIraAdd', 'Roth IRA, added per month', 'usd'], ['accounts.rothIraRet', 'Roth IRA return', 'pct'],
     ['accounts.roth401k', 'Roth 401(k)', 'usd'], ['accounts.roth401kAdd', 'Roth 401(k), added per month', 'usd'], ['accounts.roth401kRet', 'Roth 401(k) return', 'pct'],
     ['accounts.stable', 'STABLE account', 'usd'], ['accounts.stableAdd', 'STABLE, added per month', 'usd'], ['accounts.stableRet', 'STABLE return', 'pct'],
-    ['accounts.homeValue', 'Zero Rd worth', 'usd'], ['accounts.homeAppr', 'Zero Rd appreciation per year', 'pct'],
+    ['accounts.homeValue', 'Zero Rd worth', 'usd'], ['accounts.homeAppr', 'Zero Rd appreciation per year', 'pct'], ['accounts.reno1Value', 'Reno phase 1 adds to Zero Rd', 'usd'],
     ['accounts.rentalValue', 'Rental worth', 'usd'], ['rental.appr', 'Rental appreciation per year', 'pct'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
     ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },

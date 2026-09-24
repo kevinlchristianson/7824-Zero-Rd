@@ -35,6 +35,7 @@ export const FIN_INPUTS = {
     savings: 0, savingsApr: 0.04,
     // Retirement and STABLE (ABLE) accounts: not used for debt; they grow with their own monthly contributions and count in net worth.
     homeValue: 0, homeAppr: 0.03,                         // 7824 Zero Rd itself: counts in net worth only
+    reno1Value: 250000,                                   // owner: Zero Rd gains each improvement's cost when its debt closes (reno phase 1 when its HELOC does)
     rothIra: 0, rothIraAdd: 0, rothIraRet: 0.07,
     roth401k: 0, roth401kAdd: 0, roth401kRet: 0.07,
     stable: 0, stableAdd: 0, stableRet: 0.05,                         // cash savings account; only touched when it is set to cover the monthly overage
@@ -126,6 +127,12 @@ function simCore(inp) {
   const parts = Object.fromEntries(A.helocParts || []); let partsAt = A.heloc;
   const syncParts = () => { const f = partsAt > 0.5 ? heloc / partsAt : 0; for (const id in parts) parts[id] = Math.max(0, parts[id] * f); partsAt = heloc; };
   const renoOn = cal => (A.renoLeft || 0) > 0.5 && cal <= renoEnd;
+  // Zero Rd's value: what you entered, plus each improvement's cost from the month its debt closes, all appreciating.
+  const homeAdds = [], onHeloc = new Set((A.helocParts || []).map(([id]) => id));
+  let tNow = 0;
+  const addHome = (amt, what) => { if (amt > 0.5) { homeAdds.push({ t: tNow, amt }); ev(tNow, 'home', `Zero Rd gains ${what}`, amt); } };
+  const helocImprovements = () => { addHome(A.reno1Value || 0, 'reno phase 1'); for (const p of phases) if (onHeloc.has(p.id)) addHome(p.amount, p.name); };
+  const homeAt = t => { const g = 1 + (A.homeAppr || 0); return (A.homeValue || 0) * g ** (t / 12) + homeAdds.reduce((a, h) => a + h.amt * g ** ((t - h.t) / 12), 0); };
   const inv = { rothIra: A.rothIra || 0, roth401k: A.roth401k || 0, stable: A.stable || 0 }; let contribIn = 0;
   let sav = A.savings || 0, brok = A.brokerage, heloc = A.heloc, mtg = A.mortgage, truck = A.truck, wf = A.wf, usb = A.usb, sold = !!A.rentalSold;
   const phases = I.phases.map(p => ({ ...p, bal: p.status === 'open' ? p.bal : 0 }));
@@ -142,7 +149,7 @@ function simCore(inp) {
   const openPhase = () => phases.find(p => p.status === 'open');
 
   for (let t = 1; t <= T; t++) {
-    const cal = n0 + t, yrs = (t - 1) / 12, k = t - 1;
+    const cal = n0 + t, yrs = (t - 1) / 12, k = t - 1; tNow = t;
     const infl = (1 + I.income.inflation) ** yrs, esc = (1 + I.escalation) ** yrs;
     const row = { t, cal, lumps: [], pay: {}, extra: {} };
     for (const [key] of DEBTS) track(key)[k].bal0 = { heloc, mortgage: mtg, truck, wf, usb }[key];
@@ -194,7 +201,7 @@ function simCore(inp) {
         if (key === 'wf') wf = 0; else usb = 0;
       }
     }
-    const value = A.rentalValue * (1 + R.appr) ** (t / 12), home = (A.homeValue || 0) * (1 + (A.homeAppr || 0)) ** (t / 12);
+    const value = A.rentalValue * (1 + R.appr) ** (t / 12);
     // Owner: a sale pays off every debt owed at the time (after commission and taxes); the rest goes to brokerage.
     const sell = why => {
       const gross = value * (1 - R.commission), tax = R.capGains * Math.max(0, gross - R.basis) + R.recapture;
@@ -243,12 +250,12 @@ function simCore(inp) {
     brok += surplus;
 
     // Lines close and phases open.
-    for (const p of phases) if (p.status === 'open' && p.bal <= 0.5) { p.status = 'done'; p.bal = 0; ev(t, 'close', `${p.name} line paid off`); }
+    for (const p of phases) if (p.status === 'open' && p.bal <= 0.5) { p.status = 'done'; p.bal = 0; ev(t, 'close', `${p.name} line paid off`); addHome(p.amount, p.name); }
     if (S.mode === 'separate') {
       // Phases set to ride the renovation HELOC draw on it once it has room.
       for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'heloc' && helocClosed == null)) {
         if (renoOn(cal) || cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5 || (ph.at != null && heloc > ph.at + 0.5)) continue;   // never while the renovation is still drawing
-        syncParts(); heloc += ph.amount; parts[ph.id] = (parts[ph.id] ?? 0) + ph.amount; partsAt = heloc; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
+        syncParts(); heloc += ph.amount; parts[ph.id] = (parts[ph.id] ?? 0) + ph.amount; onHeloc.add(ph.id); partsAt = heloc; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
         row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
         ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });
       }
@@ -260,7 +267,7 @@ function simCore(inp) {
         ev(t, 'open', `${ph.name}: take out its own HELOC`, ph.amount, { id: ph.id, own: true });
       }
       const waiting = phases.some(p => p.status === 'pending' && p.via === 'heloc');
-      if (heloc <= 0.5 && helocClosed == null && !waiting) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Reno phase 1 HELOC paid off: close it'); }
+      if (heloc <= 0.5 && helocClosed == null && !waiting) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Reno phase 1 HELOC paid off: close it'); helocImprovements(); }
       if (helocClosed != null && !openPhase()) {
         const next = phases.find(p => p.status === 'pending' && p.via !== 'heloc');
         if (next) { next.status = 'open'; next.bal = next.amount; amort['ph:' + next.id][k].draw = next.amount; row.lumps.push({ what: `Take out a new ${pct(S.phaseApr)} HELOC and buy: ${next.name}`, amt: next.amount, from: 'new line' }); ev(t, 'open', `${next.name}: take out a new HELOC`, next.amount, { id: next.id }); }
@@ -270,11 +277,11 @@ function simCore(inp) {
       // and the limit allows.
       for (const next of phases.filter(p => p.status === 'pending')) {
         if (heloc > S.redrawAt || heloc + next.amount > A.helocLimit) break;
-        heloc += next.amount; next.status = 'done'; amort.heloc[k].draw += next.amount;
+        heloc += next.amount; next.status = 'done'; onHeloc.add(next.id); amort.heloc[k].draw += next.amount;
         row.lumps.push({ what: `Draw the HELOC for: ${next.name}`, amt: next.amount, from: 'HELOC' });
         ev(t, 'open', `${next.name}: drawn on the HELOC`, next.amount, { id: next.id });
       }
-      if (heloc <= 0.5 && phases.every(p => p.status === 'done') && helocClosed == null) { heloc = 0; helocClosed = cal; ev(t, 'close', 'HELOC paid off: close it'); }
+      if (heloc <= 0.5 && phases.every(p => p.status === 'done') && helocClosed == null) { heloc = 0; helocClosed = cal; ev(t, 'close', 'HELOC paid off: close it'); helocImprovements(); }
     }
 
     // Workbook rule: brokerage pays a line off when it can keep the cushion.
@@ -294,7 +301,7 @@ function simCore(inp) {
     const phaseBal = phases.reduce((a, p) => a + p.bal, 0);
     const debt = heloc + phaseBal + mtg + truck + wf + usb;
     syncParts();
-    const invTotal = inv.rothIra + inv.roth401k + inv.stable;
+    const invTotal = inv.rothIra + inv.roth401k + inv.stable, home = homeAt(t);
     Object.assign(row, { renoLeft, helocParts: { ...parts }, inv: { ...inv }, invTotal, sav, brok, heloc, phaseBal, phases: phases.map(p => ({ id: p.id, status: p.status, bal: p.bal })), mtg, truck, wf, usb, sold, value, debt, home, nw: brok + sav + invTotal + home + (sold ? 0 : value) - debt });
     rows.push(row);
   }
