@@ -1,8 +1,9 @@
 // Solar, heat pump and net-metering economics for 7824 Zero Rd.
 //
 // Hourly on the Casper TMY3 year:
-//   - PV output from real sun (DNI/DHI/GHI) on a fixed ground mount, with
-//     cell temperature from air temperature and wind, and inverter clipping.
+//   - PV output from real sun (DNI/DHI/GHI) on the shop's south roof slope,
+//     with cell temperature from air temperature and wind, shade from the
+//     center block (roofpv.js), and inverter clipping.
 //   - Loads from the thermal model (heating and cooling by hour), domestic
 //     electricity and domestic hot water.
 //   - Heating either from the gas boiler (today) or from air-to-water heat
@@ -16,10 +17,15 @@ import { runModel, prepareWeather, INPUTS as THERMAL, ZONES } from './thermal.js
 
 export const SOLAR_INPUTS = {
   pv: {
-    tilt: 40, azimuth: 180,          // assumed: fixed ground mount facing south
+    // Owner: flush on the shop's 5:12 south slope (22.6°), facing south.
+    tilt: 22.6, azimuth: 180,
+    shade: 0.0094,                   // yearly share lost to the center block's shade, from roofpv.js for the owner's 72 panels
     losses: 0.10,                    // assumed: soiling, snow, wiring, mismatch
     tempCoef: -0.0035,               // assumed: per °C, mono PERC
-    inverter: 'auto',                // an id from INVERTERS, or 'auto' for the best value
+    inverter: 'eg4_18kpv',           // owner: two 18kPVs (wiring.html); 'auto' picks the best value
+    // The owner's array: two pallets of 36 ZnShine ZXM7-UHLDD108 440 W in the
+    // shop-roof layout (roofpv.js), strung six by twelve onto two 18kPVs.
+    array: { kw: 31.68, inv: 2, inverter: 'eg4_18kpv', panels: 72, watts: 440 },
     albedo: 0.25,                    // assumed: dry grass, some snow
   },
   // Air-to-water heat pumps (none bought yet). The COP and capacity curves
@@ -80,7 +86,7 @@ export const SOLAR_INPUTS = {
   // idleW is what each unit draws around the clock. Prices are 2026 retail
   // listings unless marked; efficiencies are CEC-weighted.
   inverters: {
-    eg4_18kpv: { name: 'EG4 18kPV', kind: 'hybrid', ac: 12, dc: 18, cost: 4200, eff: 0.969, idleW: 70, battery: true },   // sheet price; 70 W idle from EG4
+    eg4_18kpv: { name: 'EG4 18kPV', kind: 'hybrid', ac: 12, dc: 18, cost: 3600, eff: 0.969, idleW: 70, battery: true },   // owner: refurbished; 70 W idle from EG4
     flexboss21: { name: 'EG4 FlexBOSS21', kind: 'hybrid', ac: 16, dc: 21, cost: 4199, eff: 0.965, idleW: 70, battery: true },   // eff and idle assumed
     flexboss18: { name: 'EG4 FlexBOSS18', kind: 'hybrid', ac: 13, dc: 18, cost: 3499, eff: 0.965, idleW: 70, battery: true },   // eff and idle assumed
     eg4_12kpv: { name: 'EG4 12kPV', kind: 'hybrid', ac: 8, dc: 12, cost: 3499, eff: 0.965, idleW: 60, battery: true },         // eff and idle assumed
@@ -114,7 +120,7 @@ export function pvPerKw(wx, pv) {
     const poa = beam + dhi * (1 + Math.cos(tilt)) / 2 + ghi * pv.albedo * (1 - Math.cos(tilt)) / 2;
     const Ta = (wx.T[i] - 32) / 1.8, ws = wx.V[i] / 2.23694;
     const Tc = Ta + poa / (25 + 6.84 * ws);             // Faiman cell temperature
-    const dc = poa / 1000 * (1 + pv.tempCoef * (Tc - 25)) * (1 - pv.losses);
+    const dc = poa / 1000 * (1 + pv.tempCoef * (Tc - 25)) * (1 - pv.losses) * (1 - (pv.shade ?? 0));
     out[i] = Math.max(0, dc);
   }
   return out;
@@ -590,6 +596,9 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
   variant('Household use 65 kWh/day', x => { x.domestic.kWhPerDay = 65; });
   variant('Gas at $0.80/therm', x => { x.rates.gas = Math.max(x.rates.gas, 0.80); });
 
+  // 6. The owner's shop-roof array on the winning setup.
+  const A = s.pv.array, own = A ? evaluate({ ...ctx, m: A.inverter }, { kw: A.kw, inv: A.inv, m: A.inverter, load, battery: false }) : null;
+
   const addBatt = evaluate(ctx, { ...Lr.final.cfg, battery: true });
   const mon = Array(12).fill(0); ctx.pvDC.forEach((v, i) => { mon[ctx.month[i]] += v * M.eff; });
   const Lw = loadsFor(ctx, load);
@@ -601,14 +610,19 @@ export function solarPlan(wxRaw, s = SOLAR_INPUTS, thermalInputs = THERMAL, prep
     inverter: { id: ctx.m, ...M, dcMax, maxUnits: nMax, auto: autoInv },
     inverters,
     pvYield: mon.reduce((a, b) => a + b, 0), pvMonthly: mon,
+    pvYieldGround: pvPerKw(prepared, { ...s.pv, tilt: 40, shade: 0 }).reduce((a, b) => a + b, 0) * M.eff,
     coolDemand: { btu: L0.coolTot, hours: L0.coolUnmetHrs },
     today: pick(withE(today, today)),
     baseline: pick(withE(base, base)),
     steps: Lr.steps.map(st => ({ label: st.label, kind: st.kind, dCap: st.dCap, dSave: st.dSave, pb: st.pb, dNpv: st.dNpv, cfg: st.cfg, sys: pick(withE(st.res, base)) })),
     rejected: Lr.rejected.map(st => ({ label: st.label, kind: st.kind, dCap: st.dCap, dSave: st.dSave, pb: st.pb, dNpv: st.dNpv })),
     battery: { dCap: addBatt.capex - rec.capex, dSave: rec.total - addBatt.total, possible: !!M.battery },
-    recommended: pick(withE(rec, base)),
-    lifeCost: lifeCost(rec, base, s),
+    // What the plan is built on: the owner's array when there is one, else
+    // the purchase order's end point.
+    recommended: pick(withE(own ?? rec, base)),
+    lifeCost: lifeCost(own ?? rec, base, s),
+    cheapest: { ...pick(withE(rec, base)), lifeCost: lifeCost(rec, base, s) },
+    owner: own ? { ...A, lifeCost: lifeCost(own, base, s), maxKw: dcPer(s, invOf(s, A.inverter)) * A.inv } : null,
     curve, variants,
   };
 }

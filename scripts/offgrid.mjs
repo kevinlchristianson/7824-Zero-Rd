@@ -10,9 +10,9 @@ const $ = v => '$' + Math.round(v).toLocaleString('en-US');
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Grid-tied reference: the solar plan's pick (3.5-ton, smart heating, 21 kW).
-const gctx = buildContext(wx, SOLAR_INPUTS); gctx.m = 'sma77';
-const g0 = evaluate(gctx, { kw: 0, inv: 0, load: 'c35.smart.1' }), g1 = evaluate(gctx, { kw: 21, inv: 2, load: 'c35.smart.1' });
-const grid = { kw: 21, capex: g1.capex, bills: g1.total, life: lifeCost(g1, g0, SOLAR_INPUTS) };
+const gctx = buildContext(wx, SOLAR_INPUTS); gctx.m = 'eg4_18kpv';
+const g0 = evaluate(gctx, { kw: 0, inv: 0, load: 'c35.smart.1' }), g1 = evaluate(gctx, { kw: SOLAR_INPUTS.pv.array.kw, inv: 2, load: 'c35.smart.1' });
+const grid = { kw: SOLAR_INPUTS.pv.array.kw, capex: g1.capex, bills: g1.total, life: lifeCost(g1, g0, SOLAR_INPUTS) };
 
 const t0 = performance.now();
 const C = conservation();

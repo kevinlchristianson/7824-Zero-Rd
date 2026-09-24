@@ -140,6 +140,12 @@
       </section>
 
       <section>
+        <h2>Your shop array</h2>
+        <p class="sub" id="own-sub"></p>
+        <div class="table-wrap"><table id="own"></table></div>
+      </section>
+
+      <section>
         <h2>Solar to go with it, in order</h2>
         <p class="sub" id="ladder-sub">Starting from today's setup, each step is the addition that pays for itself fastest. Steps stop when the next one is worth less than it costs at the discount rate.</p>
         <div class="table-wrap"><table id="ladder"></table></div>
@@ -159,7 +165,7 @@
       </section>
 
       <section>
-        <h2>A year with the recommended array</h2>
+        <h2>A year with your shop array</h2>
         <p class="sub" id="year-sub"></p>
         <div class="legend" id="year-legend"></div>
         <div class="chart" id="year" role="img" aria-label="Monthly solar production and electricity use"></div>
@@ -197,7 +203,7 @@ const usd = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v));
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const getIn = (o, p) => p.split('.').reduce((a, k) => a[k], o);
 const setIn = (o, p, v) => { const k = p.split('.'), l = k.pop(); k.reduce((a, x) => a[x], o)[l] = v; };
-const STORE = 'zero-rd-solar-inputs-v3';
+const STORE = 'zero-rd-solar-inputs-v4';
 
 const SCHEMA = [
   { group: 'Rates', items: [
@@ -218,13 +224,16 @@ const SCHEMA = [
     ['finance.horizon', 'Years counted', 'yr', 'sheet', 5, 40, 1],
   ] },
   { group: 'Array', items: [
-    ['pv.tilt', 'Tilt', '°', 'assumed', 0, 90, 1],
+    ['pv.array.kw', 'Your shop array (72 × 440 W)', 'kW DC', 'owner', 0, 60, 0.01],
+    ['pv.array.inv', '18kPVs for it', '', 'owner', 1, 3, 1],
+    ['pv.tilt', 'Tilt (the shop’s 5:12 roof is 22.6°)', '°', 'owner', 0, 90, 0.1],
+    ['pv.shade', 'Lost to the center block’s shade', '×', 'assumed', 0, 0.5, 0.001],
     ['pv.losses', 'Soiling, snow, wiring losses', '×', 'assumed', 0, 0.4, 0.01],
-    ['pv.inverter', 'Inverter', '', 'assumed'],
+    ['pv.inverter', 'Inverter', '', 'owner'],
     ['nemCapKwAC', 'Net-metering size limit (AC)', 'kW', 'assumed', 5, 200, 1],
   ] },
   { group: 'Inverter prices', items: [
-    ['inverters.eg4_18kpv.cost', 'EG4 18kPV, each', '$', 'sheet', 0, 20000, 50],
+    ['inverters.eg4_18kpv.cost', 'EG4 18kPV, each (refurbished)', '$', 'owner', 0, 20000, 50],
     ['inverters.flexboss21.cost', 'EG4 FlexBOSS21, each', '$', 'listing', 0, 20000, 50],
     ['inverters.flexboss18.cost', 'EG4 FlexBOSS18, each', '$', 'listing', 0, 20000, 50],
     ['inverters.eg4_12kpv.cost', 'EG4 12kPV, each', '$', 'listing', 0, 20000, 50],
@@ -347,6 +356,7 @@ const WORDS = ['', 'one', 'two', 'three', 'four'];
 const invLabel = (inv, n, micro) => (micro ? `${inv.name} microinverters` : `${WORDS[n] ?? n} ${inv.name}${n > 1 ? 's' : ''}`);
 const sysLabel = c => c.kw ? `${c.kw} kW on ${invLabel(P.inverter, c.inv, P.inverter.kind === 'micro')}${c.battery ? ' + battery' : ''}` : 'No solar';
 const MODE = { smart: 'heats when it beats gas', hp: 'heats first', cool: 'cools only' };
+const lc = t => t.replace(/^One /, 'one ').replace(/AHUs?$/, m => m);
 const isPick = r => r.opt === P.setup.opt && r.ahus === P.setup.ahus;
 
 // ---------------------------------------------------------------- render
@@ -356,7 +366,7 @@ function render() {
   const tiles = [
     ['hero', 'Buy', `${U.hpLabel} Apollo`,
       `${U.ahus === 2 ? 'Plus a second AHU for the upper level. ' : 'On the existing AHU. '}${U.mode === 'smart' ? `Let it heat only when that beats gas: on solar credit that would otherwise be paid out at $${i.rates.avoided}/kWh, or when its COP beats gas. It covers ${nf(U.hpShare * 100)}% of space and water heat.` : U.mode === 'hp' ? `Let it heat first; it covers ${nf(U.hpShare * 100)}% of space and water heat.` : 'Cooling only; the boiler keeps heating.'} ${usd(U.hpCost)} installed.`],
-    ['', 'With solar', R.cfg.kw > 0 ? `${R.cfg.kw} kW` : 'None', R.cfg.kw > 0 ? `on ${invLabel(P.inverter, R.cfg.inv, P.inverter.kind === 'micro')}; ${usd(R.solarCapex)}, pays back in ${nf(R.econ.payback, 1)} yr` : 'no array pays back'],
+    ['', P.owner ? 'Shop roof array' : 'With solar', R.cfg.kw > 0 ? `${nf(R.cfg.kw, 1)} kW` : 'None', R.cfg.kw > 0 ? `${P.owner ? `${P.owner.panels} × ${P.owner.watts} W ` : ''}on ${invLabel(P.inverter, R.cfg.inv, P.inverter.kind === 'micro')}; ${usd(R.solarCapex)}, pays back in ${nf(R.econ.payback, 1)} yr` : 'no array pays back'],
     ['', 'Bills today', usd(T.total), 'a year, with no cooling'],
     ['', 'Bills after', usd(R.total), `a year, with cooling; ${usd(B.total)} without the solar`],
     ['', 'Battery', P.battery.possible && P.battery.dSave > 0 && P.battery.dCap / P.battery.dSave < i.finance.horizon ? 'Maybe' : 'Skip', P.battery.possible ? `${usd(P.battery.dCap)} that saves ${usd(P.battery.dSave)} a year under net metering` : `the ${P.inverter.name} can't take one, and net metering already stores surplus`],
@@ -366,7 +376,7 @@ function render() {
     for (const [c, t] of [['kpi-label', l], ['kpi-value', v], ['kpi-sub', s]]) { const e = document.createElement('div'); e.className = c; e.textContent = t; d.append(e); }
     return d;
   }));
-  renderSetups(); renderLadder(); renderInverters(); renderCurve(); renderYear(); renderVariants(); renderMethod();
+  renderSetups(); renderOwn(); renderLadder(); renderInverters(); renderCurve(); renderYear(); renderVariants(); renderMethod();
 }
 
 function renderSetups() {
@@ -399,6 +409,24 @@ function renderSetups() {
   $('#setup-sub').textContent = `Each setup gets the array and inverter that make it cheapest to own. "25-yr cost" is everything bought up front plus the present value of ${i.finance.horizon} years of electric and gas bills at ${nf(i.finance.discount * 100, 1)}%; lower is better. ${U.label} wins by ${usd(sec.cost - U.cost)} over ${sec.label.replace(/^One/, 'one')}. Extra tons buy almost nothing: cooling needs about ${nf(P.coolDemand.btu / 1e6)} MMBtu a year and the 3.5-ton falls short only ${P.setups.find(r => r.opt === 'c35')?.coolUnmetHrs} hours of it. On heat, everything the heat pump makes goes through the buffer at ${i.hp.reset.lowF}–${i.hp.reset.highF}°F on the outdoor reset. Even so, its heat beats gas at $${i.rates.gas}/therm only on solar credit that would otherwise be paid out, so a bigger unit mostly adds cost. The 6-ton in your hydronic pack is the runner-up, ${usd((P.setups.find(r => r.opt === 'h60' && r.ahus === 1)?.cost ?? 0) - U.cost)} behind: close enough that its extra heat and pull-down capacity can decide it. A second AHU would only replace the radiant floor upstairs and adds its ${usd(i.ahu2.cost + i.ahu2.install)} cost. The grey row is Phase 1 with no heat pump: cheaper to own${P.noHp ? ` (${usd(P.noHp.cost)})` : ''}, but it has no cooling, so the gap is mostly the price of air conditioning.`;
 }
 
+function renderOwn() {
+  const O = P.owner, t = $('#own');
+  if (!O) { t.replaceChildren(); $('#own-sub').textContent = 'No array entered: the plan below uses the purchase order.'; return; }
+  const R = P.recommended, C = P.cheapest, B = P.baseline;
+  t.innerHTML = '<thead><tr><th>Array</th><th class="num">Solar cost</th><th class="num">Makes / yr</th><th class="num">Bills / yr</th><th class="num">Saves / yr</th><th class="num">Pays back</th><th class="num">Worth</th></tr></thead>';
+  const tb = t.createTBody();
+  const row = (label, note, r, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls;
+    const c0 = tr.insertCell(); c0.textContent = label; const n = document.createElement('div'); n.className = 'cellnote'; n.textContent = note; c0.append(n);
+    for (const v of [usd(r.solarCapex), `${nf(r.prod)} kWh`, usd(r.total), usd(r.econ.save1), r.econ.payback != null ? `${nf(r.econ.payback, 1)} yr` : 'never', usd(r.econ.npv)]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
+  };
+  row(`Your ${nf(R.cfg.kw, 2)} kW`, `${O.panels} × ${O.watts} W ZnShine on the shop roof, ${sysLabel(R.cfg).replace(/^[^o]*on /, '')}`, R, 'pick');
+  if (C.cfg.kw !== R.cfg.kw || C.cfg.inv !== R.cfg.inv) row(`Cheapest size, ${C.cfg.kw} kW`, `where the purchase order below stops, on ${invLabel(P.inverter, C.cfg.inv, P.inverter.kind === 'micro')}`, C);
+  const dCap = R.solarCapex - C.solarCapex, dSave = R.econ.save1 - C.econ.save1;
+  const winner = P.variants.filter(v => (v.per[P.setup.opt]?.kw ?? 0) >= R.cfg.kw - 1).map(v => v.label.charAt(0).toLowerCase() + v.label.slice(1));
+  $('#own-sub').textContent = `The two pallets of ZnShine 440 W in your IronRidge layout, carried east until the center block's shade starts to cost: ${nf(R.cfg.kw, 2)} kW DC on the shop's 5:12 south slope, strung six by twelve onto ${invLabel(P.inverter, R.cfg.inv, false).replace(/^Two/, 'two').replace(/^One/, 'one')} (${R.cfg.inv * (P.inverter.ac ?? 0)} kW AC, inside the ${P.inputs.nemCapKwAC} kW net-metering limit). The roof's ${P.inputs.pv.tilt}° tilt and the shade cost about ${nf((1 - P.pvYield / P.pvYieldGround) * 100)}% of the yield of a 40° ground mount. With the ${lc(P.setup.label)}, it makes ${nf(R.prod)} kWh a year against ${nf(R.loadKWh)} kWh used, and pays back in ${nf(R.econ.payback, 1)} years at $${P.inputs.capex.pvPerKw}/kW installed.${dCap > 0 ? ` The cheapest size stops at ${C.cfg.kw} kW: the last ${nf(R.cfg.kw - C.cfg.kw, 1)} kW${R.cfg.inv > C.cfg.inv ? ' and the second 18kPV' : ''} add ${usd(dCap)} for ${usd(dSave)} a year, because most of what they make ends the year as credit paid out at $${P.inputs.rates.avoided}/kWh. The whole array earns its keep if household use grows, the heat pump heats more, or the true-up moves to spring${winner.length ? ` (the "what would change" table: ${winner.join('; ')})` : ''}. If the panels are already paid for, their share of that ${usd(dCap)} is sunk and the rest pays sooner.` : ''}`;
+}
+
 function renderLadder() {
   const t = $('#ladder');
   t.innerHTML = '<thead><tr><th>Step</th><th class="num">Costs</th><th class="num">Saves / yr</th><th class="num">Pays back</th><th class="num">Worth</th><th>System after</th></tr></thead>';
@@ -415,7 +443,7 @@ function renderLadder() {
   const sep = tb.insertRow(); sep.className = 'sep'; const sc = sep.insertCell(); sc.colSpan = 6; sc.textContent = 'Next in line, not worth it yet';
   for (const s of P.rejected) row('', s.label, [usd(s.dCap), usd(s.dSave), s.dSave > 0 ? `${nf(s.pb, 1)} yr` : 'never', usd(s.dNpv), ''], 'no');
   row('', `${P.inputs.capex.batteryKwh} kWh battery`, [usd(P.battery.dCap), usd(P.battery.dSave), P.battery.dSave > 0 ? `${nf(P.battery.dCap / P.battery.dSave, 1)} yr` : 'never', '', `net metering already stores surplus at full retail value${P.battery.possible ? '' : `; would also need a hybrid inverter instead of the ${P.inverter.name}`}`], 'no');
-  $('#ladder-sub').textContent = `Starting from the ${P.setup.label.toLowerCase()} with no solar (bills ${usd(P.baseline.total)} a year), each step is the addition that pays for itself fastest. Steps stop when the next one is worth less than it costs at ${nf(P.inputs.finance.discount * 100, 1)}% over ${P.inputs.finance.horizon} years. "Worth" is that step's net present value.`;
+  $('#ladder-sub').textContent = `Starting from the ${lc(P.setup.label)} with no solar (bills ${usd(P.baseline.total)} a year), each step is the addition that pays for itself fastest. Steps stop when the next one is worth less than it costs at ${nf(P.inputs.finance.discount * 100, 1)}% over ${P.inputs.finance.horizon} years. "Worth" is that step's net present value.`;
 }
 
 function renderInverters() {
@@ -433,7 +461,7 @@ function renderInverters() {
     for (const v of [usd(r.capex), usd(r.save1), r.payback ? `${nf(r.payback, 1)} yr` : 'never', usd(r.npv)]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
   }
   const best = I[0], eg4 = I.filter(r => r.id.startsWith('eg4') || r.id.startsWith('flexboss'))[0], spread = best.npv - I.at(-1).npv;
-  $('#inv-sub').textContent = `On the ${P.setup.label.toLowerCase()}, each inverter gets its own purchase order, capped at ${P.inputs.nemCapKwAC} kW AC in total. ${best.name} comes out ahead at these prices, but the whole field is within ${usd(spread)} over ${P.inputs.finance.horizon} years${eg4 && eg4 !== best ? `, and the best battery-ready option, the ${eg4.name}, trails it by ${usd(best.npv - eg4.npv)}` : ''}. That is smaller than the uncertainty in any installer's quote, so let price and what you want later decide. Hybrids draw standby power around the clock (about $${nf(70 * 8.76 * P.inputs.rates.elec)} a year at 70 W) but can add a battery or backup; grid-tie inverters can't. Ground mount assumed, so no rapid-shutdown hardware per panel.`;
+  $('#inv-sub').textContent = `On the ${lc(P.setup.label)}, each inverter gets its own purchase order, capped at ${P.inputs.nemCapKwAC} kW AC in total. ${best.name} comes out ahead at these prices, but the whole field is within ${usd(spread)} over ${P.inputs.finance.horizon} years${eg4 && eg4 !== best ? `, and the best battery-ready option, the ${eg4.name}, trails it by ${usd(best.npv - eg4.npv)}` : ''}. That is smaller than the uncertainty in any installer's quote, so let price and what you want later decide. Hybrids draw standby power around the clock (about $${nf(70 * 8.76 * P.inputs.rates.elec)} a year at 70 W) but can add a battery or backup; grid-tie inverters can't. The array is on the shop roof, so every panel needs rapid shutdown (the Tigo units in the wiring sheet); microinverters include it.`;
 }
 
 function renderCurve() {
@@ -457,8 +485,8 @@ function renderCurve() {
   }
   ends.sort((a, b) => a.y - b.y); let prev = -1e9;
   for (const e of ends) { e.ly = Math.max(e.y, prev + 14); prev = e.ly; g += `<text class="lbl" x="${x(maxKw) + 8}" y="${e.ly + 4}">${e.label}</text>`; }
-  const R = P.recommended.cfg, row = d.find(r => r.kw === R.kw);
-  if (row) { const v = row[P.setup.opt]; g += `<circle cx="${x(R.kw)}" cy="${y(v)}" r="5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/><text class="lbl" x="${x(R.kw)}" y="${y(v) + 20}" text-anchor="middle">${R.kw} kW: ${usd(v)}</text>`; }
+  const R = P.recommended.cfg, row = d.find(r => r.kw === Math.round(R.kw));
+  if (row) { const v = P.lifeCost; g += `<circle cx="${x(R.kw)}" cy="${y(v)}" r="5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/><text class="lbl" x="${x(R.kw)}" y="${y(v) + 20}" text-anchor="middle">${P.owner ? 'your array' : `${R.kw} kW`}: ${usd(v)}</text>`; }
   g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
   el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
   const xh = el.querySelector('.xh');
@@ -523,13 +551,13 @@ function renderVariants() {
 function renderMethod() {
   const i = P.inputs;
   const items = [
-    ['Sun', `Casper TMY3 hourly beam, diffuse and global radiation on panels tilted ${i.pv.tilt}° facing south: ${nf(P.pvYield)} kWh per kW of panels a year, ${nf(P.pvMonthly[11])} in December and ${nf(P.pvMonthly[6])} in July. Cell temperature follows air temperature and wind, which suits cold, windy Casper. ${nf(i.pv.losses * 100)}% losses. The ${P.inverter.name} converts at ${nf(P.inverter.eff * 100, 1)}%${P.inverter.ac ? ` and clips at ${P.inverter.ac} kW AC per unit, taking up to ${P.inverter.dc} kW of panels` : ''}.`],
+    ['Sun', `Casper TMY3 hourly beam, diffuse and global radiation on panels flush on the shop's south roof slope, ${i.pv.tilt}° facing south, less ${nf(i.pv.shade * 100, 1)}% of the year's sun lost to the two-story center block's shade (roofpv.js, panel by panel): ${nf(P.pvYield)} kWh per kW of panels a year, ${nf(P.pvMonthly[11])} in December and ${nf(P.pvMonthly[6])} in July. Cell temperature follows air temperature and wind, which suits cold, windy Casper. ${nf(i.pv.losses * 100)}% losses. The ${P.inverter.name} converts at ${nf(P.inverter.eff * 100, 1)}%${P.inverter.ac ? ` and clips at ${P.inverter.ac} kW AC per unit, taking up to ${P.inverter.dc} kW of panels` : ''}.`],
     ['Loads', `Heating and cooling come hour by hour from the thermal model, with upstairs internal gains set from your ${i.domestic.kWhPerDay} kWh/day at ${nf(i.domestic.indoor * 100)}% indoors. Household electricity follows a typical daily shape. Hot water is ${i.dhw.galPerDay} gal/day heated to ${i.dhw.setF}°F from Casper ground water, by gas today.`],
     ['Heat pumps', `Each Apollo follows your 6-ton COP and capacity curves (${i.hp.cop47} at 47°F, ${i.hp.cop17} at 17°F, ${i.hp.cop5} at 5°F, derated ${i.hp.derate}; stops below ${i.hp.minT}°F), taken as rated at ${i.hp.ratedWaterF}°F water, with capacity scaled by tons. As in your hydronic pack, the heat pump charges the 250-gal buffer on an outdoor reset, ${i.hp.reset.lowF}°F at ${i.hp.reset.lowAtF}°F outdoors up to ${i.hp.reset.highF}°F at ${i.hp.reset.highAtF}°F. Every °F above the rating costs ${nf(i.hp.copPerF * 100, 1)}% of COP. The tank feeds the radiant floor upstairs, and the AHU (downstairs, plus upstairs when the floor can't keep up). The shop is heated only on demand, with gas: ${i.shop.heater === 'modine' ? 'the Modine' : 'max-temperature water straight from the Navien'}; the heat pump never serves it. It also preheats the combi's cold water through the lower coil, except while it's chilled. The floor puts out ${i.floor.btuPerFt2F} Btu/h per ft² per °F over ${nf(i.floor.areaFt2)} ft², and it carries ${nf(P.setup.floorShare * 100)}% of the upstairs heat. It loses ${nf(i.floor.downLoss * 100)}% downward through the R-19, which the ground level uses when it needs heat. A second AHU would heat upstairs by air with the floor off. "Heats when it beats gas" spends each month's banked solar credit that would otherwise be paid out at the true-up on the best COP hours first, plus any hour where the heat pump beats gas outright. It never makes a month buy power it wouldn't have. Cooling runs the most efficient unit first (COP ${i.hp.units.t35.coolCop} for the 3.5-ton, ${i.hp.units.t60.coolCop} for the 6-ton). Prices are MBTEK list plus $${nf(i.hp.install)} per unit to install.`],
     ['Control', `Rocky Mountain Power nets kWh by the month, so when the heat pump runs within a month doesn't change the bill. Charging the buffer only while panels export, as in the pack's future Home Assistant plan, earns nothing extra on its own. What matters is whether the year ends with credit paid out at $${i.rates.avoided}/kWh. At $${i.rates.elec}/kWh bought, heat pump heat costs more than gas unless its COP tops ${nf(i.rates.elec / (i.rates.gas / (1e5 * i.boilerEff)) / 3412, 1)}, which it never reaches here. So the trigger to build is 'projected ${MON[i.rates.trueUpMonth]} credit left over': heat with the heat pump while that's positive (mostly the fall, before a year-end true-up), and let the Navien carry the rest.`],
     ['Household', `Your ${i.domestic.kWhPerDay} kWh/day (${nf(i.domestic.kWhPerDay * 365)} kWh a year) is in every load, along with ${i.dhw.galPerDay} gal/day of hot water for four people. The recommended array makes ${nf(P.recommended.prod)} kWh against ${nf(P.recommended.loadKWh)} kWh used, so over the year it covers the household and the heat pump. In ${P.recommended.monProd.map((v, k) => v < P.recommended.monLoad[k] ? MON[k] : null).filter(Boolean).join(', ') || 'no month'}, use runs ahead of production and banked credit makes up the difference.`],
     ['Net metering', `Each month's kWh are netted. Surplus is banked at full retail value and carried forward; whatever is left at the end of ${MON[i.rates.trueUpMonth]} is paid at $${i.rates.avoided}/kWh. Systems are limited to ${i.nemCapKwAC} kW of inverter AC rating, which allows ${P.inverter.maxUnits > 1 ? P.inverter.maxUnits + ' ' + P.inverter.name + 's' : P.inverter.kind === 'micro' ? P.inverter.dcMax + ' kW of panels on microinverters' : 'one ' + P.inverter.name}. Confirm both the limit and the true-up date with Rocky Mountain Power.`],
-    ['Money', `Panel, site and battery costs are from your sheet; inverter prices other than the 18kPV are 2026 retail listings. Savings grow ${nf(i.rates.escalation * 100, 1)}% a year with rates, less ${nf(i.rates.degradation * 100, 1)}% panel degradation. "Worth" is net present value at ${nf(i.finance.discount * 100, 1)}% over ${i.finance.horizon} years. Payback counts the growing savings.`],
+    ['Money', `Panel, site and battery costs are from your sheet: $${i.capex.pvPerKw}/kW covers panels, racking and install, so if the ZnShine pallets are already paid for, your array's real cost to finish is lower than shown. The 18kPV is your refurbished price; other inverters are 2026 retail listings. Savings grow ${nf(i.rates.escalation * 100, 1)}% a year with rates, less ${nf(i.rates.degradation * 100, 1)}% panel degradation. "Worth" is net present value at ${nf(i.finance.discount * 100, 1)}% over ${i.finance.horizon} years. Payback counts the growing savings.`],
     ['Not counted', 'The controller the smart mode needs (a seasonal schedule and an outdoor-temperature lockout get most of it), extra electrical service for two units, tax credits (the federal residential credit ended in 2025; set any rebate under Costs), demand charges (none on your Schedule 25 bill), and panel or inverter replacement.'],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));

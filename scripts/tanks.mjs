@@ -30,9 +30,9 @@ const variant = t => {
 const out = [];
 for (const t of TANKS) {
   const t0 = performance.now(), { s, O } = variant(t);
-  // Grid-tied plan (the house A protects): 3.5-ton, smart heating, 21 kW.
-  const g = buildContext(wx, s); g.m = 'sma77';
-  const g0 = evaluate(g, { kw: 0, inv: 0, load: 'c35.smart.1' }), g1 = evaluate(g, { kw: 21, inv: 2, load: 'c35.smart.1' });
+  // Grid-tied plan (the house A protects): 3.5-ton, smart heating, the shop-roof array on two 18kPVs.
+  const g = buildContext(wx, s); g.m = 'eg4_18kpv';
+  const g0 = evaluate(g, { kw: 0, inv: 0, load: 'c35.smart.1' }), g1 = evaluate(g, { kw: SOLAR_INPUTS.pv.array.kw, inv: 2, load: 'c35.smart.1' });
   const grid = { capex: g1.capex, bills: g1.total, life: lifeCost(g1, g0, s) };
   const C = conservation(s), cctx = offgridContext(wx, C.s, C.t);
   const A = outageKit(cctx, O).best;
@@ -41,7 +41,7 @@ for (const t of TANKS) {
   const pick = x => x && Object.fromEntries(Object.entries(x).filter(([k]) => !['mon', 'daySoc', 'dayCons'].includes(k)));
   out.push({ ...t, grid, A: pick(A), B: pick(B), C: pick(Cw) });
   console.log(`${t.label} (${Math.round(performance.now() - t0)} ms)
-  grid-tied 21 kW: up front $${Math.round(grid.capex)}, bills $${Math.round(grid.bills)}/yr, 25-yr $${Math.round(grid.life)}
+  grid-tied shop array: up front $${Math.round(grid.capex)}, bills $${Math.round(grid.bills)}/yr, 25-yr $${Math.round(grid.life)}
   A kit: ${A.nb} batt + ${A.gen} kW, ${Math.round(A.gal)} gal, $${A.cost}
   B: ${B.tons}-ton + ${B.resKw} kW res, ${B.kw} kW PV, ${Math.round(B.battKwh)} kWh, up front $${Math.round(B.capex)}, 25-yr $${Math.round(B.life)}, res ${Math.round(B.resKwh)} kWh
   C: ${Cw.tons}-ton, ${Cw.kw} kW PV, ${Math.round(Cw.battKwh)} kWh, ${Cw.cords.toFixed(1)} cords, up front $${Math.round(Cw.capex)}, 25-yr $${Math.round(Cw.life)}, conserve ${Cw.consH} h`);

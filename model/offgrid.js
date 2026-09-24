@@ -2,7 +2,7 @@
 // on the solar model's loads (thermal model, household electricity, hot
 // water) and heat pump curves.
 //
-//   A  Outage kit for the grid-tied plan: the 21 kW array on hybrid
+//   A  Outage kit for the grid-tied plan: the shop-roof array on hybrid
 //      inverters, batteries and a gas generator carry the house through the
 //      worst week of the year with no grid. The Navien and the Modine heat
 //      as usual (the heat pump heats only on surplus sun). Sized: batteries,
@@ -39,7 +39,7 @@ export const OFFGRID_INPUTS = {
   batt: 3400, battKwh: 16.1, dod: 0.9, rte: 0.92, battKw: 10, // EG4 indoor WallMount 314Ah (owner price)
   battLife: 15, battReplaceShare: 0.6,                        // assumed: replaced once, at 60% of today's price
   // A: outage kit
-  outageKw: 21, outageDays: 7,                                // owner
+  outageKw: 31.68, outageDays: 7,                             // owner: the shop-roof array (72 x 440 W on two 18kPVs)
   gens: [                                                     // assumed installed prices, standby, NG/LP
     { kw: 10, cost: 7000 }, { kw: 14, cost: 8000 }, { kw: 18, cost: 9000 }, { kw: 22, cost: 10000 }, { kw: 26, cost: 11500 },
   ],
@@ -129,7 +129,7 @@ export function offgridContext(wx, s = SOLAR_INPUTS, thermalInputs = THERMAL) {
 // ---------------------------------------------------------------- A: outage
 
 // The house during an outage: Navien and Modine heat, the heat pump cools
-// (and heats only on surplus sun), 21 kW on hybrid inverters.
+// (and heats only on surplus sun), the shop-roof array on hybrid inverters.
 export function outageLoads(ctx) {
   const P = loadsFor(ctx, 'c35.cool.1'), H = loadsFor(ctx, 'c35.hp.1');
   return { elec: P.elec, gas: P.gas, dE: H.elec.map((v, i) => v - P.elec[i]), dG: P.gas.map((v, i) => v - H.gas[i]) };
