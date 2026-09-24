@@ -38,9 +38,11 @@ export const FIN_INPUTS = {
   strategy: {
     mode: 'separate',        // 'separate': close the HELOC, then one line per phase; 'redraw': each phase redraws the HELOC when it falls to redrawAt
     redrawAt: 100000,
-    phaseApr: 0.07,          // owner
-    sell: 'afterPayoff',     // 'afterPayoff': sell the month the rental mortgage is prepaid; 'onDate'; 'never'
-    sellOn: '2026-09',
+    phaseApr: 0.07,          // owner: a new HELOC for each phase, taken out once the renovation line is gone
+    // Owner: killing the renovation HELOC is priority one, even if it means
+    // selling the rental. December 2026 is assumed as the first realistic close.
+    sell: 'onDate',          // 'onDate'; 'afterPayoff': sell the month the rental mortgage is prepaid; 'never'
+    sellOn: '2026-12',
     prepayMortgage: true,    // once every phase is paid, surplus prepays the rental mortgage
     refillFloor: true,       // surplus, and gifts, refill brokerage first while it is under the floor
     shortfall: 'brokerage',  // when rent and savings don't cover the payments: 'brokerage' (owner: $1,500 is about the real maximum) or 'paycheck' (workbook: the paycheck covers it all)
@@ -186,7 +188,7 @@ function simCore(inp) {
       if (heloc <= 0.5 && helocClosed == null) { heloc = 0; helocClosed = cal; ev(t, 'close', 'Renovation HELOC paid off: close it'); }
       if (helocClosed != null && !openPhase()) {
         const next = phases.find(p => p.status === 'pending');
-        if (next) { next.status = 'open'; next.bal = next.amount; amort['ph:' + next.id][k].draw = next.amount; row.lumps.push({ what: `Open a ${pct(S.phaseApr)} line and buy: ${next.name}`, amt: next.amount, from: 'new line' }); ev(t, 'open', `${next.name}: open its own ${pct(S.phaseApr)} line`, next.amount, { id: next.id }); }
+        if (next) { next.status = 'open'; next.bal = next.amount; amort['ph:' + next.id][k].draw = next.amount; row.lumps.push({ what: `Take out a new ${pct(S.phaseApr)} HELOC and buy: ${next.name}`, amt: next.amount, from: 'new line' }); ev(t, 'open', `${next.name}: take out a new HELOC`, next.amount, { id: next.id }); }
       }
     } else {
       // Redraw: a phase draws on the HELOC once it has fallen to the trigger
@@ -269,8 +271,9 @@ export function variants(inp) {
   const v = (label, f) => { const I = clone(inp); f(I); const s = simulate(I); return { label, s: s.summary, end: s.rows.at(-1).cal }; };
   return [
     v('As entered', () => {}),
-    v('Sell the rental next month, equity to the truck and HELOC', I => { I.strategy.sell = 'onDate'; I.strategy.sellOn = ymOf(calOf(I.asOf) + 1); }),
-    v('Keep the rental for good', I => { I.strategy.sell = 'never'; }),
+    ...(inp.strategy.sell === 'onDate'
+      ? [v('Keep the rental; sell once its mortgage is prepaid (workbook)', I => { I.strategy.sell = 'afterPayoff'; }), v('Keep the rental for good', I => { I.strategy.sell = 'never'; })]
+      : [v('Sell the rental next month, equity to the truck and HELOC', I => { I.strategy.sell = 'onDate'; I.strategy.sellOn = ymOf(calOf(I.asOf) + 1); }), v('Keep the rental for good', I => { I.strategy.sell = 'never'; })]),
     v('Phases redraw the HELOC at $100k instead (workbook)', I => { I.strategy.mode = 'redraw'; }),
     v('Brokerage pays a line off when it can keep $50k', I => { I.strategy.brokPayoff = true; }),
     v(inp.strategy.truckFirst ? 'Gifts and surplus to the HELOC before the truck' : 'Gifts and surplus pay off the truck first', I => { I.strategy.truckFirst = !I.strategy.truckFirst; }),
