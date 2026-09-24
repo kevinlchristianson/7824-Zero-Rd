@@ -14,7 +14,8 @@
     "offgrid": "node scripts/offgrid.mjs",
     "tanks": "node scripts/tanks.mjs",
     "finance": "node scripts/finance.mjs",
-    "roofpv": "node scripts/roofpv.mjs"
+    "roofpv": "node scripts/roofpv.mjs",
+    "bundle": "node scripts/bundle.mjs"
   },
   "dependencies": {
     "three": "0.160.0"

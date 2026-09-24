@@ -1,0 +1,168 @@
+<title>7824 Zero Rd</title>
+<meta name="description" content="The building at 7824 Zero Rd in one place: the 3D model, heating and cooling, the solar plan, the shop array's wiring, off-grid sizing and the finances, each in its own tab.">
+<!-- page links -->
+<style>
+  :root {
+    --paper: #f1eee8;
+    --ink: #23201d;
+    --muted: #6d675f;
+    --rule: #d9d3c9;
+    --accent: #8a4f35;
+    --focus: #2f6f8f;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --zr-bar-h: 48px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #141210;
+      --ink: #ece6dd;
+      --muted: #a39b90;
+      --rule: #3a342e;
+      --accent: #d39473;
+      --focus: #7fb7d1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #141210;
+    --ink: #ece6dd;
+    --muted: #a39b90;
+    --rule: #3a342e;
+    --accent: #d39473;
+    --focus: #7fb7d1;
+  }
+
+  body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--body); }
+
+  /* Tab bar: stays on top while a page scrolls; pages' own sticky panels sit below it. */
+  .zr-bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    box-sizing: border-box; height: var(--zr-bar-h);
+    display: flex; align-items: stretch; gap: 24px;
+    padding-inline: 20px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+  }
+  .zr-name { margin: 0; align-self: center; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+  .zr-name b { font: 700 20px/1 var(--display); letter-spacing: 0.02em; }
+  .zr-name span { font: 500 11px/1 var(--mono); color: var(--muted); }
+  .zr-tabs { position: relative; flex: 1; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; }
+  .zr-tabs::-webkit-scrollbar { display: none; }
+  .zr-tabs button {
+    flex: none;
+    font: 600 14px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); background: none; border: 0;
+    padding: 0 12px; cursor: pointer;
+    box-shadow: inset 0 -3px 0 transparent;
+  }
+  .zr-tabs button:hover { color: var(--ink); }
+  .zr-tabs button[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -3px 0 var(--accent); }
+  .zr-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: -6px; }
+
+  .zr-panel { min-height: calc(100vh - var(--zr-bar-h)); min-height: calc(100dvh - var(--zr-bar-h)); }
+  /* The 3D model fills the window under the bar, as it does on its own page. */
+  @media (min-width: 801px) {
+    .zr-panel[data-page="model"] {
+      min-height: 0;
+      height: calc(100vh - var(--zr-bar-h));
+      height: calc(100dvh - var(--zr-bar-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    }
+  }
+  @media (max-width: 560px) {
+    .zr-bar { gap: 6px; padding-inline: 16px 0; }
+    .zr-name span { display: none; }
+    .zr-tabs button { padding: 0 10px; font-size: 13px; }
+  }
+</style>
+<!-- importmap -->
+
+<header class="zr-bar">
+  <p class="zr-name"><b>7824 Zero Rd</b><span>Casper, WY</span></p>
+  <div class="zr-tabs" role="tablist" aria-label="Pages">
+<!-- tabs -->
+  </div>
+</header>
+<!-- panels -->
+
+<!-- templates -->
+
+<script type="module">
+// Each page's script registers here and runs the first time its tab opens,
+// inside the tab's own shadow root.
+const KEY = 'zero-rd-tab';
+const tablist = document.querySelector('.zr-tabs');
+const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+const panels = new Map([...document.querySelectorAll('.zr-panel')].map(p => [p.dataset.page, p]));
+
+const defs = {};
+const def = id => defs[id] || (defs[id] = (() => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; })());
+window.zeroRd = { page: (id, run) => def(id).resolve(run) };
+
+const opened = new Set();
+async function open(id) {
+  if (opened.has(id)) return;
+  opened.add(id);
+  const root = panels.get(id).attachShadow({ mode: 'open' });
+  root.append(document.getElementById('zr-tpl-' + id).content.cloneNode(true));
+  try { await (await def(id).promise)(root); }
+  catch (err) {
+    console.error(err);
+    const p = document.createElement('p');
+    p.setAttribute('role', 'alert');
+    p.style.cssText = 'margin: 24px 20px; font: 14px/1.5 var(--body); color: var(--ink);';
+    p.textContent = `This tab didn’t finish loading (${err?.message || err}). Reload the page to try again.`;
+    root.prepend(p);
+  }
+}
+
+// Pages take the viewer's theme from their own tab.
+const syncTheme = () => {
+  const t = document.documentElement.getAttribute('data-theme');
+  for (const p of panels.values()) { if (t) p.setAttribute('data-theme', t); else p.removeAttribute('data-theme'); }
+};
+new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+syncTheme();
+
+let current = null;
+const scrolls = {};
+function select(id, focus = false) {
+  if (!panels.has(id) || id === current) return;
+  if (current) scrolls[current] = scrollY;
+  current = id;
+  for (const t of tabs) {
+    const on = t.dataset.page === id;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    if (!on) continue;
+    if (focus) t.focus({ preventScroll: true });
+    const l = t.offsetLeft, r = l + t.offsetWidth;
+    if (l < tablist.scrollLeft || r > tablist.scrollLeft + tablist.clientWidth) tablist.scrollLeft = l - 16;
+  }
+  for (const [k, p] of panels) p.hidden = k !== id;
+  try { localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
+  open(id);
+  scrollTo(0, scrolls[id] || 0);
+  dispatchEvent(new Event('resize'));
+}
+
+tablist.addEventListener('click', e => { const t = e.target.closest('[role="tab"]'); if (t) select(t.dataset.page); });
+tablist.addEventListener('keydown', e => {
+  const i = tabs.indexOf(document.activeElement);
+  const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+  if (i < 0 || to == null) return;
+  e.preventDefault();
+  select(tabs[(to + tabs.length) % tabs.length].dataset.page, true);
+});
+addEventListener('hashchange', () => select(location.hash.slice(1)));
+
+let first = location.hash.slice(1);
+if (!panels.has(first)) {
+  first = tabs[0].dataset.page;
+  try { const saved = localStorage.getItem(KEY); if (panels.has(saved)) first = saved; } catch { /* storage unavailable */ }
+}
+select(first);
+</script>
+<!-- pages -->

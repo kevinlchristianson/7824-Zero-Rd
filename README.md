@@ -8,6 +8,7 @@ Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one 
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 - **`offgrid.html`**: off-grid questions sized hour by hour, in grid-down conservation mode: (A) batteries, generator and stored gas to carry the grid-tied house through its worst week; (B) full off grid with no gas on heat pumps, resistance and batteries; (C) the same with an outdoor wood boiler. `npm run offgrid` rebuilds `data/offgrid.json`.
 - **`finance.html`**: the financial model. Every account's balance as of the last check-in, run forward month by month (`model/finance.js`): what to pay this month, the steps and cash-flow triggers ahead, each loan's amortization, and other paths from the same balances. Inputs are live-editable and autosave to the page's database; each check-in is filed with the plan it makes, so later check-ins show ahead or behind. `npm run finance` prints the default plan and writes `data/finance-seed.json`, the first check-in.
+- **`zero-rd.html`**: all six pages above as tabs of one page, the published artifact. `npm run bundle` rebuilds it from the pages, each tab running its page in its own shadow root; edit the pages, not this file.
 
 All three read `model/params.js`: the plan dimensions, heights and the full door/window inventory.
 
@@ -81,6 +82,7 @@ npm run solar                   # print the solar plan report
 npm run solar:write             # refresh data/solar-defaults.json for the page
 npm run roofpv                  # lay out panels on the south roofs; writes data/roofpv.json
 npm run weather                 # rebuild data/casper-tmy3.json from the EPW
+npm run bundle                  # rebuild zero-rd.html, every page as a tab
 npm run export                  # export/7824-zero-rd.{obj,mtl,glb}
 node scripts/export.mjs --no-context   # building only, no ground
 ```
