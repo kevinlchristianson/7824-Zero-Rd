@@ -1,5 +1,5 @@
-<title>Zero Rd Build Plan</title>
-<meta name="description" content="How to pay for the steps toward design C at 7824 Zero Rd: the owner's cash-flow workbook rebuilt with the $250k renovation, two $50k gifts, and each energy step bought on different schedules.">
+<title>Zero Rd Financial Model</title>
+<meta name="description" content="Live month-by-month cash flow for 7824 Zero Rd: every account's balance, what to pay this month, the steps and triggers ahead, amortization for each loan, and a history of check-ins against the plan.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -7,7 +7,9 @@
   :root {
     --paper: #f1eee8; --sheet: #fbfaf7; --ink: #23201d; --ink-2: #4a4540; --muted: #6d675f;
     --rule: #d9d3c9; --grid: #e8e3da; --accent: #8a4f35; --accent-wash: rgba(138, 79, 53, 0.10);
-    --s0: #8f877c; --s1: #2a78d6; --s2: #eb6834; --s3: #1f9e89; --focus: #2f6f8f;
+    --focus: #2f6f8f; --warn: #b3261e; --warn-wash: rgba(179, 38, 30, 0.08); --good: #0a7d0a;
+    /* Series follow the account: rental blue, HELOC orange, phase lines violet, brokerage aqua, paycheck yellow; truck and cards are the neutral "other debt". */
+    --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -17,229 +19,854 @@
       color-scheme: dark;
       --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
       --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
-      --s0: #8d857a; --s1: #3987e5; --s2: #d95926; --s3: #2bb39c; --focus: #7fb7d1;
+      --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
+      --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
     --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
     --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
-    --s0: #8d857a; --s1: #3987e5; --s2: #d95926; --s3: #2bb39c; --focus: #7fb7d1;
+    --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
+    --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
   }
   body { margin: 0; background: var(--sheet); color: var(--ink); font: 14px/1.5 var(--body); }
-  .page { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
+  .page { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .masthead { padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
+  .masthead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
   .eyebrow { font: 600 12px/1 var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
-  h1 { font: 700 44px/0.95 var(--display); margin: 0; }
-  .lede { color: var(--muted); margin: 8px 0 0; max-width: 68ch; text-wrap: pretty; }
+  h1 { font: 700 44px/0.95 var(--display); margin: 0; text-wrap: balance; }
+  .lede { color: var(--muted); margin: 8px 0 0; max-width: 66ch; text-wrap: pretty; }
+  .status { margin: 0; font: 500 12px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status.ok::before { background: var(--good); }
+  .status.busy::before { background: var(--accent); }
+  .status.err::before { background: var(--warn); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-bottom: 1px solid var(--rule); overflow: hidden; margin-inline: -16px; }
+  .kpi { padding: 16px; display: grid; gap: 2px; align-content: start; box-shadow: -1px 0 0 var(--rule); }
+  .kpi.hero { grid-column: span 2; }
+  .kpi-label { font: 600 12px/1.2 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .kpi-value { font: 600 28px/1.15 var(--body); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .kpi.hero .kpi-value { font-size: 44px; line-height: 1; margin: 2px 0 4px; letter-spacing: -0.02em; }
+  .kpi-sub { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .kpi.warn .kpi-value { color: var(--warn); }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0 32px; align-items: start; }
+  .results { min-width: 0; }
   section { padding-block: 24px 8px; border-bottom: 1px solid var(--rule); }
   section:last-child { border-bottom: 0; }
   h2 { font: 700 26px/1.1 var(--display); margin: 0 0 4px; text-wrap: balance; }
-  h3 { font: 600 16px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; margin: 18px 0 8px; color: var(--ink-2); }
+  h3 { font: 600 15px/1.2 var(--display); letter-spacing: 0.06em; text-transform: uppercase; margin: 18px 0 8px; color: var(--ink-2); }
   .sub { color: var(--muted); margin: 0 0 14px; max-width: 74ch; text-wrap: pretty; }
+  .sub b { color: var(--ink); font-weight: 600; }
 
-  .kit { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--rule); margin: 6px 0 16px; }
-  .kit > div { padding: 14px 16px; box-shadow: -1px 0 0 var(--rule); display: grid; gap: 2px; align-content: start; }
-  .kit > div:first-child { box-shadow: none; padding-left: 0; }
-  .k-label { font: 600 12px/1.2 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-  .k-value { font: 600 28px/1.1 var(--body); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .k-sub { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
-  @media (max-width: 760px) { .kit { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kit > div:nth-child(3) { box-shadow: none; padding-left: 0; } .kit > div:nth-child(n+3) { border-top: 1px solid var(--rule); } }
+  /* Month checklists */
+  .months { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 12px; }
+  .month { border: 1px solid var(--rule); border-radius: 4px; padding: 14px 16px 10px; background: var(--sheet); }
+  .month.now { border-color: var(--ink); box-shadow: inset 0 3px 0 var(--accent); }
+  .month h4 { margin: 0 0 8px; font: 700 20px/1.1 var(--display); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .month h4 small { font: 600 11px var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ledger td { padding: 3px 0; border: 0; vertical-align: baseline; }
+  .ledger td.amt { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 8px; }
+  .ledger tr.head td { padding-top: 8px; font: 600 11px var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ledger tr.do td { font-weight: 600; }
+  .ledger tr.lump td { color: var(--accent); font-weight: 600; }
+  .ledger tr.total td { border-top: 1px solid var(--rule); padding-top: 5px; color: var(--muted); }
+  .ledger i.sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
 
-  ol.steps { margin: 0 0 16px; padding-left: 0; list-style: none; display: grid; gap: 10px; max-width: 76ch; counter-reset: s; }
-  ol.steps li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
-  ol.steps li::before { counter-increment: s; content: counter(s); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--sheet); font: 600 12px var(--mono); }
-  ol.steps b { color: var(--ink); }
-  ol.steps span { color: var(--ink-2); }
+  /* Steps */
+  .steps { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 0; }
+  .steps li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 16px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
+  .steps .when { font: 600 13px var(--mono); color: var(--ink-2); padding-top: 1px; }
+  .steps .what b { display: block; font-weight: 600; }
+  .steps .what span { color: var(--muted); font-size: 13px; }
+  .steps li.past .when, .steps li.past .what { opacity: 0.55; }
+  details.more > summary { cursor: pointer; font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 6px 0 12px; }
 
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin-bottom: 16px; }
+  table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .data th, .data td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); vertical-align: baseline; }
+  .data th { font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--rule); white-space: nowrap; }
+  .data td.num, .data th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .data tr.pick td { font-weight: 600; }
+  .data tr.pick td:first-child::before { content: '▸ '; }
+  .cellnote { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+  .pill { display: inline-block; font: 600 10.5px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 6px 2px; border-radius: 2px; white-space: nowrap; }
+  .pill.ok { color: var(--good); box-shadow: inset 0 0 0 1px currentColor; }
+  .pill.warn { color: var(--warn); background: var(--warn-wash); }
+  .pill.wait { color: var(--muted); box-shadow: inset 0 0 0 1px var(--rule); }
+  .pos { color: var(--good); } .neg { color: var(--warn); }
+
+  /* Charts */
   .chart { position: relative; width: 100%; margin-bottom: 6px; }
   .chart svg { display: block; overflow: visible; }
   .chart text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
   .chart .lbl { font-family: var(--body); font-size: 11.5px; fill: var(--ink); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; font-size: 12.5px; color: var(--ink-2); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend i { display: inline-block; width: 16px; height: 2px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  .legend i.line { width: 16px; height: 2px; border-radius: 1px; }
+  .legend i.dash { width: 16px; height: 0; border-top: 2px dashed var(--ink); background: none !important; }
+  .legend i.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--sheet); }
+  details.tv { margin: 4px 0 16px; }
+  details.tv > summary { cursor: pointer; font: 600 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 28px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { font: 600 13px/1 var(--display); letter-spacing: 0.04em; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink-2); border-radius: 3px; padding: 7px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .tabs button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+  .tabs i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+  .facts b { color: var(--ink); font: 600 14px var(--mono); font-variant-numeric: tabular-nums; }
 
-  .table-wrap { overflow-x: auto; margin-bottom: 16px; }
-  table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13px; }
-  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); vertical-align: baseline; }
-  th { font: 600 11.5px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--rule); }
-  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.pick td { font-weight: 600; }
-  tr.pick td:first-child::before { content: '▸ '; }
-  .cellnote { font-size: 11.5px; font-weight: 400; color: var(--muted); }
-  .warn { color: var(--accent); }
+  .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 170px; max-width: 280px; }
+  .tip .t-head { font: 600 11px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .tip .t-row { display: flex; align-items: center; gap: 8px; line-height: 1.6; }
+  .tip .t-row i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .tip .t-row b { font: 600 12px var(--mono); font-variant-numeric: tabular-nums; margin-left: auto; }
   .notes { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); max-width: 80ch; font-size: 13px; }
   .notes b { color: var(--ink); }
-  .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 160px; }
-  .tip b { font: 600 12px var(--mono); }
+
+  /* Inputs */
+  .inputs { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; overflow-y: auto; background: var(--paper); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); padding-inline: 16px; padding-block: 18px 28px; }
+  .inputs h2 { font-size: 22px; }
+  .checkin { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 12px; margin: 10px 0 14px; display: grid; gap: 8px; }
+  .checkin .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .checkin label { font-size: 12.5px; color: var(--ink-2); }
+  .checkin input { font: 500 13px var(--mono); background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; }
+  .checkin input[type="text"] { font-family: var(--body); width: 100%; box-sizing: border-box; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn { font: 600 12px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--rule); background: transparent; color: var(--ink-2); border-radius: 3px; padding: 8px 10px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+  .btn.small { padding: 5px 7px; font-size: 11px; }
+  .btn.danger { color: var(--warn); }
+  .saveline { font: 12px var(--mono); color: var(--muted); }
+  .inputs details { border-top: 1px solid var(--rule); }
+  .inputs summary { cursor: pointer; padding: 10px 0; font: 600 14px var(--display); letter-spacing: 0.04em; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+  .inputs summary::-webkit-details-marker { display: none; }
+  .inputs summary::after { content: "+"; color: var(--muted); font-family: var(--mono); }
+  .inputs details[open] summary::after { content: "−"; }
+  .groupnote { font-size: 11.5px; color: var(--muted); margin: -4px 0 8px; }
+  .subhead { font: 600 12px var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); margin: 10px 0 2px; display: flex; align-items: center; gap: 6px; }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 2px 8px; align-items: center; padding: 4px 0; }
+  .field label { font-size: 12.5px; color: var(--ink-2); line-height: 1.3; }
+  .field input, .field select { width: 100%; box-sizing: border-box; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; font: 500 13px var(--mono); text-align: right; }
+  .field select { text-align: left; font-family: var(--body); font-size: 12px; }
+  .field input[type="checkbox"] { width: 18px; height: 18px; justify-self: end; accent-color: var(--accent); }
+  .field input[type="month"] { text-align: left; font-size: 12px; }
+
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    .inputs { position: static; max-height: none; border: 1px solid var(--rule); margin-top: 24px; }
+  }
+  @media (max-width: 640px) { .page { padding-inline: 16px; } h1 { font-size: 36px; } .kpi.hero .kpi-value { font-size: 34px; } .steps li { grid-template-columns: 1fr; } }
+  @media (max-width: 420px) { .kpi.hero { grid-column: 1 / -1; } }
 </style>
 
 <div class="page">
   <header class="masthead">
-    <p class="eyebrow">Build plan · 7824 Zero Rd</p>
-    <h1>Paying for the road to design C</h1>
-    <p class="lede">Your cash-flow workbook's chosen path (hold the rental, rent the second unit, kill the line, prepay the mortgage, sell) rebuilt month by month with the renovation at $250k on a $250k interest-only HELOC and your mom's two $50k gifts. Each step toward the wood-boiler off-grid design is then bought on different schedules, and the schedules are compared on what you end up with in 2046 after everything the paycheck put in.</p>
+    <div>
+      <p class="eyebrow">Financial model · 7824 Zero Rd</p>
+      <h1>Paying for the road to design C</h1>
+      <p class="lede">Every account as of your last check-in, run forward month by month: what to pay this month, the steps and triggers ahead, and each loan's amortization. Change any balance under Accounts &amp; plan and it all reruns. Save a check-in each month and the page keeps the history against the plan.</p>
+    </div>
+    <p class="status" id="status" role="status">Loading…</p>
   </header>
 
-  <section>
-    <h2>What to do</h2>
-    <p class="sub" id="do-sub"></p>
-    <div class="kit" id="kit"></div>
-    <ol class="steps" id="steps"></ol>
-  </section>
+  <div class="kpis" id="kpis" aria-label="Headline results"></div>
 
-  <section>
-    <h2>If closing the HELOC comes first</h2>
-    <p class="sub" id="hf-sub"></p>
-    <div class="kit" id="hf-kit"></div>
-    <div class="table-wrap"><table id="hf"></table></div>
-  </section>
+  <div class="layout">
+    <main class="results" id="results">
+      <section id="sec-now">
+        <h2>What to do this month</h2>
+        <p class="sub" id="now-sub"></p>
+        <div class="months" id="months"></div>
+      </section>
 
-  <section>
-    <h2>What each step is worth</h2>
-    <p class="sub">Costs at your prices (refurbished 18kPVs at $3,600, batteries at $3,400, MBTEK less 20%). Savings are yearly bill changes from the solar plan at today's rates, growing 3.3% a year in the cash flow. Nothing here counts as an asset; only what it saves counts.</p>
-    <div class="table-wrap"><table id="ladder"></table></div>
-  </section>
+      <section id="sec-steps">
+        <h2>Steps ahead</h2>
+        <p class="sub" id="steps-sub"></p>
+        <ol class="steps" id="steps"></ol>
+      </section>
 
-  <section>
-    <h2>Schedules compared</h2>
-    <p class="sub" id="cmp-sub"></p>
-    <div class="table-wrap"><table id="cmp"></table></div>
-  </section>
+      <section id="sec-triggers">
+        <h2>Cash-flow triggers</h2>
+        <p class="sub">Rules the plan runs on. Each has its own trigger, what to do when it fires, when the plan expects it, and where it stands at this check-in.</p>
+        <div class="table-wrap"><table class="data" id="triggers"></table></div>
+      </section>
 
-  <section>
-    <h2>Debt over time</h2>
-    <p class="sub">The HELOC and the rental mortgage together, month by month, for four schedules; the HELOC-first line includes each phase's own line. The line dies, then surplus prepays the mortgage, then the rental sells.</p>
-    <div class="legend" id="debt-legend"></div>
-    <div class="chart" id="debt" role="img" aria-label="HELOC plus mortgage balance over time for three schedules"></div>
-  </section>
+      <section id="sec-flow">
+        <h2>Where each month's money goes</h2>
+        <p class="sub" id="flow-sub"></p>
+        <div class="legend" id="flow-legend"></div>
+        <div class="chart" id="flow" role="img" aria-label="Monthly money in and money out for the next three years"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="flow-table"></div></details>
+      </section>
 
-  <section>
-    <h2>How it works, and what isn't in it</h2>
-    <ul class="notes" id="notes"></ul>
-  </section>
+      <section id="sec-debt">
+        <h2>Debt over time</h2>
+        <p class="sub" id="debt-sub"></p>
+        <div class="legend" id="debt-legend"></div>
+        <div class="chart" id="debt" role="img" aria-label="Every debt balance stacked over time, with the first plan and the check-ins"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="debt-table"></div></details>
+        <h3>Brokerage against its floor</h3>
+        <p class="sub" id="brok-sub"></p>
+        <div class="legend" id="brok-legend"></div>
+        <div class="chart" id="brok" role="img" aria-label="Brokerage balance against the floor, with the first plan and the check-ins"></div>
+      </section>
+
+      <section id="sec-amort">
+        <h2>Amortization</h2>
+        <p class="sub">Each loan on its own: the balance month by month, and what each year's payments go to. The HELOC and the phase lines are interest-only, so their principal is whatever surplus the plan sends them.</p>
+        <div class="tabs" id="amort-tabs" role="group" aria-label="Loan"></div>
+        <div class="facts" id="amort-facts"></div>
+        <div class="pair">
+          <div><h3>Balance</h3><div class="chart" id="amort-bal" role="img" aria-label="Loan balance over time"></div></div>
+          <div><h3>Each year's payments</h3><div class="legend" id="amort-legend"></div><div class="chart" id="amort-yr" role="img" aria-label="Principal and interest paid each year"></div></div>
+        </div>
+        <div class="table-wrap"><table class="data" id="amort-table"></table></div>
+        <details class="tv"><summary>Month by month, next 24 months</summary><div class="table-wrap" id="amort-months"></div></details>
+      </section>
+
+      <section id="sec-history">
+        <h2>Check-ins</h2>
+        <p class="sub" id="hist-sub"></p>
+        <div class="table-wrap"><table class="data" id="history"></table></div>
+      </section>
+
+      <section id="sec-paths">
+        <h2>Other paths from here</h2>
+        <p class="sub">The same balances run under other rules. "Net of paycheck" is net worth at the end of the horizon, including the rental until it sells, minus everything the paycheck put in: the workbook's own yardstick. The residence and the equipment aren't counted.</p>
+        <div class="table-wrap"><table class="data" id="paths"></table></div>
+      </section>
+
+      <section id="sec-method">
+        <h2>How it works</h2>
+        <ul class="notes" id="notes"></ul>
+      </section>
+    </main>
+
+    <aside class="inputs" aria-label="Accounts and plan inputs">
+      <h2>Accounts &amp; plan</h2>
+      <div class="checkin">
+        <div class="row"><label for="asof">Balances as of the end of</label><input type="month" id="asof"></div>
+        <input type="text" id="note" placeholder="Note for this check-in" aria-label="Check-in note">
+        <div class="btns">
+          <button type="button" class="btn primary" id="save">Save check-in</button>
+          <button type="button" class="btn" id="next" title="Fill in next month's balances as the plan expects them, then correct them from your statements">Start next month</button>
+        </div>
+        <div class="saveline" id="saveline">Edits save automatically.</div>
+      </div>
+      <form id="form" autocomplete="off"></form>
+    </aside>
+  </div>
 </div>
 <div class="tip" id="tip" hidden></div>
 
 <script type="module">
+import { FIN_INPUTS, DEBTS, simulate, projectInputs, seriesOf, variants, calOf, ymOf, labelOf, MON } from './model/finance.js';
+
 const $ = s => document.querySelector(s);
+const clone = o => JSON.parse(JSON.stringify(o));
 const nf = (v, d = 0) => Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-const usd = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v));
-const k$ = v => (v < 0 ? '−$' : '$') + nf(Math.abs(v) / 1000) + 'k';
+const usd = (v, d = 0) => (v < -0.005 ? '−$' : '$') + nf(Math.abs(v), d);
+const k$ = v => (v < 0 ? '−$' : '$') + (Math.abs(v) >= 1e6 ? nf(Math.abs(v) / 1e6, 2) + 'M' : nf(Math.abs(v) / 1000) + 'k');
+const L = c => (c == null ? '—' : labelOf(c));
+const sum = a => a.reduce((x, y) => x + y, 0);
+const getIn = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+const setIn = (o, p, v) => { const k = p.split('.'), l = k.pop(); k.reduce((a, x) => a[x], o)[l] = v; };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const CACHE = 'zero-rd-finance-v1';
+const COLOR = { rental: 'var(--c-rental)', heloc: 'var(--c-heloc)', phase: 'var(--c-phase)', brok: 'var(--c-brok)', pay: 'var(--c-pay)', other: 'var(--c-other)', int: 'var(--c-int)' };
+
+// ---------------------------------------------------------------- state
+function merge(base, over) {
+  for (const k of Object.keys(over || {})) {
+    if (!(k in base)) continue;
+    if (Array.isArray(base[k])) base[k] = clone(over[k]);
+    else if (base[k] && typeof base[k] === 'object') merge(base[k], over[k]);
+    else base[k] = over[k];
+  }
+  return base;
+}
+let inputs = clone(FIN_INPUTS), SIM = null, checkins = [], db = null, edited = false;
+try { const s = localStorage.getItem(CACHE); if (s) inputs = merge(clone(FIN_INPUTS), JSON.parse(s)); } catch { /* storage unavailable */ }
+
+const statusEl = $('#status'), saveline = $('#saveline');
+const setStatus = (t, c) => { statusEl.textContent = t; statusEl.className = 'status' + (c ? ' ' + c : ''); };
+
+// ---------------------------------------------------------------- persistence
+// Every edit is kept in the artifact's database (state/current) and in this
+// browser; "Save check-in" also files a dated copy under checkins/<month>.
+let saving = null, pending = false, saveTimer = 0;
+function scheduleSave() {
+  try { localStorage.setItem(CACHE, JSON.stringify(inputs)); } catch { /* ignore */ }
+  if (!db) return;
+  clearTimeout(saveTimer);
+  saveline.textContent = 'Saving…';
+  saveTimer = setTimeout(flushSave, 1200);
+}
+async function flushSave() {
+  if (saving) { pending = true; return; }
+  saving = db.doc('state/current').set({ inputs: clone(inputs), updatedAt: new Date().toISOString() })
+    .then(() => { saveline.textContent = `Saved ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`; })
+    .catch(e => { saveline.textContent = e?.code === 'invalid_argument' ? 'Read-only here: edits stay in this browser.' : 'Couldn’t save just now; your edits are kept in this browser.'; });
+  await saving; saving = null;
+  if (pending) { pending = false; flushSave(); }
+}
+async function saveCheckin() {
+  if (!db) { saveline.textContent = 'Check-ins save when the page is open in Claude.'; return; }
+  const sim = SIM, id = inputs.asOf;
+  const doc = { asOf: id, note: inputs.note || '', savedAt: new Date().toISOString(), inputs: clone(inputs), ...seriesOf(sim) };
+  saveline.textContent = 'Saving check-in…';
+  try { await db.doc('checkins/' + id).set(doc); saveline.textContent = `Check-in for ${L(calOf(id))} saved.`; flushSave(); }
+  catch (e) { saveline.textContent = e?.code === 'quota_exceeded' ? 'The history is full; delete an old check-in first.' : 'Couldn’t save the check-in. Try again.'; }
+}
+async function deleteCheckin(id) {
+  try { await db.doc('checkins/' + id).delete(); } catch { saveline.textContent = 'Couldn’t delete that check-in.'; }
+}
+const use = n => (window.claude && typeof window.claude.use === 'function' ? window.claude.use(n) : Promise.resolve(null));
+(async () => {
+  db = await use('db');
+  if (!db) { saveline.textContent = 'Edits save in this browser. Check-ins need the page open in Claude.'; renderHistory(); return; }
+  try {
+    const cur = await db.doc('state/current').get();
+    if (cur.exists && !edited) { inputs = merge(clone(FIN_INPUTS), cur.data().inputs); buildForm(); run(); }
+  } catch { /* the snapshot below still tries */ }
+  let first = true;
+  db.collection('checkins').onSnapshot(snap => {
+    checkins = snap.docs.map(d => d.data()).filter(c => c && c.asOf).sort((a, b) => a.asOf.localeCompare(b.asOf));
+    if (first) {
+      first = false;
+      // No working copy yet: start from the latest check-in.
+      db.doc('state/current').get().then(c => { if (!c.exists && !edited && checkins.length) { inputs = merge(clone(FIN_INPUTS), checkins.at(-1).inputs); buildForm(); run(); } }).catch(() => {});
+    }
+    renderHistory(); renderDebt(); renderBrok();
+  }, () => { saveline.textContent = 'History unavailable right now.'; });
+})();
+
+// ---------------------------------------------------------------- run
+let pathsTimer = 0;
+function run() {
+  try { SIM = simulate(inputs); }
+  catch (e) { setStatus('Check the inputs: ' + (e.message || e), 'err'); return; }
+  setStatus(`As of ${L(SIM.n0)}`, 'ok');
+  renderKpis(); renderNow(); renderSteps(); renderTriggers(); renderFlow(); renderDebt(); renderBrok(); renderAmort(); renderHistory(); renderNotes();
+  clearTimeout(pathsTimer); pathsTimer = setTimeout(renderPaths, 250);
+}
+let runTimer = 0;
+const rerun = () => { clearTimeout(runTimer); runTimer = setTimeout(run, 120); };
+
+// ---------------------------------------------------------------- helpers
 const tip = $('#tip');
-const showTip = (e, html) => { tip.innerHTML = html; tip.hidden = false; tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; };
+function showTip(e, head, rows) {
+  tip.replaceChildren(el('div', 't-head', head));
+  for (const r of rows) {
+    const d = el('div', 't-row'), i = el('i'); i.style.background = r.color || 'transparent';
+    if (r.dash) { i.style.background = 'none'; i.style.borderTop = '2px dashed var(--ink)'; i.style.height = '0'; }
+    d.append(i, el('span', null, r.label), el('b', null, r.value)); tip.append(d);
+  }
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 8) x = e.clientX - w - 14;
+  if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
 const hideTip = () => { tip.hidden = true; };
+function niceTicks(lo, hi, count = 5) {
+  const span = hi - lo || 1, raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= count) || 10 * mag;
+  const out = []; for (let v = Math.floor(lo / step) * step; v <= Math.ceil(hi / step) * step + step / 2; v += step) out.push(Math.round(v / step) * step);
+  return out;
+}
+function legend(node, items) {
+  node.replaceChildren(...items.map(it => { const s = el('span'), i = el('i', it.kind || ''); if (!it.kind || it.kind === 'line') i.style.background = it.color; s.append(i, document.createTextNode(it.label)); return s; }));
+}
+function table(node, head, rows, opts = {}) {
+  const t = el('table', 'data'), tr = t.createTHead().insertRow();
+  head.forEach((h, j) => { const th = el('th', opts.num?.(j) ? 'num' : '', h); tr.append(th); });
+  const tb = t.createTBody();
+  for (const r of rows) {
+    const row = tb.insertRow(); if (r.cls) row.className = r.cls;
+    r.cells.forEach((c, j) => { const td = row.insertCell(); if (opts.num?.(j)) td.className = 'num'; if (c instanceof Node) td.append(c); else td.textContent = c ?? ''; });
+  }
+  node.replaceChildren(t);
+  return t;
+}
+const phaseName = id => SIM.inputs.phases.find(p => p.id === id)?.name ?? id;
+const shortPhase = id => phaseName(id).split(':')[0];
+const acctName = key => key.startsWith('ph:') ? `${shortPhase(key.slice(3))} line` : Object.fromEntries(DEBTS)[key];
+const acctColor = key => key === 'heloc' ? COLOR.heloc : key === 'mortgage' ? COLOR.rental : key.startsWith('ph:') ? COLOR.phase : COLOR.other;
 
-let D;
-try { D = await (await fetch(new URL('./data/finance.json', import.meta.url))).json(); }
-catch { $('#do-sub').textContent = 'The plan data didn’t load. Reload the page to try again.'; throw new Error('no data'); }
-const P = D.plans, F = D.F, S = D.STEPS, base = P.base, rec = P.solarGift;
-const gain = p => p.nwNet - base.nwNet;
-
-function doSection() {
-  $('#do-sub').textContent = `Buy the solar with the first gift and let everything else ride the HELOC. The 21 kW array on two refurbished 18kPVs returns about ${nf(S.solar.saves / S.solar.cost * 100)}% a year, more than the 7% the line costs, and it leaves you ${usd(gain(rec))} better off by 2046 than putting that gift on the line. Every other step toward C costs wealth whenever you buy it, because the heat pump mostly buys cooling, the batteries buy resilience, and the boiler burns wood worth more than the gas it replaces while you're on the grid.`;
-  const kit = [
-    ['Dec 2026', 'Solar', `${usd(S.solar.cost)} from gift 1; the other ${usd(50000 - S.solar.cost - F.floorTopUp)} pays the line, ${usd(F.floorTopUp)} stays in brokerage to hold the floor`],
-    ['Jun 2027', 'Gift 2 → HELOC', 'all of it, unless you want the outage kit now'],
-    [rec.locDead, 'Line dies', `about ${rec.locDead === base.locDead ? 'the same month as' : 'a month after'} the no-solar path, with the array paid for`],
-    [rec.sold, 'Rental sells', `${k$(rec.nwNet)} in 2046 after everything the paycheck put in, vs ${k$(base.nwNet)} without solar`],
+// ---------------------------------------------------------------- KPIs
+function renderKpis() {
+  const S = SIM.summary, r1 = SIM.rows[0], I = SIM.inputs;
+  const extra = sum(Object.entries(r1.extra).filter(([k]) => k !== 'brokerage').map(([, v]) => v));
+  const target = r1.extra.heloc ? 'the HELOC' : Object.keys(r1.extra).find(k => k.startsWith('ph:')) ? acctName(Object.keys(r1.extra).find(k => k.startsWith('ph:'))) : null;
+  const low = S.minBrok, lowWarn = low.v < I.strategy.floor - 1;
+  const tiles = [
+    ['hero', `${L(r1.cal)}`, extra > 1 ? usd(extra) : r1.fromBrok > 1 ? `−${usd(r1.fromBrok)}` : '$0',
+      extra > 1 ? `extra to ${target}, after every payment. ${usd(r1.paycheck)} from the paycheck.` : r1.fromBrok > 1 ? `Payments run ${usd(r1.fromBrok)} past rent and your ${usd(r1.paycheck)}: brokerage covers the gap this month.` : 'No surplus this month: rent and the paycheck just cover the payments.'],
+    ['', 'Renovation HELOC gone', L(S.helocClosed), I.strategy.mode === 'separate' ? 'then each phase gets its own line' : 'phases redraw it along the way'],
+    ['', 'Every debt gone', L(S.debtFree), S.sold ? `rental sold ${L(S.sold)}` : 'rental kept'],
+    [lowWarn ? 'warn' : '', 'Lowest brokerage', usd(low.v), `${L(low.cal)}; floor ${usd(I.strategy.floor)}${lowWarn ? ' — breached' : ''}`],
+    ['', `Net worth ${Math.floor(SIM.rows.at(-1).cal / 12)}`, k$(S.nwEnd), `${k$(S.nwNet)} after the ${k$(S.paycheckIn)} the paycheck put in`],
   ];
-  $('#kit').replaceChildren(...kit.map(([l, v, s]) => { const d = document.createElement('div'); d.innerHTML = '<div class="k-label"></div><div class="k-value"></div><div class="k-sub"></div>'; d.children[0].textContent = l; d.children[1].textContent = v; d.children[2].textContent = s; return d; }));
-  const steps = [
-    ['Dec 2026: solar.', `21 kW on two refurbished EG4 18kPVs (hybrid, so batteries can follow) with the Dec 2026 gift. ${usd(S.solar.cost)}; saves about ${usd(S.solar.saves)} a year. The 18kPVs cost ${usd(3800)} more than grid-tie SMAs but they're the doorway to everything else in C.`],
-    ['Keep ${usd(F.floorTopUp)} of gift 1 in brokerage.', `The $15k you floated for closing isn't reimbursed now that the line is full, so the two card payoffs (Dec 2027 and Feb 2028) would push brokerage below your ${usd(F.floor)} floor without it.`],
-    ['Jun 2027: gift 2 to the HELOC.', `Paying 7% beats every remaining step. If you want the outage kit sooner, 32 kWh of batteries is ${usd(S.batt.cost)} and costs about ${k$(-(gain(P.cGifts) - gain(rec)) * S.batt.cost / (S.hp.cost + S.batt.cost + S.wood.cost))} of 2046 wealth.`],
-    ['Heat pump when you want cooling, not before.', `The 3.5-ton, buffer and controls (${usd(S.hp.cost)}) save only about ${usd(S.hp.saves)} a year on top of solar. Buy them the summer you decide you want air conditioning; on the HELOC is fine.`],
-    ['Wood boiler last, or when the line dies.', `${usd(S.wood.cost)} installed, and while you're grid-connected it burns about ${usd(-S.wood.saves)} a year more in wood than it saves in gas at a $150/cord blend. It's what makes the house heat without the grid; buy it as insurance, not as an investment. Buying the heat pump, batteries and boiler in 2027 instead of 2036 costs about ${k$(gain(P.cLate) - gain(P.cGifts))} of 2046 wealth.`],
-    ['Skip the 0% card for solar.', `Putting the array on the card in Oct 2026 gains two months of production but drops brokerage to ${k$(P.solarCard.minBrok)}, under the floor, and the card fee plus a balloon in Apr 2028 land ${k$(gain(rec) - gain(P.solarCard))} behind waiting for the gift.`],
-  ];
-  $('#steps').replaceChildren(...steps.map(([b, t]) => { const li = document.createElement('li'); const d = document.createElement('div'); const bb = document.createElement('b'); bb.textContent = b.replace('${usd(F.floorTopUp)}', usd(F.floorTopUp)) + ' '; const sp = document.createElement('span'); sp.textContent = t; d.append(bb, sp); li.append(d); return li; }));
+  $('#kpis').replaceChildren(...tiles.map(([cls, l, v, s]) => { const d = el('div', 'kpi' + (cls ? ' ' + cls : '')); d.append(el('div', 'kpi-label', l), el('div', 'kpi-value', v), el('div', 'kpi-sub', s)); return d; }));
 }
 
-function helocFirst() {
-  const S1 = P.helocFirstSell, K = P.helocFirstKeep, ev = p => p.events.filter(e => /line|HELOC closed|sold/i.test(e.what));
-  $('#hf-sub').textContent = `Your alternative rule: kill the renovation line as fast as possible, then give each phase its own 7% line in turn (solar, lower level, heat pump, batteries, boiler). Selling the rental in ${S1.events.find(e => /sold/.test(e.what))?.date ?? 'Sep 2026'} frees about ${usd(S1.events.find(e => /sold/.test(e.what))?.amt ?? 0)} of equity after commission, taxes and the mortgage payoff, which pays the truck and then the line, and closes it in ${S1.locDead}, ${Math.round((new Date(K.locDead) - new Date(S1.locDead)) / 2.63e9)} months before keeping the rental gets there (${K.locDead}) and about ${Math.round((new Date(base.locDead) - new Date(S1.locDead)) / 2.63e9 / 12 * 10) / 10} years before the workbook path. The price is the rental's income and appreciation: ${k$(S1.nwNet)} in 2046 net of paycheck against ${k$(K.nwNet)} keeping it, with a $2,000/mo paycheck contribution instead of $1,500.`;
-  $('#hf-kit').replaceChildren(...[
-    ['Sell now', 'HELOC closed', S1.locDead, `all debt gone ${S1.debtFree}; solar ${S1.owned.solar}, lower level next, boiler ${S1.owned.wood}`],
-    ['Sell now', '2046, net of paycheck', k$(S1.nwNet), `interest ${usd(S1.interest)} over the run`],
-    ['Keep the rental', 'HELOC closed', K.locDead, `all debt gone ${K.debtFree}; solar ${K.owned.solar}, boiler ${K.owned.wood}; rental sold ${K.sold}`],
-    ['Keep the rental', '2046, net of paycheck', k$(K.nwNet), `interest ${usd(K.interest)}; ${k$(K.nwNet - base.nwNet)} vs the workbook path`],
-  ].map(([l, v0, v, s]) => { const d = document.createElement('div'); d.innerHTML = '<div class="k-label"></div><div class="k-value"></div><div class="k-sub"></div>'; d.children[0].textContent = `${l} · ${v0}`; d.children[1].textContent = v; d.children[2].textContent = s; return d; }));
-  const t = $('#hf');
-  t.innerHTML = '<thead><tr><th>Event</th><th class="num">Sell the rental now</th><th class="num">Keep the rental</th></tr></thead>';
-  const tb = t.createTBody();
-  const rows = [['Renovation HELOC closed', S1.locDead, K.locDead], ['Solar (own line)', S1.owned.solar, K.owned.solar], ['Lower level (own line)', S1.events.find(e => /Lower-level renovation on/.test(e.what))?.date, K.events.find(e => /Lower-level renovation on/.test(e.what))?.date], ['Heat pump and buffer', S1.owned.hp, K.owned.hp], ['Batteries', S1.owned.batt, K.owned.batt], ['Wood boiler', S1.owned.wood, K.owned.wood], ['All debt gone', S1.debtFree, K.debtFree], ['Rental sold', S1.sold ?? S1.events.find(e => /sold/.test(e.what))?.date, K.sold], ['Interest and fees', usd(S1.interest), usd(K.interest)], ['2046, net of paycheck', k$(S1.nwNet), k$(K.nwNet)]];
-  for (const [l, a, b] of rows) { const tr = tb.insertRow(); tr.insertCell().textContent = l; for (const v of [a, b]) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v ?? '—'; } }
+// ---------------------------------------------------------------- this month
+function monthCard(r, isNow) {
+  const d = el('div', 'month' + (isNow ? ' now' : ''));
+  const h = el('h4'); h.append(document.createTextNode(`${MON[r.cal % 12]} ${Math.floor(r.cal / 12)}`), el('small', null, isNow ? 'next month to act on' : 'then'));
+  d.append(h);
+  const t = el('table', 'ledger'), add = (label, amt, cls, color) => { const tr = t.insertRow(); if (cls) tr.className = cls; const c = tr.insertCell(); if (color) { const i = el('i', 'sw'); i.style.background = color; c.append(i); } c.append(document.createTextNode(label)); if (amt != null) { const a = tr.insertCell(); a.className = 'amt'; a.textContent = amt; } else c.colSpan = 2; };
+  add('Coming in', null, 'head');
+  if (r.rent > 0) add('Rental, net', usd(r.rent, 2), '', COLOR.rental);
+  if (r.rent2 > 0) add('Second dwelling rent', usd(r.rent2, 2), '', COLOR.rental);
+  if (Math.abs(r.save) > 0.5) add('Energy bill savings', usd(r.save, 2), '', COLOR.rental);
+  add('From your paycheck', usd(r.paycheck, 2), '', COLOR.pay);
+  if (r.fromBrok > 0.5) add('From brokerage (the gap)', usd(r.fromBrok, 2), '', COLOR.brok);
+  add('Payments', null, 'head');
+  const names = { truck: 'Truck loan', mortgage: 'Rental mortgage', wf: 'Wells Fargo card, minimum', usb: 'US Bank card, minimum', heloc: 'HELOC interest' };
+  for (const [k, v] of Object.entries(r.req)) add(k.startsWith('ph:') ? `${shortPhase(k.slice(3))} line interest` : names[k], usd(v, 2), '', acctColor(k));
+  const extras = Object.entries(r.extra).filter(([, v]) => v > 0.5);
+  if (extras.length || r.lumps.length) add('Then', null, 'head');
+  for (const [k, v] of extras) add(k === 'brokerage' ? 'Put the rest in brokerage' : k === 'mortgage' ? 'Extra principal to the rental mortgage' : `Extra principal to ${k === 'heloc' ? 'the HELOC' : 'the ' + acctName(k)}`, usd(v, 2), 'do', k === 'brokerage' ? COLOR.brok : acctColor(k));
+  for (const l of r.lumps) add(l.what, usd(l.amt), 'lump');
+  add(`After: HELOC ${usd(r.heloc)}${r.phaseBal > 0.5 ? ` · lines ${usd(r.phaseBal)}` : ''} · brokerage ${usd(r.brok)}`, null, 'total');
+  d.append(t);
+  return d;
+}
+function renderNow() {
+  const R = SIM.rows;
+  $('#months').replaceChildren(...R.slice(0, 3).map((r, j) => monthCard(r, j === 0)));
+  const r = R[0], I = SIM.inputs;
+  $('#now-sub').textContent = `From the balances you entered for the end of ${L(SIM.n0)}. Autopays first, then whatever is left goes where the plan says: ${I.strategy.refillFloor ? `brokerage until it's back at the ${usd(I.strategy.floor)} floor, then ` : ''}the HELOC, then the open phase line${I.strategy.prepayMortgage ? ', then the rental mortgage once every phase is paid' : ''}. Pay to the cent when you can; a few dollars either way washes out at the next check-in.`;
 }
 
-function ladder() {
-  const t = $('#ladder');
-  t.innerHTML = '<thead><tr><th>Step</th><th class="num">Cost</th><th class="num">Saves / yr</th><th class="num">Simple return</th><th>What it buys</th></tr></thead>';
-  const tb = t.createTBody();
-  const roles = { solar: 'Cuts the electric bill to near zero under net metering', hp: 'Cooling, and a little cheaper heat on fall surplus', batt: 'Rides through a week without the grid (design A)', wood: 'Heat without gas or grid (design C); costs money on the grid' };
-  for (const [k, s] of Object.entries(S)) {
-    const tr = tb.insertRow(); if (k === 'solar') tr.className = 'pick';
-    tr.insertCell().textContent = s.label;
-    for (const v of [usd(s.cost), (s.saves < 0 ? '−' : '') + usd(Math.abs(s.saves)), s.saves > 0 ? `${nf(s.saves / s.cost * 100, 1)}%` : '—']) { const c = tr.insertCell(); c.className = 'num'; c.textContent = v; }
-    tr.insertCell().textContent = roles[k];
+// ---------------------------------------------------------------- steps
+function stepsList() {
+  const I = SIM.inputs, S = SIM.summary, out = [];
+  const push = (cal, title, detail) => out.push({ cal, title, detail });
+  for (const e of SIM.events) {
+    if (e.kind === 'gift') { const set = inputs.gifts.find(g => calOf(g.month) === e.cal)?.keep ?? 0; push(e.cal, `Gift arrives: ${usd(e.amt)}`, `${e.keep > 0.5 ? `Keep ${usd(e.keep)} in brokerage${e.keep > set + 1 ? ` (${usd(e.keep - set)} more than you set, to hold the ${usd(I.strategy.floor)} floor through the low in ${L(SIM.summary.minBrok.cal)})` : ''}; ` : ''}${e.to.map(([k, v]) => `${usd(v)} to ${k === 'heloc' ? 'the HELOC' : 'the ' + acctName(k)}`).join(', ') || 'the rest to brokerage'}.`); }
+    else if (e.kind === 'card') push(e.cal, e.what, `Its 0% ends this month. Pay the ${usd(e.amt)} balance in full from brokerage; don't let it roll to the regular rate.`);
+    else if (e.kind === 'close') push(e.cal, e.what, /HELOC/.test(e.what) ? 'Ask the bank to close the line (or freeze it at $0) so it can’t be redrawn.' : 'Close the line; the next phase opens.');
+    else if (e.kind === 'open') push(e.cal, e.what, I.strategy.mode === 'separate' ? `Open a new ${nf(I.strategy.phaseApr * 100, 2)}% line for ${usd(e.amt)}, buy it, and send every month's surplus to that line.` : `Draw ${usd(e.amt)} on the HELOC and buy it.`);
+    else if (e.kind === 'sale') push(e.cal, 'Sell the rental', `About ${usd(e.amt)} after ${nf(I.rental.commission * 100)}% commission, capital gains and recapture${e.toLine ? `; ${usd(e.toLine)} of it to the HELOC` : ''}${e.toTruck ? `, ${usd(e.toTruck)} to the truck` : ''}. The rest goes to brokerage.`);
+    else if (e.kind === 'brok') push(e.cal, e.what, `Brokerage can pay it and still keep ${usd(I.strategy.cushion)}.`);
   }
+  const r2 = calOf(I.income.rent2From);
+  if (r2 > SIM.n0 && !I.accounts.rentalSold) push(r2, 'Second dwelling rent starts', `${usd(I.income.rent2)} more a month, all of it to the debt being paid down.`);
+  if (S.truckFree && I.accounts.truck > 0) push(S.truckFree, 'Truck paid off', `Its ${usd(I.accounts.truckPmt, 2)} a month goes to the debt being paid down from here. Cancel the autopay.`);
+  const pre = SIM.rows.find(r => (r.extra.mortgage ?? 0) > 0.5);
+  if (pre) push(pre.cal, 'Every phase paid: prepay the rental mortgage', 'All surplus now goes to the rental mortgage as extra principal.');
+  const gap = SIM.rows.filter(r => r.fromBrok > 0.5);
+  if (gap.length) push(gap.at(-1).cal + 1, 'Rent and the paycheck cover every payment', `Until then brokerage makes up the gap: ${usd(sum(gap.map(r => r.fromBrok)))} over ${gap.length} month${gap.length > 1 ? 's' : ''}.`);
+  return out.sort((a, b) => a.cal - b.cal);
+}
+function renderSteps() {
+  const list = stepsList(), ol = $('#steps');
+  const item = s => { const li = el('li'); const w = el('div', 'what'); w.append(el('b', null, s.title), el('span', null, s.detail)); li.append(el('div', 'when', L(s.cal)), w); return li; };
+  ol.replaceChildren(...list.slice(0, 10).map(item));
+  if (list.length > 10) {
+    const li = el('li'); li.style.display = 'block';
+    const d = el('details', 'more'); d.append(el('summary', null, `${list.length - 10} more, to ${L(list.at(-1).cal)}`));
+    const inner = el('ol', 'steps'); inner.append(...list.slice(10).map(item)); d.append(inner); li.append(d); ol.append(li);
+  }
+  $('#steps-sub').textContent = `Every move the plan makes from ${L(SIM.n0)} on, in order. Dates move as check-ins come in ahead of or behind the plan.`;
 }
 
-function cmp() {
-  const t = $('#cmp');
-  t.innerHTML = '<thead><tr><th>Schedule</th><th>Steps bought</th><th class="num">Line dies</th><th class="num">Debt-free</th><th class="num">Interest + fees</th><th class="num">Bills saved</th><th class="num">Lowest brokerage</th><th class="num">2046, net of paycheck</th><th class="num">vs no energy</th></tr></thead>';
-  const tb = t.createTBody();
-  for (const [id, p] of Object.entries(P)) {
-    const tr = tb.insertRow(); if (id === 'solarGift') tr.className = 'pick';
-    const c0 = tr.insertCell(); c0.textContent = p.name; const n = document.createElement('div'); n.className = 'cellnote'; n.textContent = p.note; c0.append(n);
-    tr.insertCell().textContent = Object.entries(p.owned).map(([k, d]) => `${{ solar: 'solar', hp: 'heat pump', batt: 'batteries', wood: 'boiler' }[k]} ${d}`).join(', ') || 'none';
-    const floorNote = p.minBrok < F.floor ? ' ⚠' : '';
-    for (const v of [p.locDead ?? '—', p.debtFree ?? '—', usd(p.interest), usd(p.cumSave), usd(p.minBrok) + floorNote, k$(p.nwNet), (gain(p) >= 0 ? '+' : '') + k$(gain(p))]) { const c = tr.insertCell(); c.className = 'num' + (v.includes('⚠') ? ' warn' : ''); c.textContent = v; }
+// ---------------------------------------------------------------- triggers
+function renderTriggers() {
+  const I = SIM.inputs, A = I.accounts, S = SIM.summary, St = I.strategy, rows = [];
+  const pill = (cls, t) => el('span', 'pill ' + cls, t);
+  const row = (when, what, proj, now) => rows.push({ cells: [when, what, proj, now] });
+  const low = S.minBrok;
+  row(`Brokerage under ${usd(St.floor)}`, St.refillFloor ? 'Surplus and gifts refill brokerage before any extra goes to debt.' : 'Refill is off: nothing tops it back up.', `Low ${usd(low.v)} in ${L(low.cal)}`, A.brokerage >= St.floor ? pill('ok', `${usd(A.brokerage)} now`) : pill('warn', `${usd(A.brokerage)}: under`));
+  const gap = SIM.rows.filter(r => r.fromBrok > 0.5);
+  row(`Payments run past rent + ${usd(I.income.paycheck)}`, St.shortfall === 'brokerage' ? 'The gap comes out of brokerage; the paycheck stays at its maximum.' : 'The paycheck covers the whole gap (workbook rule).', gap.length ? `${gap.length} months, ${usd(sum(gap.map(r => r.fromBrok)))}, through ${L(gap.at(-1).cal)}` : 'Not expected', SIM.rows[0].fromBrok > 0.5 ? pill('warn', `${usd(SIM.rows[0].fromBrok)} next month`) : pill('ok', 'Covered'));
+  for (const [k, name] of [['wf', 'Wells Fargo'], ['usb', 'US Bank']]) {
+    const due = calOf(A[k + 'Due']), bal = A[k];
+    if (bal <= 0.5) { row(`${name} card 0% ends ${L(due)}`, 'Paid off.', '—', pill('ok', 'Done')); continue; }
+    const e = SIM.events.find(x => x.kind === 'card' && x.what.startsWith(name));
+    row(`${name} card 0% ends ${L(due)}`, `Pay the balance in full from brokerage that month. Keep it in brokerage until then; the minimums are autopaid.`, e ? `${usd(e.amt)} in ${L(e.cal)}` : '—', pill('wait', `${usd(bal)} owed`));
   }
-  $('#cmp-sub').textContent = `All on the workbook's rules: $1,500 a month from the paycheck or the shortfall if larger, surplus to the line, reno-2 ($100k for the lower level) redraws when the line first reaches $100k, brokerage at 8%, a ${usd(F.floor)} brokerage floor (⚠ marks a breach), rental sold the month the mortgage settles. "2046, net of paycheck" is net worth in June 2046 minus everything the paycheck contributed, the workbook's own yardstick; the residence and the equipment aren't counted.`;
+  for (const g of SIM.inputs.gifts.filter(x => x.amount > 0)) {
+    const c = calOf(g.month);
+    if (c <= SIM.n0) continue;
+    row(`Gift of ${usd(g.amount)} arrives (${L(c)})`, `Keep ${usd(g.keep)} in brokerage, the rest to the debt being paid down.`, L(c), pill('wait', 'Expected'));
+  }
+  row('HELOC reaches $0', St.mode === 'separate' ? `Close it. Open a ${nf(St.phaseApr * 100, 2)}% line for the next phase and send all surplus there.` : 'Nothing: phases redraw it when it falls to the trigger.', L(S.helocClosed), A.heloc > 0.5 ? pill('wait', `${usd(A.heloc)} to go`) : pill('ok', 'Closed'));
+  if (St.mode === 'redraw') row(`HELOC falls to ${usd(St.redrawAt)}`, 'Draw the next phase on it.', L(SIM.events.find(e => e.kind === 'open')?.cal), pill('wait', `${usd(A.heloc)} now`));
+  const open = I.phases.find(p => p.status === 'open');
+  row('A phase line reaches $0', 'Close it and open the next phase’s line.', SIM.events.filter(e => e.kind === 'close' && !/HELOC/.test(e.what)).map(e => L(e.cal)).join(', ') || '—', open ? pill('wait', `${shortPhase(open.id)}: ${usd(open.bal)}`) : pill('wait', `${I.phases.filter(p => p.status === 'done').length} of ${I.phases.length} done`));
+  if (St.prepayMortgage) row('Every phase paid', 'Send all surplus to the rental mortgage as extra principal.', L(SIM.rows.find(r => (r.extra.mortgage ?? 0) > 0.5)?.cal), pill('wait', `${usd(A.mortgage)} owed`));
+  row('Rental mortgage reaches $0', St.sell === 'afterPayoff' ? 'Sell the rental; the proceeds go to brokerage.' : St.sell === 'never' ? 'Keep it; rent keeps coming in.' : 'Already set to sell on a date.', L(S.sold ?? SIM.rows.find(r => r.mtg < 1)?.cal), pill('wait', A.rentalSold ? 'Sold' : `${usd(A.rentalValue)} value`));
+  row(`Brokerage ≥ the line + ${usd(St.cushion)}`, St.brokPayoff ? 'Pay the line off from brokerage.' : 'Off: brokerage keeps compounding instead.', St.brokPayoff ? L(SIM.events.find(e => e.kind === 'brok')?.cal) : '—', pill('wait', St.brokPayoff ? 'Watching' : 'Off'));
+  table($('#triggers'), ['When', 'Do', 'Plan expects', 'At this check-in'], rows);
 }
 
-function debtChart() {
-  const el = $('#debt'), W = Math.max(300, el.clientWidth), H = 240, m = { l: 48, r: 130, t: 10, b: 24 };
-  const S3 = [['base', 'No energy', 'var(--s0)'], ['solarGift', 'Solar from gift 1', 'var(--s1)'], ['cGifts', 'C-capable by 2027', 'var(--s2)'], ['helocFirstSell', 'HELOC first, sell now', 'var(--s3)']];
-  const hi = 400000, x = t => m.l + t / F.months * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
-  let g = '';
-  for (let v = 0; v <= hi; v += 100000) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 3.5}" text-anchor="end">${k$(v)}</text>`;
-  for (let yr = 2027; yr <= 2046; yr += 2) { const t = (yr - 2026) * 12 - 5; g += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${yr}</text>`; }
-  const ends = [];
-  for (const [id, lab, col] of S3) {
-    const s = P[id].series;
-    g += `<polyline points="${s.map(p => `${x(p.t).toFixed(1)},${y(Math.min(hi, p.loc + p.mtg + p.other)).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.8"/>`;
-    const last = s.find(p => p.loc + p.mtg + p.other < 1) ?? s.at(-1);
-    ends.push({ lab, col, t: last.t });
-  }
-  ends.sort((a, b) => a.t - b.t);
-  ends.forEach((e, i) => { g += `<text class="lbl" x="${x(e.t) + 6}" y="${y(0) - 6 - i * 14}" fill="${e.col}">${e.lab}: debt-free ${P[S3.find(q => q[1] === e.lab)[0]].debtFree}</text>`; });
-  $('#debt-legend').innerHTML = S3.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('');
-  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
-  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
-  const xh = el.querySelector('.xh');
-  el.querySelector('.hit').addEventListener('pointermove', e => {
-    const b = el.getBoundingClientRect(), t = Math.max(3, Math.round((e.clientX - b.left - m.l) / (W - m.l - m.r) * F.months / 3) * 3);
-    xh.setAttribute('x1', x(t)); xh.setAttribute('x2', x(t)); xh.setAttribute('visibility', 'visible');
-    const yr = 2026 + Math.floor((t + 5) / 12), mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][(t + 5) % 12];
-    showTip(e, `<div>${mo} ${yr}</div>` + S3.map(([id, lab, col]) => { const p = P[id].series.find(q => q.t === t); return p ? `<div><i style="display:inline-block;width:10px;height:2px;background:${col};margin-right:6px;vertical-align:middle"></i><b>${k$(p.loc + p.mtg + p.other)}</b> ${lab} · HELOC ${k$(p.loc)}, brokerage ${k$(p.brok)}</div>` : ''; }).join(''));
+// ---------------------------------------------------------------- monthly flow
+function flowData(n = 36) {
+  return SIM.rows.slice(0, n).map(r => {
+    const pay = k => (r.req[k] ?? 0) + (r.extra[k] ?? 0);
+    const phaseKeys = [...new Set([...Object.keys(r.req), ...Object.keys(r.extra)].filter(k => k.startsWith('ph:')))];
+    return {
+      cal: r.cal,
+      in: [['Rent and savings', r.rent + r.rent2 + r.save, COLOR.rental], ['Paycheck', r.paycheck, COLOR.pay], ['From brokerage', r.fromBrok, COLOR.brok]],
+      out: [['Rental mortgage', pay('mortgage'), COLOR.rental], ['Truck and cards', pay('truck') + pay('wf') + pay('usb'), COLOR.other], ['HELOC', pay('heloc'), COLOR.heloc], ['Phase lines', sum(phaseKeys.map(pay)), COLOR.phase], ['To brokerage', r.extra.brokerage ?? 0, COLOR.brok]],
+    };
   });
-  el.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+}
+function renderFlow() {
+  const node = $('#flow'), W = Math.max(300, node.clientWidth), H = 300, m = { l: 52, r: 8, t: 14, b: 26 };
+  const D = flowData(), n = D.length;
+  const up = Math.max(...D.map(d => sum(d.in.map(x => x[1])))), dn = Math.max(...D.map(d => sum(d.out.map(x => x[1]))));
+  const ticks = niceTicks(-dn, up, 6), lo = ticks[0], hi = ticks.at(-1);
+  const y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b), band = (W - m.l - m.r) / n, bw = Math.max(3, Math.min(16, band * 0.7));
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(${t === 0 ? '--muted' : '--grid'})"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(Math.abs(t)).replace('$0k', '$0')}</text>`;
+  D.forEach((d, i) => {
+    const x = m.l + band * i + (band - bw) / 2;
+    let b = 0;
+    for (const [, v, c] of d.in) { if (v < 0.5) continue; const y0 = y(b) - (b > 0 ? 1 : 0), y1 = y(b + v); if (y0 - y1 > 0.3) g += `<rect x="${x}" y="${y1}" width="${bw}" height="${y0 - y1}" fill="${c}"/>`; b += v; }
+    b = 0;
+    for (const [, v, c] of d.out) { if (v < 0.5) continue; const y0 = y(-b) + (b > 0 ? 1 : 0), y1 = y(-b - v); if (y1 - y0 > 0.3) g += `<rect x="${x}" y="${y0}" width="${bw}" height="${y1 - y0}" fill="${c}"/>`; b += v; }
+    if (d.cal % 12 === 0 || i === 0) g += `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle">${d.cal % 12 === 0 ? Math.floor(d.cal / 12) : MON[d.cal % 12]}</text>`;
+    g += `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  });
+  g += `<text x="${W - m.r}" y="${m.t + 8}" text-anchor="end">in ↑</text><text x="${W - m.r}" y="${H - m.b - 4}" text-anchor="end">out ↓</text>`;
+  node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  node.querySelectorAll('.hit').forEach(h => {
+    const d = D[+h.dataset.i];
+    h.addEventListener('pointermove', e => showTip(e, `${L(d.cal)} · dollars`, [...d.in.filter(x => x[1] > 0.5).map(([l, v, c]) => ({ label: `in: ${l}`, value: usd(v), color: c })), ...d.out.filter(x => x[1] > 0.5).map(([l, v, c]) => ({ label: `out: ${l}`, value: usd(v), color: c }))]));
+    h.addEventListener('pointerleave', hideTip);
+  });
+  legend($('#flow-legend'), [
+    { label: 'Rental: rent in, mortgage out', color: COLOR.rental }, { label: 'Paycheck', color: COLOR.pay }, { label: 'Brokerage', color: COLOR.brok },
+    { label: 'HELOC', color: COLOR.heloc }, { label: 'Phase lines', color: COLOR.phase }, { label: 'Truck and cards', color: COLOR.other },
+  ]);
+  table($('#flow-table'), ['Month', 'Rent + savings', 'Paycheck', 'From brokerage', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'To brokerage'],
+    D.map(d => ({ cells: [L(d.cal), ...d.in.map(x => usd(x[1])), ...d.out.map(x => usd(x[1]))] })), { num: j => j > 0 });
+  const r2 = SIM.rows.find(r => r.rent2 > 0);
+  $('#flow-sub').textContent = `The next ${n} months. Above the line is what comes in; below, where it goes, by account (interest and principal together). The two always match. One-time moves (gifts, card payoffs, opening a line) aren't in the bars; they're in the month cards and steps.${r2 ? ` The step up in ${L(r2.cal)} is the second rent starting.` : ''}`;
 }
 
-function notes() {
+// ---------------------------------------------------------------- debt over time
+function planPoints() {
+  if (!checkins.length) return null;
+  const base = checkins[0];
+  return { base, pts: base.points ?? [] };
+}
+function atPlan(pts, cal) {
+  if (!pts?.length) return null;
+  if (cal < pts[0].cal || cal > pts.at(-1).cal) return null;
+  for (let j = 1; j < pts.length; j++) if (pts[j].cal >= cal) { const a = pts[j - 1], b = pts[j], f = (cal - a.cal) / Math.max(1, b.cal - a.cal); return { debt: a.debt + f * (b.debt - a.debt), brok: a.brok + f * (b.brok - a.brok) }; }
+  return pts[0].cal === cal ? pts[0] : null;
+}
+const actualDebt = inp => { const A = inp.accounts; return A.heloc + A.mortgage + A.truck + A.wf + A.usb + sum(inp.phases.map(p => (p.status === 'open' ? p.bal : 0))); };
+function renderDebt() {
+  if (!SIM) return;
+  const node = $('#debt'), W = Math.max(300, node.clientWidth), H = 300, m = { l: 52, r: 12, t: 12, b: 26 };
+  const R = SIM.rows, plan = planPoints();
+  const lay = [['Rental mortgage', r => r.mtg, COLOR.rental], ['Truck and cards', r => r.truck + r.wf + r.usb, COLOR.other], ['HELOC', r => r.heloc, COLOR.heloc], ['Phase lines', r => r.phaseBal, COLOR.phase]];
+  const c0 = Math.min(SIM.n0, plan?.base ? calOf(plan.base.asOf) : SIM.n0), c1 = R.at(-1).cal;
+  const hist = checkins.map(c => ({ cal: calOf(c.asOf), debt: actualDebt(c.inputs), brok: c.inputs.accounts.brokerage }));
+  const top = Math.max(...R.map(r => r.debt), actualDebt(SIM.inputs), ...hist.map(h => h.debt), ...(plan?.pts ?? []).map(p => p.debt), 1);
+  const ticks = niceTicks(0, top, 5), hi = ticks.at(-1);
+  const x = c => m.l + (c - c0) / Math.max(1, c1 - c0) * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
+  for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += 2) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
+  const pts = [{ cal: SIM.n0, r: { mtg: SIM.inputs.accounts.mortgage, truck: SIM.inputs.accounts.truck, wf: SIM.inputs.accounts.wf, usb: SIM.inputs.accounts.usb, heloc: SIM.inputs.accounts.heloc, phaseBal: sum(SIM.inputs.phases.map(p => p.status === 'open' ? p.bal : 0)), brok: SIM.inputs.accounts.brokerage } }, ...R.map(r => ({ cal: r.cal, r }))];
+  let base = pts.map(() => 0);
+  for (const [, f, col] of lay) {
+    const topv = pts.map((p, i) => base[i] + f(p.r));
+    if (Math.max(...pts.map(p => f(p.r))) < 1) { base = topv; continue; }
+    const d = `M${pts.map((p, i) => `${x(p.cal).toFixed(1)},${y(topv[i]).toFixed(1)}`).join('L')}L${pts.map((p, i) => `${x(p.cal).toFixed(1)},${y(base[i]).toFixed(1)}`).reverse().join('L')}Z`;
+    g += `<path d="${d}" fill="${col}" fill-opacity="0.85" stroke="var(--sheet)" stroke-width="1"/>`;
+    base = topv;
+  }
+  g += `<line x1="${x(SIM.n0)}" x2="${x(SIM.n0)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" stroke-dasharray="2 3"/><text x="${x(SIM.n0) + 4}" y="${m.t + 10}">as of ${MON[SIM.n0 % 12]} ${Math.floor(SIM.n0 / 12)}</text>`;
+  if (plan?.pts?.length > 1) g += `<polyline points="${plan.pts.map(p => `${x(p.cal).toFixed(1)},${y(p.debt).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  for (const h of hist) g += `<circle cx="${x(h.cal)}" cy="${y(h.debt)}" r="4.5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/>`;
+  // Direct labels at the right edge.
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  const xh = node.querySelector('.xh');
+  node.querySelector('.hit').addEventListener('pointermove', e => {
+    const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0));
+    const p = pts.find(q => q.cal === Math.max(SIM.n0, Math.min(c1, c)))?.r, pl = atPlan(plan?.pts, c), h = hist.find(q => q.cal === c);
+    xh.setAttribute('x1', x(c)); xh.setAttribute('x2', x(c)); xh.setAttribute('visibility', 'visible');
+    const rows = p && c >= SIM.n0 ? lay.map(([l, f, col]) => ({ label: l, value: usd(f(p)), color: col })).filter(q => q.value !== '$0') : [];
+    if (pl) rows.push({ label: 'First plan, all debt', value: usd(pl.debt), dash: true });
+    if (h) rows.push({ label: 'Checked in, all debt', value: usd(h.debt), color: 'var(--ink)' });
+    showTip(e, L(c), rows.length ? rows : [{ label: 'before this check-in', value: '' }]);
+  });
+  node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  legend($('#debt-legend'), [...lay.map(([l, , c]) => ({ label: l, color: c })), ...(plan?.pts?.length > 1 ? [{ label: `First plan (${L(calOf(plan.base.asOf))}), all debt`, kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins, all debt', kind: 'dot' }] : [])]);
+  const yearly = R.filter(r => r.cal % 12 === 11);
+  table($('#debt-table'), ['Year end', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'All debt', 'Brokerage', 'Net worth'], yearly.map(r => ({ cells: [L(r.cal), usd(r.mtg), usd(r.truck + r.wf + r.usb), usd(r.heloc), usd(r.phaseBal), usd(r.debt), usd(r.brok), usd(r.nw)] })), { num: j => j > 0 });
+  const S = SIM.summary;
+  $('#debt-sub').textContent = `Every balance stacked, from ${L(SIM.n0)} to ${L(c1)}: ${usd(actualDebt(SIM.inputs))} owed at the check-in, the renovation HELOC gone ${L(S.helocClosed)}, then the phase lines one at a time, then the rental mortgage${S.sold ? ` until the sale in ${L(S.sold)}` : ''}.${plan?.pts?.length > 1 ? ' The dashed line is the plan from your first check-in; the dots are what you actually owed at each check-in, so you can see ahead or behind at a glance.' : ' Save check-ins and the plan and your actual balances appear here too.'}`;
+}
+
+// ---------------------------------------------------------------- brokerage
+function renderBrok() {
+  if (!SIM) return;
+  const node = $('#brok'), W = Math.max(300, node.clientWidth), H = 220, m = { l: 52, r: 12, t: 12, b: 26 };
+  const R = SIM.rows, I = SIM.inputs, S = SIM.summary, plan = planPoints();
+  const stop = S.sold && S.sold > SIM.n0 + 1 ? S.sold - 1 : R.at(-1).cal;
+  const pts = [{ cal: SIM.n0, v: I.accounts.brokerage }, ...R.filter(r => r.cal <= stop).map(r => ({ cal: r.cal, v: r.brok }))];
+  const c0 = Math.min(SIM.n0, plan?.base ? calOf(plan.base.asOf) : SIM.n0), c1 = stop;
+  const hist = checkins.map(c => ({ cal: calOf(c.asOf), v: c.inputs.accounts.brokerage })).filter(h => h.cal <= c1);
+  const ppts = (plan?.pts ?? []).filter(p => p.cal <= c1);
+  const top = Math.max(...pts.map(p => p.v), ...hist.map(h => h.v), I.strategy.floor * 1.5);
+  const ticks = niceTicks(0, top, 4), hi = ticks.at(-1);
+  const x = c => m.l + (c - c0) / Math.max(1, c1 - c0) * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+  let g = '';
+  for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
+  const step = Math.max(1, Math.ceil((c1 - c0) / 12 / 8));
+  for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += step) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(I.strategy.floor)}" y2="${y(I.strategy.floor)}" stroke="var(--warn)" stroke-dasharray="4 3"/><text x="${W - m.r}" y="${y(I.strategy.floor) - 5}" text-anchor="end" fill="var(--warn)" style="fill:var(--warn)">floor ${k$(I.strategy.floor)}</text>`;
+  g += `<path d="M${x(pts[0].cal)},${y(0)}L${pts.map(p => `${x(p.cal).toFixed(1)},${y(p.v).toFixed(1)}`).join('L')}L${x(pts.at(-1).cal)},${y(0)}Z" fill="${COLOR.brok}" fill-opacity="0.18"/>`;
+  g += `<polyline points="${pts.map(p => `${x(p.cal).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${COLOR.brok}" stroke-width="2"/>`;
+  if (ppts.length > 1) g += `<defs><clipPath id="brok-clip"><rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}"/></clipPath></defs><polyline clip-path="url(#brok-clip)" points="${ppts.map(p => `${x(p.cal).toFixed(1)},${y(p.brok).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  for (const h of hist) g += `<circle cx="${x(h.cal)}" cy="${y(h.v)}" r="4.5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/>`;
+  const low = S.minBrok;
+  if (low.cal <= c1) g += `<circle cx="${x(low.cal)}" cy="${y(low.v)}" r="4" fill="${COLOR.brok}" stroke="var(--sheet)" stroke-width="2"/><text class="lbl" x="${x(low.cal)}" y="${y(low.v) + 18}" text-anchor="middle">low ${usd(low.v)}</text>`;
+  g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+  const xh = node.querySelector('.xh');
+  node.querySelector('.hit').addEventListener('pointermove', e => {
+    const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0));
+    xh.setAttribute('x1', x(c)); xh.setAttribute('x2', x(c)); xh.setAttribute('visibility', 'visible');
+    const p = pts.find(q => q.cal === c), pl = atPlan(plan?.pts, c), h = hist.find(q => q.cal === c), rows = [];
+    if (p) rows.push({ label: 'Brokerage', value: usd(p.v), color: COLOR.brok });
+    if (pl) rows.push({ label: 'First plan', value: usd(pl.brok), dash: true });
+    if (h) rows.push({ label: 'Checked in', value: usd(h.v), color: 'var(--ink)' });
+    showTip(e, L(c), rows.length ? rows : [{ label: 'before this check-in', value: '' }]);
+  });
+  node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  legend($('#brok-legend'), [{ label: 'Brokerage', color: COLOR.brok, kind: 'line' }, ...(ppts.length > 1 ? [{ label: 'First plan', kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins', kind: 'dot' }] : [])]);
+  const sale = S.sold ? SIM.events.find(e => e.kind === 'sale') : null;
+  $('#brok-sub').textContent = `The cushion that carries the gap months, the card payoffs and any surprise. It bottoms out at ${usd(low.v)} in ${L(low.cal)}${low.v < I.strategy.floor - 1 ? `, ${usd(I.strategy.floor - low.v)} under your floor` : ''}.${sale ? ` Shown up to the rental sale in ${L(sale.cal)}, when about ${usd(sale.amt)} lands in it; it reaches ${k$(R.at(-1).brok)} by ${Math.floor(R.at(-1).cal / 12)}.` : ''}`;
+}
+
+// ---------------------------------------------------------------- amortization
+let amortKey = 'heloc';
+function amortAccounts() {
+  const keys = ['heloc', ...SIM.inputs.phases.map(p => 'ph:' + p.id), 'mortgage', 'truck', 'wf', 'usb'];
+  return keys.filter(k => SIM.amort[k]?.some(x => x.bal0 > 0.5 || x.draw > 0.5));
+}
+function renderAmort() {
+  const keys = amortAccounts();
+  if (!keys.includes(amortKey)) amortKey = keys[0];
+  const tabs = $('#amort-tabs');
+  tabs.replaceChildren(...keys.map(k => { const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(k === amortKey)); const i = el('i'); i.style.background = acctColor(k); b.append(i, document.createTextNode(acctName(k))); b.addEventListener('click', () => { amortKey = k; renderAmort(); }); return b; }));
+  if (!amortKey) return;
+  const A = SIM.amort[amortKey], I = SIM.inputs, rows = SIM.rows;
+  const apr = amortKey === 'heloc' ? I.accounts.helocApr : amortKey === 'mortgage' ? I.accounts.mortgageApr : amortKey === 'truck' ? I.accounts.truckApr : amortKey.startsWith('ph:') ? I.strategy.phaseApr : 0;
+  const lastIdx = A.reduce((j, x, i) => (x.bal0 > 0.5 || x.draw > 0.5 ? i : j), 0), end = Math.min(A.length - 1, lastIdx + 3);
+  const paidOff = A.findIndex((x, i) => i >= A.findIndex(q => q.bal0 > 0.5 || q.draw > 0.5) && x.bal < 0.5 && (x.bal0 > 0.5 || x.draw > 0.5));
+  const totInt = sum(A.map(x => x.interest)), totPrin = sum(A.map(x => x.principal)), drawn = sum(A.map(x => x.draw));
+  const facts = [['Owed now', usd(A[0].bal0)], ...(drawn ? [['Drawn later', usd(drawn)]] : []), ['Rate', apr ? `${nf(apr * 100, 3)}%` : '0% until due'], ['Paid off', paidOff >= 0 ? L(rows[paidOff].cal) : 'after the horizon'], ['Interest from here', usd(totInt)], ['Principal from here', usd(totPrin)]];
+  $('#amort-facts').replaceChildren(...facts.map(([l, v]) => { const s = el('span'); s.append(document.createTextNode(l + ' '), el('b', null, v)); return s; }));
+  const col = acctColor(amortKey);
+  // Balance over time.
+  {
+    const node = $('#amort-bal'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
+    const series = [{ cal: SIM.n0, v: A[0].bal0 }, ...A.slice(0, end + 1).map((x, i) => ({ cal: rows[i].cal, v: x.bal }))];
+    const hi = niceTicks(0, Math.max(...series.map(s => s.v), 1), 4).at(-1), ticks = niceTicks(0, hi, 4);
+    const c0 = series[0].cal, c1 = series.at(-1).cal;
+    const x = c => m.l + (c - c0) / Math.max(1, c1 - c0) * (W - m.l - m.r), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+    let g = '';
+    for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
+    const step = Math.max(1, Math.ceil((c1 - c0) / 12 / 6));
+    for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += step) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
+    g += `<path d="M${x(c0)},${y(0)}L${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join('L')}L${x(c1)},${y(0)}Z" fill="${col}" fill-opacity="0.22"/>`;
+    g += `<polyline points="${series.map(s => `${x(s.cal).toFixed(1)},${y(s.v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2"/>`;
+    g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+    node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+    const xh = node.querySelector('.xh');
+    node.querySelector('.hit').addEventListener('pointermove', e => {
+      const b = node.getBoundingClientRect(), c = Math.round(c0 + (e.clientX - b.left - m.l) / (W - m.l - m.r) * (c1 - c0)), s = series.find(q => q.cal === c) ?? series.at(-1);
+      xh.setAttribute('x1', x(s.cal)); xh.setAttribute('x2', x(s.cal)); xh.setAttribute('visibility', 'visible');
+      const k = s.cal - SIM.n0 - 1, a = A[k];
+      showTip(e, L(s.cal), [{ label: 'Balance', value: usd(s.v), color: col }, ...(a ? [{ label: 'Interest', value: usd(a.interest, 2), color: COLOR.int }, { label: 'Principal', value: usd(a.principal, 2), color: col }, ...(a.draw ? [{ label: 'Drawn', value: usd(a.draw) }] : [])] : [])]);
+    });
+    node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
+  }
+  // Payments per calendar year.
+  const years = new Map();
+  A.slice(0, end + 1).forEach((x, i) => { const yr = Math.floor(rows[i].cal / 12); const o = years.get(yr) ?? { yr, start: x.bal0, draw: 0, interest: 0, principal: 0, end: 0 }; o.draw += x.draw; o.interest += x.interest; o.principal += x.principal; o.end = x.bal; years.set(yr, o); });
+  const Y = [...years.values()].filter(o => o.start > 0.5 || o.draw > 0.5 || o.principal > 0.5);
+  {
+    const node = $('#amort-yr'), W = Math.max(280, node.clientWidth), H = 220, m = { l: 52, r: 8, t: 10, b: 24 };
+    const hi = niceTicks(0, Math.max(...Y.map(o => o.interest + o.principal), 1), 4).at(-1), ticks = niceTicks(0, hi, 4);
+    const band = (W - m.l - m.r) / Math.max(1, Y.length), bw = Math.max(4, Math.min(26, band * 0.6)), y = v => m.t + (hi - v) / hi * (H - m.t - m.b);
+    let g = '';
+    for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
+    Y.forEach((o, i) => {
+      const x0 = m.l + band * i + (band - bw) / 2, yb = y(0), yi = y(o.interest), yp = y(o.interest + o.principal);
+      if (yb - yi > 0.3) g += `<rect x="${x0}" y="${yi}" width="${bw}" height="${yb - yi}" fill="${COLOR.int}"/>`;
+      if (yi - yp > 0.3) g += `<rect x="${x0}" y="${yp}" width="${bw}" height="${Math.max(0, yi - yp - 1)}" fill="${col}"/>`;
+      if (Y.length <= 14 || i % 2 === 0) g += `<text x="${x0 + bw / 2}" y="${H - 8}" text-anchor="middle">${String(o.yr).slice(2)}</text>`;
+      g += `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${H - m.t - m.b}" fill="transparent"/>`;
+    });
+    node.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+    node.querySelectorAll('.hit').forEach(h => { const o = Y[+h.dataset.i]; h.addEventListener('pointermove', e => showTip(e, String(o.yr), [{ label: 'Principal', value: usd(o.principal), color: col }, { label: 'Interest', value: usd(o.interest), color: COLOR.int }, { label: 'Balance at year end', value: usd(o.end) }])); h.addEventListener('pointerleave', hideTip); });
+  }
+  legend($('#amort-legend'), [{ label: 'Principal', color: col }, { label: 'Interest', color: COLOR.int }]);
+  table($('#amort-table'), ['Year', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], Y.map(o => ({ cells: [String(o.yr), usd(o.start), o.draw ? usd(o.draw) : '—', usd(o.interest), usd(o.principal), usd(o.end)] })), { num: j => j > 0 });
+  table($('#amort-months'), ['Month', 'Start', 'Drawn', 'Interest', 'Principal', 'End'], A.slice(0, 24).map((x, i) => ({ cells: [L(rows[i].cal), usd(x.bal0, 2), x.draw ? usd(x.draw) : '—', usd(x.interest, 2), usd(x.principal, 2), usd(x.bal, 2)] })), { num: j => j > 0 });
+}
+
+// ---------------------------------------------------------------- history
+function renderHistory() {
+  const node = $('#history');
+  if (!SIM) return;
+  if (!checkins.length) {
+    node.replaceChildren();
+    $('#hist-sub').textContent = db ? 'No check-ins yet. Enter the balances from your statements, set the month they are as of, and press Save check-in. The first one becomes the plan the later ones are measured against.' : 'Check-ins are kept in the page’s own database, which is available when this page is open in Claude.';
+    return;
+  }
+  const plan = planPoints();
+  const rows = [...checkins].reverse().map(c => {
+    const A = c.inputs.accounts, cal = calOf(c.asOf), debt = actualDebt(c.inputs), pl = atPlan(plan?.pts, cal);
+    // Net position: brokerage less every debt, against the first plan's.
+    const vs = pl && c !== plan.base ? (A.brokerage - debt) - (pl.brok - pl.debt) : null;
+    const vsCell = el('span', vs == null || Math.abs(vs) < 50 ? '' : vs > 0 ? 'pos' : 'neg', vs == null ? (c === plan.base ? 'the plan' : '—') : Math.abs(vs) < 50 ? 'on plan' : `${vs > 0 ? 'ahead ' : 'behind '}${usd(Math.abs(vs))}`);
+    const acts = el('div', 'btns');
+    const load = el('button', 'btn small', 'Load'); load.type = 'button'; load.title = 'Put these balances and settings back in the inputs';
+    load.addEventListener('click', () => { inputs = merge(clone(FIN_INPUTS), c.inputs); edited = true; buildForm(); run(); scheduleSave(); });
+    const del = el('button', 'btn small danger', 'Delete'); del.type = 'button';
+    del.addEventListener('click', () => { if (del.dataset.armed) { deleteCheckin(c.asOf); } else { del.dataset.armed = '1'; del.textContent = 'Confirm'; setTimeout(() => { delete del.dataset.armed; del.textContent = 'Delete'; }, 4000); } });
+    acts.append(load, del);
+    const note = el('span', null, L(cal)); if (c.note) note.append(el('span', 'cellnote', c.note));
+    return { cells: [note, usd(A.brokerage), usd(A.heloc), usd(sum(c.inputs.phases.map(p => p.status === 'open' ? p.bal : 0))), usd(A.mortgage), usd(A.truck + A.wf + A.usb), usd(debt), vsCell, L(c.summary?.debtFree), acts], cls: c.asOf === inputs.asOf ? 'pick' : '' };
+  });
+  table(node, ['As of', 'Brokerage', 'HELOC', 'Phase lines', 'Mortgage', 'Truck + cards', 'All debt', 'vs first plan', 'Debt-free then', ''], rows, { num: j => j > 0 && j < 9 });
+  $('#hist-sub').textContent = `${checkins.length} saved. "vs first plan" is your net position (brokerage less every debt) against what the plan from ${L(calOf(plan.base.asOf))} expected for that month. "Debt-free then" is when that check-in's projection finished. Load puts a check-in's balances and settings back in the inputs.`;
+}
+
+// ---------------------------------------------------------------- other paths
+function renderPaths() {
+  if (!SIM) return;
+  const V = variants(inputs), base = V[0].s;
+  table($('#paths'), ['Path', 'HELOC gone', 'All debt gone', 'Interest paid', 'Lowest brokerage', 'Net of paycheck', 'vs as entered'],
+    V.map((v, j) => ({ cls: j === 0 ? 'pick' : '', cells: [v.label, L(v.s.helocClosed), L(v.s.debtFree), usd(v.s.interestPaid), usd(v.s.minBrok.v), k$(v.s.nwNet), j === 0 ? '' : Math.abs(v.s.nwNet - base.nwNet) < 1000 ? 'about the same' : `${v.s.nwNet >= base.nwNet ? '+' : '−'}${k$(Math.abs(v.s.nwNet - base.nwNet)).replace(/^−/, '')}`] })), { num: j => j > 0 });
+}
+
+// ---------------------------------------------------------------- notes
+function renderNotes() {
+  const I = SIM.inputs, S = I.strategy, A = I.accounts;
   const items = [
-    ['Engine', `The workbook's S13 path, month by month from July 2026: truck on autopay at 8.99%, the two cards paid in full at their 0% deadlines from brokerage, the rental mortgage at 2.875%, the HELOC at 7% interest-only with all surplus paying principal, reno-2 redrawing $100k when the line first reaches $100k, surplus prepaying the mortgage once the line is dead, and the rental (${usd(F.rental.value)} growing 3%/yr, less 4% commission, 15% capital gains and ${usd(F.rental.recapture)} recapture) sold the month it settles. Rental income ${usd(F.rental.net)}, plus ${usd(F.rental.rent2)} second-dwelling rent from Feb 2027, both inflating 2.5%/yr.`],
-    ['Changes from the workbook', `Reno-1 is $250k and fills the $250k line, so the $15k floated for closing is no longer reimbursed; gift 1 tops brokerage up by ${usd(F.floorTopUp)} to keep the floor. Two $50k gifts, Dec 2026 and Jun 2027. Energy bill savings enter as cash each month and shrink what the paycheck must cover.`],
-    ['Energy steps', `Solar: 21 kW on two refurbished 18kPVs, ${usd(S.solar.cost)}, ${usd(S.solar.saves)}/yr from the solar plan (electric bill ${usd(2205)} today). Heat pump, buffer and controls ${usd(S.hp.cost)}, ${usd(S.hp.saves)}/yr more. Batteries ${usd(S.batt.cost)}, no bill change. Wood boiler ${usd(S.wood.cost)} installed; it displaces about $473 of gas a year and burns about 7.3 cords, priced at a $150/cord blend of bought and cut wood. The bigger array and battery bank that only matter if you actually disconnect aren't included; you said you'd stay connected.`],
-    ['Not in the model', 'Living costs and utilities beyond the bill savings, property tax and insurance, income tax (Wyoming has none; no federal credit remains for solar), the resale value of any equipment, a 0% card fee other than the 3% assumed, appreciation of the residence, and the Airbnb and second-dwelling rent actually persisting to the sale (the workbook\'s own watch-list item). Everything is nominal at 8% brokerage returns; the 6% case is in the data file.'],
+    ['Each month', `Interest accrues on the truck (${nf(A.truckApr * 100, 2)}%), the rental mortgage (${nf(A.mortgageApr * 100, 3)}%), the HELOC (${nf(A.helocApr * 100, 2)}%, interest-only) and any open phase line (${nf(S.phaseApr * 100, 2)}%, interest-only). The cards are 0% with minimums until their due month, when the balance is paid in full from brokerage. Rent (${usd(I.income.rentalNet, 2)} net, plus ${usd(I.income.rent2)} second-dwelling rent from ${L(calOf(I.income.rent2From))}) grows ${nf(I.income.inflation * 100, 1)}% a year; energy savings from finished phases grow ${nf(I.escalation * 100, 1)}%.`],
+    ['The paycheck', S.shortfall === 'brokerage' ? `Your contribution stays at ${usd(I.income.paycheck)} a month (${usd(I.income.paycheckSold)} once the rental is sold). When rent and savings don't cover the payments, brokerage covers the gap; that is the main reason brokerage dips.` : `The workbook rule: ${usd(I.income.paycheck)} a month, or the whole shortfall if that's larger.`],
+    ['Surplus', `What's left after the payments goes, in order: ${S.refillFloor ? `brokerage until it's back at ${usd(S.floor)}, ` : ''}the HELOC, the open phase line, ${S.prepayMortgage ? 'the rental mortgage once every phase is paid, ' : ''}then brokerage, which earns ${nf(S.ret * 100, 1)}%.`],
+    ['Phases', S.mode === 'separate' ? `Your HELOC-first rule: nothing new is bought until the renovation HELOC is at $0. Then each phase opens its own ${nf(S.phaseApr * 100, 2)}% line in turn, and all surplus pays it off before the next opens. Set a phase to open (with its balance) or done at a check-in and the plan picks up from there.` : `Workbook rule: each phase redraws the HELOC once it falls to ${usd(S.redrawAt)} and the limit allows.`],
+    ['Gifts', `Each gift first keeps what's set for brokerage${S.autoKeep ? ' (raised automatically when brokerage would otherwise dip under the floor before the next gift)' : ''}, then pays down the debt being worked on.`],
+    ['The rental', S.sell === 'afterPayoff' ? `Sold the month its mortgage is prepaid: ${usd(A.rentalValue)} growing ${nf(I.rental.appr * 100, 1)}% a year, less ${nf(I.rental.commission * 100)}% commission, ${nf(I.rental.capGains * 100)}% capital gains over the ${usd(I.rental.basis)} basis and ${usd(I.rental.recapture)} recapture.` : S.sell === 'never' ? 'Kept for good; rent keeps coming in and its value counts in net worth.' : `Sold in ${L(calOf(S.sellOn))}; the equity pays the truck, then the HELOC.`],
+    ['Check-ins', 'Your edits save as you type, to this page’s own database (and to this browser). Save check-in files a dated copy of every balance and setting, with the plan it makes. "Start next month" fills in next month as the plan expects it; correct what differs from your statements, then save. The first check-in is the plan the later ones are measured against.'],
+    ['Not in it', 'Living costs beyond this system, property tax and insurance, income tax, the residence’s value, and resale of equipment. The phase costs and savings come from the solar, heat pump and off-grid pages.'],
   ];
-  $('#notes').replaceChildren(...items.map(([k, v]) => { const li = document.createElement('li'); const b = document.createElement('b'); b.textContent = k + '. '; li.append(b, document.createTextNode(v)); return li; }));
+  $('#notes').replaceChildren(...items.map(([k, v]) => { const li = el('li'); li.append(el('b', null, k + '. '), document.createTextNode(v)); return li; }));
 }
 
-doSection(); helocFirst(); ladder(); cmp(); notes(); debtChart();
-let rz = 0; new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(debtChart); }).observe($('#debt'));
+// ---------------------------------------------------------------- inputs form
+const pctIn = v => Math.round(v * 1e5) / 1e3, pctOut = v => v / 100;
+const GROUPS = () => [
+  { name: 'Accounts', open: true, note: 'Balances at the end of the check-in month, from your statements.', fields: [
+    ['accounts.brokerage', 'Brokerage', 'usd'],
+    ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'],
+    ['accounts.mortgage', 'Rental mortgage owed', 'usd'], ['accounts.mortgageApr', 'Mortgage rate', 'pct'], ['accounts.mortgagePmt', 'Mortgage payment', 'usd'],
+    ['accounts.truck', 'Truck loan owed', 'usd'], ['accounts.truckApr', 'Truck rate', 'pct'], ['accounts.truckPmt', 'Truck payment', 'usd'],
+    ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],
+    ['accounts.usb', 'US Bank card owed', 'usd'], ['accounts.usbMin', 'US Bank minimum', 'usd'], ['accounts.usbDue', 'US Bank 0% ends', 'month'],
+    ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
+  ] },
+  { name: 'Phases after the HELOC', open: true, note: 'In order. Mark one open with its line balance once you’ve bought it, or done once its line is paid.', phases: true },
+  { name: 'Income', fields: [
+    ['income.rentalNet', 'Rental net, per month', 'usd'], ['income.rent2', 'Second dwelling rent', 'usd'], ['income.rent2From', 'Second rent starts', 'month'],
+    ['income.paycheck', 'From your paycheck, per month', 'usd'], ['income.paycheckSold', 'From the paycheck once sold', 'usd'], ['income.inflation', 'Rent growth per year', 'pct'],
+  ] },
+  { name: 'Gifts', gifts: true, note: 'Keep: what stays in brokerage; the rest pays down debt.' },
+  { name: 'Rules', fields: [
+    ['strategy.mode', 'After the renovation HELOC', 'select', [['separate', 'Close it; one line per phase'], ['redraw', 'Phases redraw the HELOC']]],
+    ['strategy.redrawAt', 'Redraw once the HELOC is down to', 'usd'], ['strategy.phaseApr', 'Phase line rate', 'pct'],
+    ['strategy.shortfall', 'When payments outrun rent + paycheck', 'select', [['brokerage', 'Brokerage covers it'], ['paycheck', 'Paycheck covers it (workbook)']]],
+    ['strategy.floor', 'Brokerage floor', 'usd'], ['strategy.refillFloor', 'Refill brokerage to the floor first', 'bool'], ['strategy.autoKeep', 'Gifts keep enough to hold the floor', 'bool'],
+    ['strategy.ret', 'Brokerage return', 'pct'],
+    ['strategy.prepayMortgage', 'Prepay the mortgage after the phases', 'bool'],
+    ['strategy.sell', 'Sell the rental', 'select', [['afterPayoff', 'When its mortgage is paid'], ['onDate', 'On a date'], ['never', 'Never']]],
+    ['strategy.sellOn', 'Sell on', 'month'],
+    ['strategy.brokPayoff', 'Brokerage pays off a line when it can', 'bool'], ['strategy.cushion', 'Cushion to keep', 'usd'],
+    ['horizonYears', 'Years to run', 'int'],
+  ] },
+  { name: 'Rental sale', fields: [
+    ['rental.appr', 'Appreciation per year', 'pct'], ['rental.commission', 'Commission', 'pct'], ['rental.basis', 'Tax basis', 'usd'], ['rental.capGains', 'Capital gains rate', 'pct'], ['rental.recapture', 'Depreciation recapture', 'usd'], ['escalation', 'Energy savings growth', 'pct'],
+  ] },
+];
+function field(path, label, type, opts) {
+  const f = el('div', 'field'), id = 'f-' + path.replace(/\./g, '-'), l = el('label', null, label); l.htmlFor = id;
+  let c;
+  const v = getIn(inputs, path);
+  if (type === 'select') { c = el('select'); for (const [val, t] of opts) { const o = el('option', null, t); o.value = val; c.append(o); } c.value = v; }
+  else if (type === 'bool') { c = el('input'); c.type = 'checkbox'; c.checked = !!v; }
+  else if (type === 'month') { c = el('input'); c.type = 'month'; c.value = v; }
+  else if (type === 'text') { c = el('input'); c.type = 'text'; c.value = v ?? ''; c.style.textAlign = 'left'; c.style.fontFamily = 'var(--body)'; }
+  else { c = el('input'); c.type = 'number'; c.inputMode = 'decimal'; c.step = type === 'pct' ? '0.001' : type === 'int' ? '1' : '0.01'; c.value = type === 'pct' ? pctIn(v) : v; if (type === 'pct') l.textContent = label + ' (%)'; }
+  c.id = id;
+  const on = () => {
+    let val;
+    if (type === 'bool') val = c.checked;
+    else if (type === 'select' || type === 'month' || type === 'text') { val = c.value; if (type === 'month' && !/^\d{4}-\d{2}$/.test(val)) return; }
+    else { val = Number(c.value); if (c.value === '' || !Number.isFinite(val)) return; if (type === 'pct') val = pctOut(val); if (type === 'int') val = Math.max(1, Math.min(40, Math.round(val))); }
+    if (getIn(inputs, path) === val) return;
+    setIn(inputs, path, val); edited = true; scheduleSave(); rerun();
+  };
+  c.addEventListener('change', on);
+  if (c.tagName === 'INPUT' && c.type !== 'checkbox') c.addEventListener('input', on);
+  f.append(l, c);
+  return f;
+}
+function buildForm() {
+  $('#asof').value = inputs.asOf; $('#note').value = inputs.note ?? '';
+  const form = $('#form'); form.replaceChildren();
+  for (const g of GROUPS()) {
+    const d = el('details'); if (g.open) d.open = true;
+    d.append(el('summary', null, g.name));
+    if (g.note) d.append(el('p', 'groupnote', g.note));
+    if (g.fields) for (const [p, l, t, o] of g.fields) d.append(field(p, l, t, o));
+    if (g.phases) inputs.phases.forEach((ph, i) => {
+      const h = el('div', 'subhead'); const sw = el('i'); sw.style.cssText = 'width:8px;height:8px;border-radius:2px;display:inline-block;background:var(--c-phase)'; h.append(sw, document.createTextNode(`${i + 1}. ${ph.name.split(':')[0]}`)); d.append(h);
+      d.append(field(`phases.${i}.amount`, 'Cost', 'usd'), field(`phases.${i}.saves`, 'Saves per year', 'usd'),
+        field(`phases.${i}.status`, 'Status', 'select', [['pending', 'Not yet'], ['open', 'Bought: line open'], ['done', 'Done: line paid']]), field(`phases.${i}.bal`, 'Its line owes', 'usd'));
+    });
+    if (g.gifts) inputs.gifts.forEach((gf, i) => {
+      d.append(el('div', 'subhead', `Gift ${i + 1}`), field(`gifts.${i}.month`, 'Arrives', 'month'), field(`gifts.${i}.amount`, 'Amount', 'usd'), field(`gifts.${i}.keep`, 'Keep in brokerage', 'usd'));
+    });
+    form.append(d);
+  }
+}
+$('#asof').addEventListener('change', e => { if (!/^\d{4}-\d{2}$/.test(e.target.value)) return; inputs.asOf = e.target.value; edited = true; scheduleSave(); rerun(); });
+$('#note').addEventListener('input', e => { inputs.note = e.target.value; edited = true; scheduleSave(); });
+$('#save').addEventListener('click', saveCheckin);
+$('#next').addEventListener('click', () => {
+  const p = projectInputs(SIM, SIM.n0 + 1); if (!p) return;
+  inputs = p; edited = true; buildForm(); run(); scheduleSave();
+  saveline.textContent = `Filled in ${L(SIM.n0)} as the plan expects. Correct it from your statements, then save.`;
+});
+
+buildForm();
+run();
+let rz = 0;
+new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (SIM) { renderFlow(); renderDebt(); renderBrok(); renderAmort(); } }); }).observe($('#results'));
 </script>
