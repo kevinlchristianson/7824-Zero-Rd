@@ -138,7 +138,7 @@
   .notes b { color: var(--ink); }
 
   /* Inputs */
-  .inputs { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; overflow-y: auto; background: var(--paper); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); padding-inline: 16px; padding-block: 18px 28px; }
+  .inputs { position: sticky; top: env(safe-area-inset-top, 0px); box-sizing: border-box; max-height: 100vh; max-height: 100dvh; overflow-y: auto; background: var(--paper); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); padding-inline: 16px; padding-block: 18px 28px; }
   .inputs h2 { font-size: 22px; }
   .checkin { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 12px; margin: 10px 0 14px; display: grid; gap: 8px; }
   .checkin .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
@@ -1022,5 +1022,8 @@ $('#next').addEventListener('click', () => {
 buildForm();
 run();
 let rz = 0;
+// Keep the whole inputs panel on screen before it sticks too, so its last field is always reachable.
+const fitInputs = () => { const a = $('.inputs'); if (getComputedStyle(a).position !== 'sticky') { a.style.maxHeight = ''; return; } const top = Math.max(0, a.getBoundingClientRect().top); a.style.maxHeight = `${top > innerHeight - 240 ? innerHeight : innerHeight - top}px`; };
+addEventListener('scroll', fitInputs, { passive: true }); addEventListener('resize', fitInputs); requestAnimationFrame(fitInputs);
 new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (SIM) { renderFlow(); renderDebt(); renderBrok(); renderNw(); renderAmort(); } }); }).observe($('#results'));
 </script>
