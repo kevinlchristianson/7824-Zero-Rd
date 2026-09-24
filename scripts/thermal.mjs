@@ -1,7 +1,7 @@
 // Runs the heating and cooling model and prints a report.
 // Usage: npm run thermal [-- --json]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary, SENSITIVITY, sensitivityCase } from '../model/thermal.js';
+import { runModel, slimResult, ZONES, ZONE_NAMES, GROUPS, INPUTS, sessionSummary, SENSITIVITY, sensitivityCase, calibrationGrid } from '../model/thermal.js';
 
 const wx = JSON.parse(readFileSync(new URL('../data/casper-tmy3.json', import.meta.url), 'utf8'));
 const t0 = performance.now();
@@ -54,6 +54,12 @@ if (r.calm) {
   const calmHeat = ZONES.reduce((s, z, kk) => s + r.calm.heatTot[kk], 0);
   console.log(`  without wind: heat ${(calmHeat / 1e6).toFixed(1)} MMBtu → wind adds ${((cost.heat - calmHeat) / 1e6).toFixed(1)} MMBtu (${((cost.heat / calmHeat - 1) * 100).toFixed(0)}%)`);
 }
+if (r.asis) {
+  const a = r.asis, at = a.cost.totals, ai = INPUTS.asis;
+  console.log(`\nThis winter, ${a.upperDone ? 'upper level renovated and ground level as-is' : 'center block before the renovation'} (foam R-${ai.wallR} on brick, R-${ai.roofR} attic, U-${ai.windowU} windows, ACH50 ${ai.ach50}; shop as given; same setpoints and equipment)`);
+  for (const [kk, z] of ZONES.entries()) if (z !== 'garage') console.log(`  ${pad(ZONE_NAMES[z], 22)} heat ${lpad(mm(a.heatTot[kk]), 6)} MMBtu  cool ${lpad(mm(a.coolTot[kk]), 5)}  design ${lpad(k(a.heatDesign[z].load), 5)} kBtu/h  peakH ${k(a.peakHeat[kk])}  Tmin ${a.Tmin[kk].toFixed(1)}°F  unmet ${a.unmet[kk]} h`);
+  console.log(`  COST: heating $${(at.gas + at.heatElec).toFixed(0)} (${at.therms.toFixed(0)} therms), cooling $${at.cooling.toFixed(0)}, total $${at.total.toFixed(0)}/yr; ACH50 ${a.range.low.ach50}: $${a.range.low.cost.totals.total.toFixed(0)}, ACH50 ${a.range.high.ach50}: $${a.range.high.cost.totals.total.toFixed(0)}`);
+}
 console.log('\nAnnual net heat flow out of each zone, MMBtu');
 console.log('  ' + pad('', 22) + GROUPS.map(([g]) => lpad(g, 8)).join('') + lpad('solar', 8) + lpad('intern', 8) + lpad('heat', 8) + lpad('cool', 8) + lpad('resid', 8));
 for (const [kk, z] of ZONES.entries()) {
@@ -64,7 +70,8 @@ for (const [kk, z] of ZONES.entries()) {
 }
 console.log('\nMonthly heating MMBtu (shop / ground / upper) and upper cooling');
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-for (let m = 0; m < 12; m++) console.log(`  ${MON[m]}  ${[0, 2, 3].map(z => lpad(mm(M.heat[z][m]), 6)).join('')}   cool ${lpad(mm(M.cool[3][m]), 5)}`);
+const zi = z => ZONES.indexOf(z);
+for (let m = 0; m < 12; m++) console.log(`  ${MON[m]}  ${['shop', 'ground', 'upper'].map(z => lpad(mm(M.heat[zi(z)][m]), 6)).join('')}   cool ${lpad(mm(M.cool[zi('upper')][m]), 5)}`);
 console.log('\nSessions:', 'shop', JSON.stringify(sessionSummary(INPUTS, 'shop')), 'ground', JSON.stringify(sessionSummary(INPUTS, 'ground')));
 
 const sens = { base: r.cost.totals.total, rows: SENSITIVITY.map(c => ({ key: c.key, label: c.label, better: sensitivityCase(c, 'better', r), worse: sensitivityCase(c, 'worse', r) })) };
@@ -77,6 +84,7 @@ for (const x of [...sens.rows].sort((a, b) => (b.worse.total - b.better.total) -
 if (process.argv.includes('--write')) {
   const slim = slimResult(r);
   slim.sensitivity = sens;
+  slim.calib = { state: 'asis', rows: calibrationGrid(r, 'asis') };
   delete slim.main.T; delete slim.main.Qh; delete slim.main.Qc; delete slim.wx;
   const round = (k, v) => {
     if (ArrayBuffer.isView(v)) v = Array.from(v);

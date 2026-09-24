@@ -36,6 +36,13 @@ export const INPUTS = {
   // Center block airtightness is unknown: a best guess for both levels,
   // plus the tight and leaky ends of a plausible range.
   center: { ach50: 5, achLow: 3, achHigh: 8 },
+  // The center block this winter, before the renovation. Owner: the R-30
+  // walls, R-60 roof, continuous foam and new windows below are what the two
+  // renovation phases will deliver; today the brick has the 1" of closed-cell
+  // foam every wall already carries, an older attic, older double-pane windows
+  // and an old shell's leaks. upperDone: reno phase 1 has finished the upper
+  // level, so only the ground level is still as-is.
+  asis: { wallR: 7, roofR: 19, windowU: 0.8, windowSHGC: 0.6, ach50: 12, achLow: 8, achHigh: 18, upperDone: false },
   ground: {
     wallR: 30, ceilingR: 20, minF: 60, occF: 70, hoursPerWeek: 28,
     sessionHours: 7, startHour: 9, gainsOn: 0.3, gainsOff: 0.03,
@@ -96,6 +103,16 @@ export const SCHEMA = [
     ['center.ach50', 'Best guess, both levels', 'ACH50', 'assumed', 0.3, 30, 0.1],
     ['center.achLow', 'Tight end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
     ['center.achHigh', 'Leaky end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
+  ] },
+  { group: 'This winter, before the renovation', note: 'The center block as it stands now, for the as-is case and for calibrating to bills. The shop is as given. Turn on “upper level done” once reno phase 1 finishes.', items: [
+    ['asis.wallR', 'Center wall foam now (1″ CCF)', 'R', 'assumed', 0, 60, 0.5],
+    ['asis.roofR', 'Roof insulation now', 'R', 'assumed', 0, 100, 1],
+    ['asis.windowU', 'Window U-factor now', 'U', 'assumed', 0.1, 1.3, 0.01],
+    ['asis.windowSHGC', 'Window SHGC now', '', 'assumed', 0.1, 0.9, 0.01],
+    ['asis.ach50', 'Airtightness now', 'ACH50', 'assumed', 0.3, 30, 0.1],
+    ['asis.achLow', 'Tight end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
+    ['asis.achHigh', 'Leaky end of range', 'ACH50', 'assumed', 0.3, 30, 0.1],
+    ['asis.upperDone', 'Upper level done (after reno phase 1)', 'on/off', 'given', 0, 1, 1],
   ] },
   { group: 'Center, ground level', items: [
     ['ground.wallR', 'Wall insulation', 'R', 'given', 0, 60, 0.5],
@@ -340,7 +357,9 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   // Air leakage: effective leakage area from ACH50 (ELA ≈ 0.055 in² per CFM50).
   for (const z of ZONES) {
-    const Z = zones[z], ach50 = z === 'ground' || z === 'upper' ? inp.center.ach50 : inp[z].ach50;
+    // The two center levels share center.ach50 unless one is given its own
+    // (the as-is case, with only the ground level still unrenovated).
+    const Z = zones[z], ach50 = z === 'ground' || z === 'upper' ? (inp[z].ach50 ?? inp.center.ach50) : inp[z].ach50;
     Z.ELA = 0.055 * ach50 * Z.V / 60;
     Z.Cs = CS_STORY * Z.hStack / 8;
     Z.Cw = cwCoef(inp.site.shelter, Z.hWind / 8);
@@ -599,8 +618,8 @@ export function simulate(env, wx, inp, opts = {}) {
   const A = new Float64Array(n * n), b = new Float64Array(n), x = new Float64Array(n);
   const A0 = new Float64Array(n * n), b0 = new Float64Array(n);
   const Ta = new Float64Array(nz), Tm = new Float64Array(nz);
-  const init = [inp.shop.minF, 45, inp.ground.minF, inp.upper.heatF, 40];
-  for (let k = 0; k < nz; k++) { Ta[k] = init[k]; Tm[k] = init[k]; }
+  const init = { shop: inp.shop.minF, ground: inp.ground.minF, upper: inp.upper.heatF, garage: 40 };
+  for (let k = 0; k < nz; k++) { Ta[k] = init[ZONES[k]]; Tm[k] = init[ZONES[k]]; }
   const links = env.links.map(l => ({ ...l, ia: ZONES.indexOf(l.a), ib: ZONES.indexOf(l.b) }));
   const bnd = newBoundary();
 
@@ -860,6 +879,23 @@ export function designDay(wx, month, TmaxF, rangeF, windMph, windDir) {
   return s;
 }
 
+// ---------------------------------------------------------------- as-is
+
+// Inputs for this winter's building: the center block before the renovation,
+// with the ground and upper levels' walls, roof, windows and airtightness
+// swapped for the `asis` values. With upperDone, reno phase 1 has finished
+// the upper level and only the ground level is still as-is. The shop,
+// setpoints, equipment and rates are the forecast's.
+export function asIsInputs(inp, { ach50 = inp.asis.ach50, upperDone = !!inp.asis.upperDone } = {}) {
+  const a = inp.asis, i2 = JSON.parse(JSON.stringify(inp));
+  i2.ground.wallR = a.wallR; i2.ground.ach50 = ach50;
+  if (!upperDone) {
+    i2.upper.wallR = a.wallR; i2.upper.roofR = a.roofR; i2.upper.ach50 = ach50;
+    i2.glass.windowU = a.windowU; i2.glass.windowSHGC = a.windowSHGC;
+  }
+  return i2;
+}
+
 // ---------------------------------------------------------------- run
 
 const MMBTU = 1e6;
@@ -931,8 +967,27 @@ export function runModel(wxRaw, inp = INPUTS, p = DEFAULTS, { prepared } = {}) {
     range[k] = { ach50: v, heatTot: r2.heatTot, coolTot: r2.coolTot, cost: costs(r2, i2) };
   }
 
+  // This winter's building: the center before the renovation, at the same
+  // setpoints and on the same equipment, with its own airtightness range.
+  let asis = null;
+  if (inp.asis) {
+    const ai = asIsInputs(inp), aenv = buildEnvelope(p, ai);
+    const am = simulate(aenv, wx, ai, { capHeat, capCool, sched, windOn });
+    const arange = {};
+    for (const [k, v] of [['low', inp.asis.achLow], ['high', inp.asis.achHigh]]) {
+      const i3 = asIsInputs(inp, { ach50: v });
+      const r3 = simulate(buildEnvelope(p, i3), wx, i3, { capHeat, capCool, sched, windOn });
+      arange[k] = { ach50: v, heatTot: r3.heatTot, coolTot: r3.coolTot, cost: costs(r3, i3) };
+    }
+    asis = {
+      upperDone: !!inp.asis.upperDone, heatDesign: steadyLoads(aenv, ai, { T: Tdes, V: Vdes, wd: WDdes, windOn }),
+      cost: costs(am, ai), range: arange, heatTot: am.heatTot, coolTot: am.coolTot, heat: am.heat, cool: am.cool,
+      unmet: am.unmet, Tmin: am.Tmin, peakHeat: am.peakHeat,
+    };
+  }
+
   return {
-    wx, env, ua, heatDesign, windCurve, worst, coolDesign, coolDD, capHeat, capCool, main, calm, range, sched, inp,
+    wx, env, ua, heatDesign, windCurve, worst, coolDesign, coolDD, capHeat, capCool, main, calm, range, asis, sched, inp,
     cost: costs(main, inp),
     design: dsn, periods: wxRaw.periods, station: wxRaw.station, dataset: wxRaw.dataset,
   };
@@ -946,7 +1001,7 @@ export function slimResult(r) {
     coolDesign: r.coolDesign, capHeat: r.capHeat, capCool: r.capCool, design: r.design,
     periods: r.periods, station: r.station, dataset: r.dataset,
     main: r.main, calm: r.calm ? { heatTot: r.calm.heatTot, coolTot: r.calm.coolTot } : null,
-    range: r.range, cost: r.cost,
+    range: r.range, asis: r.asis, cost: r.cost,
     wx: { T: Float32Array.from(r.wx.T), V: Float32Array.from(r.wx.V), month: r.wx.month, dayMeanF: r.wx.dayMeanF },
     inp: r.inp,
     coolDesignDay: { T: Array.from(r.coolDD.T[ZI.upper]), Qc: Array.from(r.coolDD.Qc[ZI.upper]) },
@@ -1031,4 +1086,33 @@ export function sensitivityCase(c, which, base, p = DEFAULTS) {
     total = costs(res, i2).totals.total;
   }
   return { v, label: c.fmt(v), total };
+}
+
+// ---------------------------------------------------------------- calibration
+
+// Fitting the center's airtightness to gas bills: the year simulated at each
+// of these ACH50 values for the building state the bills came from, giving
+// monthly therms (every zone, as a bill would) and the annual cost. The page
+// interpolates between them to find the airtightness that best matches the
+// billed months.
+export const CALIB_ACH = [2, 3, 4.5, 6.5, 9, 12, 16, 20];
+export const CALIB_STATES = {
+  asis: 'the building before the renovation',
+  mixed: 'after reno phase 1, ground level still as-is',
+  reno: 'the renovated building',
+};
+export function calibrationGrid(base, state = 'asis', p = DEFAULTS) {
+  const inp = base.inp;
+  return CALIB_ACH.map(v => {
+    let i2;
+    if (state === 'reno') { i2 = JSON.parse(JSON.stringify(inp)); i2.center.ach50 = v; }
+    else i2 = asIsInputs(inp, { ach50: v, upperDone: state === 'mixed' });
+    const res = simulate(buildEnvelope(p, i2), base.wx, i2,
+      { capHeat: base.capHeat, capCool: base.capCool, sched: base.sched, windOn: !!i2.site.wind });
+    const c = costs(res, i2);
+    return {
+      ach50: v, therms: c.totals.therms, total: c.totals.total,
+      months: Array.from({ length: 12 }, (_, m) => ZONES.reduce((sum, z) => sum + c.monthly[z][m].therms, 0)),
+    };
+  });
 }

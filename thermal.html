@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Zero Rd Thermal Model</title>
 <meta name="description" content="Hour-by-hour heating and cooling model of 7824 Zero Rd on the Casper TMY3 year, with Wyoming wind driving air leakage.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -167,6 +168,18 @@
   select, input, button { font: inherit; color: var(--ink); }
   select { background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 8px; }
   .strip-label { font: 600 11px var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 6px 0 0; }
+  .kpi.asis .kpi-value { color: var(--accent); }
+  .callouts.stale { opacity: 0.5; }
+
+  /* Calibrate to bills */
+  .row .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; max-width: 100%; font-size: 12.5px; color: var(--ink-2); }
+  .row .ctl select { flex: 1 1 200px; min-width: 0; max-width: 100%; }
+  .row .ctl input[type="number"] { width: 72px; box-sizing: border-box; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; font: 500 13px var(--mono); text-align: right; }
+  .bills { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px 10px; margin: 0 0 14px; }
+  .bill { display: grid; gap: 3px; }
+  .bill label { font: 600 11px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .bill input { width: 100%; box-sizing: border-box; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 6px; font: 500 13px var(--mono); text-align: right; }
+  .bill input:not(:placeholder-shown) { border-color: var(--accent); }
 
   .tip { position: fixed; z-index: 10; pointer-events: none; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 140px; max-width: 260px; }
   .tip .t-head { font: 600 11px var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
@@ -241,7 +254,7 @@
     <main class="results" id="results">
       <section id="sec-cost">
         <h2>What it costs</h2>
-        <p class="sub">Energy for heating and cooling in a typical Casper year at your Black Hills Energy and Rocky Mountain Power rates. Heating cost by zone above the line, the upper level's cooling below it. Dollars.</p>
+        <p class="sub">Energy for heating and cooling in a typical Casper year at your Black Hills Energy and Rocky Mountain Power rates. The headline is the renovated building; the tile beside it is this winter's, before the renovation. Heating cost by zone above the line, the upper level's cooling below it, for the renovated building. Dollars.</p>
         <div class="legend" id="month-legend"></div>
         <div class="chart" id="month-chart" role="img" aria-label="Monthly heating cost by zone and upper-level cooling cost"></div>
         <details class="tv"><summary>Table view</summary><div class="table-wrap" id="month-table"></div></details>
@@ -252,6 +265,20 @@
         <div class="tornado" id="tornado" aria-label="Annual cost range for each unknown input"></div>
         <div class="callouts" id="cost-callouts"></div>
         <p class="fine" id="rates-note"></p>
+      </section>
+
+      <section id="sec-calib">
+        <h2>Calibrate to your bills</h2>
+        <p class="sub">Enter each Black Hills bill's therms under the month most of its days fall in. The page takes off hot water and cooking, then finds the center block's airtightness whose modeled months match best. TMY3 is a typical year, so one month can miss by a fifth on weather alone; three or more heating months make a fair fit.</p>
+        <div class="row">
+          <label class="ctl">Bills are from <select id="calib-state"></select></label>
+          <label class="ctl">Hot water and cooking, therms a month <input id="calib-base" type="number" min="0" max="200" step="1" inputmode="numeric"></label>
+          <button type="button" class="btn" id="calib-clear">Clear</button>
+        </div>
+        <div class="bills" id="bills" aria-label="Billed therms by month"></div>
+        <div class="callouts" id="calib-callouts"></div>
+        <details class="tv"><summary>Table view</summary><div class="table-wrap" id="calib-table"></div></details>
+        <p class="fine">The default 18 therms a month for hot water and cooking is Palmer Dr's summer floor on the September 2026 bill. A bill covers the whole premise, so the modeled therms include the shop.</p>
       </section>
 
       <section id="sec-zones">
@@ -311,7 +338,7 @@
 <div class="tip" id="tip" hidden></div>
 
 <script type="module">
-import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, getIn, setIn, sessionSummary } from './model/thermal.js';
+import { SCHEMA, INPUTS, ZONES, ZONE_NAMES, GROUPS, CALIB_STATES, getIn, setIn, sessionSummary } from './model/thermal.js';
 import { DEFAULTS, wallsOf, vestibuleDepth, openings } from './model/params.js';
 
 const $ = s => document.querySelector(s);
@@ -340,8 +367,22 @@ try { const s = localStorage.getItem(STORE); if (s) inputs = merge(clone(INPUTS)
 const saveInputs = () => { try { localStorage.setItem(STORE, JSON.stringify(inputs)); } catch { /* ignore */ } };
 const atDefaults = () => JSON.stringify(inputs) === JSON.stringify(INPUTS);
 
+// Billed therms by month for the calibration panel, kept apart from the
+// model inputs so typing a bill does not rerun the year.
+const BILLS = 'zero-rd-thermal-bills-v1';
+let bills = { state: 'asis', base: 18, therms: Array(12).fill(null) };
+try {
+  const b = JSON.parse(localStorage.getItem(BILLS) || 'null');
+  if (b && typeof b === 'object') {
+    if (b.state in CALIB_STATES) bills.state = b.state;
+    if (Number.isFinite(b.base) && b.base >= 0) bills.base = b.base;
+    if (Array.isArray(b.therms)) bills.therms = Array.from({ length: 12 }, (_, m) => (Number.isFinite(b.therms[m]) && b.therms[m] >= 0 ? b.therms[m] : null));
+  }
+} catch { /* storage unavailable */ }
+const saveBills = () => { try { localStorage.setItem(BILLS, JSON.stringify(bills)); } catch { /* ignore */ } };
+
 // ---------------------------------------------------------------- run orchestration
-let R = null, SENS = null, sensFresh = false, reqId = 0, worker = null, inlineMod = null, wxCache = null;
+let R = null, SENS = null, sensFresh = false, CAL = null, calFresh = false, reqId = 0, worker = null, inlineMod = null, wxCache = null;
 const statusEl = $('#status'), resultsEl = $('#results');
 function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status' + (cls ? ' ' + cls : ''); }
 
@@ -358,6 +399,7 @@ async function runInline(id) {
     wxCache ||= await (await fetch(new URL('./data/casper-tmy3.json', import.meta.url))).json();
     const r = inlineMod.runModel(wxCache, inputs);
     onResult({ id, result: inlineMod.slimResult(r) });
+    onResult({ id, calib: { state: bills.state, rows: inlineMod.calibrationGrid(r, bills.state) } });
   } catch (err) { onResult({ id, error: String(err.message || err) }); }
 }
 let timer = 0;
@@ -367,14 +409,20 @@ function scheduleRun(delay = 350) {
   setStatus('Calculating…', 'busy');
   timer = setTimeout(() => {
     const id = ++reqId;
-    if (worker) worker.postMessage({ id, inputs }); else runInline(id);
+    if (worker) worker.postMessage({ id, inputs, calibState: bills.state }); else runInline(id);
   }, delay);
 }
-function onResult({ id, result, sensitivity, error }) {
+// A new building state for the bills: just the grid, for the same inputs.
+function requestCalib() {
+  calFresh = false; renderCalib();
+  if (worker) worker.postMessage({ id: reqId, inputs, calibState: bills.state, calibOnly: true }); else scheduleRun(0);
+}
+function onResult({ id, result, sensitivity, calib, error }) {
   if (id !== reqId) return;
   if (error) { setStatus(`Model error: ${error}`, 'error'); return; }
   if (sensitivity) { SENS = sensitivity; sensFresh = true; if (R) renderSensitivity(); return; }
-  R = result; sensFresh = false;
+  if (calib) { CAL = calib; calFresh = true; renderCalib(); return; }
+  R = result; sensFresh = false; calFresh = false;
   resultsEl.classList.remove('stale');
   setStatus('Up to date');
   renderAll();
@@ -433,7 +481,13 @@ function renderKpis() {
   const heat = sum(R.main.heatTot), calm = R.calm ? sum(R.calm.heatTot) : null;
   const windPct = calm ? (heat / calm - 1) * 100 : null;
   const tiles = [
-    ['hero', 'Heating & cooling, per year', `$${nf(c.total)}`, `$${nf(lo)} if the center is tight (ACH50 ${i.center.achLow}), $${nf(hi)} if leaky (ACH50 ${i.center.achHigh}). Service charges add $${nf(c.fixed)} a year either way.`],
+    ['hero', 'Renovated, per year', `$${nf(c.total)}`, `Heating and cooling with the center at R-${i.upper.wallR} walls, an R-${i.upper.roofR} roof and ACH50 ${i.center.ach50}: $${nf(lo)} if it comes out tight (ACH50 ${i.center.achLow}), $${nf(hi)} if leaky (ACH50 ${i.center.achHigh}). Service charges add $${nf(c.fixed)} a year either way.`],
+    ...(R.asis ? [(() => {
+      const a = R.asis, ai = i.asis, ar = a.range;
+      const shell = `${ai.wallR ? `R-${ai.wallR} foam on the brick` : 'bare brick'}${a.upperDone ? '' : `, R-${ai.roofR} attic, U-${ai.windowU} windows`}`;
+      return ['hero asis', a.upperDone ? 'This winter, after reno phase 1' : 'This winter, before the renovation', `$${nf(a.cost.totals.total)}`,
+        `${a.upperDone ? 'Upper level renovated; ground level' : 'Center block'} still ${shell}, ACH50 ${ai.ach50}, at the same setpoints on the same equipment. $${nf(ar.low.cost.totals.total)} at ACH50 ${ar.low.ach50}, $${nf(ar.high.cost.totals.total)} at ${ar.high.ach50}.`];
+    })()] : []),
     ['', 'Gas for heat', `$${nf(c.gas)}`, `${nf(c.therms)} therms, $${i.rates.gasWinter.toFixed(3)} Nov–Mar and $${i.rates.gas.toFixed(3)} Apr–Oct, Navien at ${nf(i.plant.boilerEff * 100)}%`],
     ['', 'Electric for cooling', `$${nf(c.cooling)}`, `${nf(c.compKWh)} kWh for the Apollo at COP ${i.plant.coolCOP}, plus the AHU and pumps`],
     ['', 'AHU and pumps for heat', `$${nf(c.heatElec)}`, `${nf(c.heatHours)} hours at ${nf(i.plant.fanW + i.plant.pumpW)} W`],
@@ -633,6 +687,16 @@ function renderCosts() {
     const r = R.range[k].cost.totals;
     row(`${label}, ACH50 ${R.range[k].ach50}`, null, [nf((r.heat + r.cool) / 1e6, 1), nf(r.therms), nf(r.kWh), `$${nf(r.total)}`]);
   }
+  if (R.asis) {
+    const a = R.asis, at = a.cost.totals;
+    const sep2 = tb.insertRow(); sep2.className = 'sep'; const sc2 = sep2.insertCell(); sc2.colSpan = 5;
+    sc2.textContent = a.upperDone ? 'This winter: upper level renovated, ground level as-is' : 'This winter: center block before the renovation';
+    row(`As-is, ACH50 ${i.asis.ach50}`, null, [nf((at.heat + at.cool) / 1e6, 1), nf(at.therms), nf(at.kWh), `$${nf(at.total)}`], 'total');
+    for (const [k, label] of [['low', 'tight'], ['high', 'leaky']]) {
+      const r = a.range[k].cost.totals;
+      row(`${label}, ACH50 ${a.range[k].ach50}`, null, [nf((r.heat + r.cool) / 1e6, 1), nf(r.therms), nf(r.kWh), `$${nf(r.total)}`]);
+    }
+  }
 
   // What moves the bill.
   const gasPerMMBtu = (i.rates.gasWinter ?? i.rates.gas) / i.plant.boilerEff * 10;
@@ -649,6 +713,10 @@ function renderCosts() {
     [`+$${nf(fanAll - fanAuto)} a year`, `if the AHU fan runs around the clock instead of only when heating or cooling.`],
     [`${nf(recAvg, 1)} h`, `for the shop to climb from ${i.shop.minF}°F to ${i.shop.occF}°F on average while the slab soaks up heat${recMiss ? `; ${recMiss} winter sessions never get there` : ''}. Start its heat about that much early.`],
     [`${nf(mild)}% of cooling`, `happens while it is below ${i.upper.coolF - 3}°F outside. Opening windows then, or cooling to 72°F instead of ${i.upper.coolF}°F, trims the cooling bill.`],
+    ...(R.asis ? [(() => {
+      const a = R.asis, d = a.heatDesign, unmet = a.unmet[ZONES.indexOf('ground')] + a.unmet[ZONES.indexOf('upper')];
+      return [`${nf((d.ground.load + d.upper.load) / 1000)} kBtu/h`, `for the center block on the design day this winter (ground ${nf(d.ground.load / 1000)}, upper ${nf(d.upper.load / 1000)}), against the AHU's ${nf(i.plant.ahuHeatBtuh)} Btu/h${unmet > 24 ? `; the model has the center below its setpoint for ${nf(unmet)} hours` : ''}.`];
+    })()] : []),
   ];
   $('#cost-callouts').replaceChildren(...items.map(([big, small]) => {
     const d = document.createElement('div'); d.className = 'callout';
@@ -904,7 +972,8 @@ function renderMethod() {
     ['Schedules', `In-use temperatures apply only on heating-degree days (daily mean below 65°F), as you described: shop ${sessionText('shop')}, ground level ${sessionText('ground')}. Each zone can draw up to the AHU's ${nf(i.plant.ahuHeatBtuh)} Btu/h, so warm-ups take time while the slab soaks up heat. The upper level's ${i.upper.unoccDays} empty days are spread evenly through the year.`],
     ['Equipment', `The Navien condensing combi-boiler heats at an assumed ${nf(i.plant.boilerEff * 100)}% seasonal efficiency, allowing for cycling and hot-water priority. ${nf(i.plant.distLoss * 100)}% of the heating and cooling is assumed lost from ducts and piping before it reaches the rooms. The ${i.plant.coolTons}-ton Apollo cools at COP ${i.plant.coolCOP}, covering the ${nf(R.coolDesign.upper.load / 12000, 1)}-ton design load. The AHU draws ${i.plant.fanW} W and the pumps an assumed ${i.plant.pumpW} W. They run for heat delivered ÷ ${nf(i.plant.ahuHeatBtuh)} Btu/h and for cooling ÷ the Apollo's capacity. Domestic hot water from the combi is not counted.`],
     ['Cooling', `With heat and cool both at ${i.upper.heatF}°F there is no deadband, so the upper level often heats at night and cools the next afternoon. ${nf(mild)}% of its cooling happens while it is below ${i.upper.coolF - 3}°F outside, which open windows or an economizer could cover.`],
-    ['Check first', 'The center\'s airtightness and the winter gas price move the cost most, then duct and piping losses, how the foam is framed, and the boiler\'s real efficiency. A blower-door test pins down the first. A year of the previous owner\'s gas and electric usage would let the model be calibrated to the real building.'],
+    ['This winter', `The headline is the renovated building. The as-is case swaps the center's walls, roof, windows and airtightness for what is there now (${i.asis.wallR ? `R-${i.asis.wallR} of foam on the brick` : 'bare brick'}, an R-${i.asis.roofR} attic, U-${i.asis.windowU} windows, ACH50 ${i.asis.ach50} with ${i.asis.achLow}–${i.asis.achHigh} as the range)${i.asis.upperDone ? ', with the upper level already renovated' : ''}, at the same setpoints, on the same Navien and AHU. The shop is as given in both.`],
+    ['Check first', `The center's airtightness and the winter gas price move the cost most, then duct and piping losses, how the foam is framed, and the boiler's real efficiency. A blower-door test pins down the first. Black Hills bills entered under Calibrate to your bills fit the airtightness of whichever state the building is in; ask Black Hills for the premise's usage before you owned it to calibrate the as-is case from a full year.`],
   ];
   $('#method').replaceChildren(...items.map(([k, v]) => {
     const li = document.createElement('li');
@@ -925,7 +994,7 @@ function buildForm() {
   form.replaceChildren();
   SCHEMA.forEach((grp, gidx) => {
     const det = document.createElement('details');
-    if (gidx < 3) det.open = true;
+    if (gidx < 4) det.open = true;
     const sum = document.createElement('summary'); sum.textContent = grp.group; det.append(sum);
     const noteText = grp.note || GROUP_NOTES[grp.group];
     if (noteText) {
@@ -948,7 +1017,7 @@ function buildForm() {
         const opts = SHELTER.map((t, k) => [k + 1, t]);
         for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; ctl.append(o); }
         ctl.value = String(val);
-      } else if (path === 'site.wind') {
+      } else if (unit === 'on/off') {
         ctl = document.createElement('input'); ctl.type = 'checkbox'; ctl.checked = !!val;
       } else {
         ctl = document.createElement('input'); ctl.type = 'number'; ctl.inputMode = 'decimal';
@@ -985,22 +1054,104 @@ $('#reset').addEventListener('click', () => {
   inputs = clone(INPUTS); saveInputs(); buildForm(); scheduleRun(0);
 });
 
+// ---------------------------------------------------------------- calibrate to bills
+function buildBills() {
+  $('#bills').replaceChildren(...MON.map((mo, m) => {
+    const d = document.createElement('div'); d.className = 'bill';
+    const l = document.createElement('label'); l.htmlFor = `bill-${m}`; l.textContent = mo;
+    const inEl = document.createElement('input'); inEl.type = 'number'; inEl.id = `bill-${m}`; inEl.min = 0; inEl.max = 9999; inEl.step = 1; inEl.inputMode = 'numeric'; inEl.placeholder = '—';
+    if (bills.therms[m] != null) inEl.value = bills.therms[m];
+    inEl.addEventListener('input', () => {
+      const v = inEl.value === '' ? null : Number(inEl.value);
+      bills.therms[m] = Number.isFinite(v) && v >= 0 ? v : null;
+      saveBills(); renderCalib();
+    });
+    d.append(l, inEl); return d;
+  }));
+}
+// The airtightness whose modeled months best match the billed ones, by
+// interpolating the worker's grid and scanning it in steps of 0.1 ACH50.
+function fitBills() {
+  if (!CAL || CAL.state !== bills.state || !CAL.rows || !CAL.rows.length) return null;
+  const rows = CAL.rows, lo = rows[0].ach50, hi = rows.at(-1).ach50;
+  const target = bills.therms.map(v => (v == null ? null : Math.max(0, v - bills.base)));
+  const idx = target.map((v, m) => (v == null ? -1 : m)).filter(m => m >= 0);
+  if (!idx.length) return null;
+  const at = a => {
+    let j = rows.findIndex(r => r.ach50 >= a - 1e-9); if (j < 0) j = rows.length - 1; if (j === 0) j = 1;
+    const r0 = rows[j - 1], r1 = rows[j], f = (a - r0.ach50) / (r1.ach50 - r0.ach50);
+    return { months: r0.months.map((v, m) => v + f * (r1.months[m] - v)), therms: r0.therms + f * (r1.therms - r0.therms), total: r0.total + f * (r1.total - r0.total) };
+  };
+  let best = null;
+  for (let s10 = Math.round(lo * 10); s10 <= Math.round(hi * 10); s10++) {
+    const a = s10 / 10, x = at(a);
+    let sse = 0;
+    for (const m of idx) sse += (x.months[m] - target[m]) ** 2;
+    if (!best || sse < best.sse) best = { ach50: a, sse, ...x };
+  }
+  const billed = idx.reduce((s, m) => s + target[m], 0), modeled = idx.reduce((s, m) => s + best.months[m], 0);
+  return { ...best, idx, target, billed, modeled, edge: best.ach50 <= lo + 1e-9 ? 'tight' : best.ach50 >= hi - 1e-9 ? 'leaky' : null };
+}
+function renderCalib() {
+  const out = $('#calib-callouts'), tbl = $('#calib-table');
+  out.classList.toggle('stale', !calFresh);
+  const fit = fitBills();
+  if (!fit) {
+    const entered = bills.therms.some(v => v != null);
+    const p = document.createElement('p'); p.className = 'fine';
+    p.textContent = !entered ? 'Enter at least one month of billed therms to fit the airtightness.' : 'Working out the fit…';
+    out.replaceChildren(p); tbl.replaceChildren(); return;
+  }
+  const label = CALIB_STATES[bills.state], n = fit.idx.length;
+  const items = [
+    [`ACH50 ${nf(fit.ach50, 1)}`, `implied airtightness of the center block from ${n} billed month${n > 1 ? 's' : ''}, for ${label}${fit.edge ? `. That is the ${fit.edge} end of the ACH50 ${CAL.rows[0].ach50}–${CAL.rows.at(-1).ach50} range the page tests, so the true value may lie beyond it` : ''}.`],
+    [`${nf(fit.modeled)} vs ${nf(fit.billed)} therms`, `modeled against billed over those months, after ${nf(bills.base)} therms a month for hot water and cooking. TMY3 is a typical year, so a single month can miss by a fifth on weather alone.`],
+    [`$${nf(fit.total)} a year`, `heating and cooling in a typical year at that airtightness, for ${label}${bills.state !== 'reno' ? `. The forecast assumes ACH50 ${inputs.center.ach50} after foam and new windows; this fit describes the shell before them` : ''}.`],
+  ];
+  out.replaceChildren(...items.map(([big, small]) => {
+    const d = document.createElement('div'); d.className = 'callout';
+    const b = document.createElement('b'); b.textContent = big;
+    const sp = document.createElement('span'); sp.textContent = small;
+    d.append(b, sp); return d;
+  }));
+  const t = document.createElement('table');
+  t.innerHTML = `<thead><tr><th>Month</th><th class="num">Billed</th><th class="num">Less hot water</th><th class="num">Modeled at ACH50 ${nf(fit.ach50, 1)}</th><th class="num">Difference</th></tr></thead>`;
+  const tb = t.createTBody();
+  const line = (label, vals, cls) => {
+    const tr = tb.insertRow(); if (cls) tr.className = cls; tr.insertCell().textContent = label;
+    for (const v of vals) { const c = tr.insertCell(); c.className = 'num'; c.textContent = nf(v); }
+  };
+  for (const m of fit.idx) line(MON[m], [bills.therms[m], fit.target[m], fit.months[m], fit.months[m] - fit.target[m]]);
+  line('Total', [fit.idx.reduce((s, m) => s + bills.therms[m], 0), fit.billed, fit.modeled, fit.modeled - fit.billed], 'total');
+  tbl.replaceChildren(t);
+}
+{
+  const sel = $('#calib-state');
+  sel.replaceChildren(...Object.entries(CALIB_STATES).map(([k, label]) => Object.assign(document.createElement('option'), { value: k, textContent: label })));
+  sel.value = bills.state;
+  sel.addEventListener('change', () => { bills.state = sel.value; saveBills(); requestCalib(); });
+  const base = $('#calib-base'); base.value = bills.base;
+  base.addEventListener('input', () => { const v = Number(base.value); if (base.value !== '' && Number.isFinite(v) && v >= 0) { bills.base = v; saveBills(); renderCalib(); } });
+  $('#calib-clear').addEventListener('click', () => { bills.therms = Array(12).fill(null); saveBills(); buildBills(); renderCalib(); });
+}
+
 // ---------------------------------------------------------------- render
 function renderAll() {
   if (!R) return;
   renderKpis(); renderMonthly(); renderCosts(); renderSensitivity(); renderZoneTable(); renderPlan(); renderBalance(); renderWind();
-  fillWeeks(); renderWeek(); renderMethod();
+  fillWeeks(); renderWeek(); renderMethod(); renderCalib();
 }
 let rz = 0;
 new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (R) { renderMonthly(); renderWind(); renderWeek(); } }); }).observe(resultsEl);
 
 buildForm();
+buildBills();
 renderPlan();
 startWorker();
 // Precomputed default results paint the page at once; the live run replaces them.
 if (atDefaults()) {
   fetch(new URL('./data/thermal-defaults.json', import.meta.url)).then(r => r.json()).then(d => {
-    if (!R) { R = d; SENS = d.sensitivity || null; sensFresh = !!SENS; renderAll(); resultsEl.classList.add('stale'); }
+    if (!R) { R = d; SENS = d.sensitivity || null; sensFresh = !!SENS; CAL = d.calib || null; calFresh = !!CAL; renderAll(); resultsEl.classList.add('stale'); }
   }).catch(() => {});
 }
 scheduleRun(0);

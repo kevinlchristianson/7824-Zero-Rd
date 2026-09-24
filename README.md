@@ -4,7 +4,7 @@ Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one 
 
 - **`index.html`**: parametric three.js massing model (3D viewer), with solar panels laid out on the south roof slopes. `npm run roofpv` rebuilds the layout in `data/roofpv.json`.
 - **`wiring.html`**: DC wiring for the shop's roof array: strings, home runs, the roof junction box, conduits to the inverters in the shop's SE corner, grounding, and the wire and parts list. `npm run roofpv` rebuilds `data/wiring.json` with the layout.
-- **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
+- **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. It forecasts the renovated building and shows this winter's as-is building beside it, and it fits the center's airtightness to Black Hills bills. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 - **`offgrid.html`**: off-grid questions sized hour by hour, in grid-down conservation mode: (A) batteries, generator and stored gas to carry the grid-tied house through its worst week; (B) full off grid with no gas on heat pumps, resistance and batteries; (C) the same with an outdoor wood boiler. `npm run offgrid` rebuilds `data/offgrid.json`.
 - **`finance.html`**: the financial model. Every account's balance as of the last check-in, run forward month by month (`model/finance.js`): what to pay this month, the steps and cash-flow triggers ahead, each loan's amortization, and other paths from the same balances. Inputs are live-editable and autosave to the page's database; each check-in is filed with the plan it makes, so later check-ins show ahead or behind. `npm run finance` prints the default plan and writes `data/finance-seed.json`, the first check-in.
@@ -22,7 +22,7 @@ The center block and the shop are 48′ × 68′ inside (owner), with about 16�
 
 ## Heating & cooling model (`model/thermal.js`)
 
-- **Zones:** shop, vestibule (unheated buffer), center ground level, center upper level, and south leg (unheated). Each zone has an air node and a thermal-mass node, and the model steps every 15 minutes through all 8,760 hours.
+- **Zones:** shop, center ground level, center upper level, and south leg (unheated). The vestibule in front of the shop is cosmetic and not modeled. Each zone has an air node and a thermal-mass node, and the model steps every 15 minutes through all 8,760 hours.
 - **Given by the owner:**
   - Shop: 12″ brick with R-15 closed-cell foam, R-40 attic. Held at 45°F minimum, and 70°F for about 12 h/week on heating-degree days.
   - Ground level: R-30 walls, R-20 ceiling to the upper level. Held at 60°F minimum, and 70°F for 28 h/week on heating-degree days.
@@ -41,14 +41,16 @@ The center block and the shop are 48′ × 68′ inside (owner), with about 16�
   - Shop: no windows and no doors on the windward side; it is super airtight (modeled at ACH50 1.5). It is heated to 70°F two 6-hour days a week.
   - Ground level: no windows. A 36″ walkout to the courtyard, and 86″ walkthroughs into the shop and the south leg.
 - **Equipment (owner):**
-  - A Navien condensing combi-boiler heats, at an assumed 92% seasonal efficiency.
+  - A Navien condensing combi-boiler heats, at an assumed 88% seasonal efficiency.
   - An MBTEK Apollo 3.5-ton air-to-water heat pump cools at COP 4.6.
   - Both run through an MBTEK AP-AHU-6T air handler drawing 460 W. It runs for heat delivered ÷ its output, and for cooling ÷ the Apollo's capacity.
-- **Rates (owner's Aug-2026 bills, rates only):**
+- **Rates (owner's Aug-2026 bills, rates only; checked against the September 2026 Black Hills bill, which puts Zero Rd on residential RGS GCA with a $33.00 customer charge and no franchise fee):**
   - Gas: $0.576/therm all-in, on Black Hills Energy RGS GCA.
   - Electric: $0.1017/kWh all-in, on Rocky Mountain Power Schedule 25.
   - Monthly service charges ($34.65 gas, $37.46 electric) are reported separately.
-- **Center airtightness is unknown.** The model runs a best guess (ACH50 3.5) plus a tight (2) to leaky (6) range, and reports costs for all three.
+- **Center airtightness is unknown.** The model runs a best guess (ACH50 5) plus a tight (3) to leaky (8) range, and reports costs for all three.
+- **The headline is the renovated building.** Owner: the R-30 walls, R-60 roof, continuous foam and new windows are what the two renovation phases will deliver, not what stands today. The page runs the same year for **this winter's building** beside it: the center block with the 1″ of closed-cell foam every wall already carries (R-7), an R-19 attic, older U-0.8 windows and ACH50 12 (8–18 as its range), at the same setpoints on the same equipment. A switch marks the upper level done after reno phase 1, leaving only the ground level as-is. The shop is as given in both. At the defaults the renovated building costs about $1,800 a year to heat and cool and the as-is one about $3,450.
+- **Calibrate to your bills.** Billed therms entered by month, less an assumed 18 therms a month for hot water and cooking, are fitted to the year simulated at eight airtightness values (ACH50 2–20) for whichever state the bills came from: as-is, after phase 1, or renovated. The page reports the implied ACH50, modeled against billed therms, and the year's cost at that fit. TMY3 is a typical year, so a single month can miss by a fifth on weather alone.
 - **Assumptions to confirm** (tagged *assumed* in the page):
   - center airtightness
   - slab-edge insulation
@@ -56,13 +58,14 @@ The center block and the shop are 48′ × 68′ inside (owner), with about 16�
   - the AHU's heat output
   - window U-factor and SHGC
   - internal gains
+  - the as-is shell: its foam, attic, windows and airtightness before the renovation
 
 ## Solar plan (`model/solar.js`)
 
 The plan runs hourly over the same TMY3 year:
 
 - **PV output.** Isotropic sky on a south-facing array tilted 40°. Faiman cell temperature. Each EG4 18kPV clips at 12 kW AC and takes up to 18 kW DC.
-- **Loads.** Heating and cooling come from the thermal model. Household electricity is 47 kWh/day. Hot water is 40 gal/day at 120°F.
+- **Loads.** Heating and cooling come from the thermal model. Household electricity is 47 kWh/day. Hot water is 60 gal/day at 120°F. The plan's own assumptions differ from the thermal page in three places: the Navien at 93% (thermal page: 88%), the upper level's internal gains taken from the 47 kWh/day (thermal page: 0.2 W/ft²), and the shop heated by the existing Modine at 82% (thermal page: the Navien through the AHU).
 - **Heat pump setups.** No Apollo is bought yet. The plan compares one 3.5-ton, one 6-ton, 3.5 + 6, and two 6-tons, each on the existing 6-ton AHU or with a second 3.5-ton AHU. It follows the owner's hydronic pack. The heat pump charges a 250-gal buffer on an outdoor reset, 85 to 120 °F. The buffer feeds the upstairs radiant floor (capacity-limited at tank temperature), the AHU and the shop unit heater, and it preheats the Navien combi's cold water. There are three heating modes. Cool-only leaves heat to the Navien. Heat-first runs the heat pump whenever it can. Smart spends solar credit that would otherwise be paid out at the true-up on the best-COP hours. Each setup gets its cheapest array and is ranked by 25-year cost.
 - **Net metering.** Rocky Mountain Power's Wyoming rules: kWh netted monthly, surplus banked at retail, leftover credit paid at avoided cost at the annual true-up, 25 kW AC cap.
 
