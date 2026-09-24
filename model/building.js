@@ -3,9 +3,9 @@
 // the heating and cooling model.
 
 import * as THREE from 'three';
-import { DEFAULTS, wallsOf, vestibuleDepth, centerPlate, openings } from './params.js';
+import { DEFAULTS, wallsOf, vestibuleDepth, centerPlate, gableOf, openings } from './params.js';
 
-export { DEFAULTS, FT_PER_PX, wallsOf, vestibuleDepth, centerPlate, openings } from './params.js';
+export { DEFAULTS, FT_PER_PX, wallsOf, vestibuleDepth, centerPlate, gableOf, openings } from './params.js';
 
 // ---------------------------------------------------------------- materials
 
@@ -24,10 +24,8 @@ function makeMaterials() {
     steel: m('steel', 0x3b3a38, { roughness: 0.6, metalness: 0.4 }),
     fence: m('fence', 0x6b5040),
     grass: m('dry_grass', 0xc4b58c),
-    conifer: m('conifer', 0x3e5838, { flatShading: true }),
-    leaf: m('deciduous', 0x76905a, { flatShading: true }),
-    olive: m('russian_olive', 0xa6b3a0, { flatShading: true }),
-    trunk: m('trunk', 0x5b4636),
+    pv: m('pv_panel', 0x1f2a3c, { roughness: 0.35, metalness: 0.25 }),
+    pvShaded: m('pv_shaded', 0xc4553a, { transparent: true, opacity: 0.55 }),
   };
 }
 
@@ -142,28 +140,27 @@ function placeWall(face, w, t, h, openings, mats, y0 = 0) {
   return panel;
 }
 
-// Closed hip-roof solid over rectangle r at eave height eaveY
-// (soffit at eaveY, fascia up to eaveY + thick, planes up to the ridge).
-export function hipRoof(r, eaveY, pitch, thick, mat) {
-  const alongX = (r.x1 - r.x0) >= (r.z1 - r.z0);
-  const L = alongX ? r.x1 - r.x0 : r.z1 - r.z0;
-  const S = alongX ? r.z1 - r.z0 : r.x1 - r.x0;
-  const hL = L / 2, hS = S / 2, rh = hL - hS;
-  const top = eaveY + thick, ridge = top + hS * pitch;
+// Gable roof over block `key` ('center', 'north' or 'south'): a slab `thick`
+// deep, two slopes meeting at a ridge along x or z, overhanging the walls at
+// the eaves and rakes. Returns the roof and the two brick gable ends, which
+// fill the wall from the plate up to the underside of the roof.
+export function gableRoof(p, key, mats) {
+  const r = p[key].roof, w = wallsOf(r, p.overhang), g = gableOf(p, key);
+  const t = p.roofThick, k = p.pitch, hS = g.half, e = g.plate, top = g.eaveTop, ridge = g.ridgeY;
+  const hL = (g.alongX ? r.x1 - r.x0 : r.z1 - r.z0) / 2;
 
   // Local frame: u along the ridge, v across it.
-  const P = (u, y, v) => (alongX ? [u, y, v] : [v, y, -u]);
-  const A = P(-hL, top, -hS), B = P(hL, top, -hS), C = P(hL, top, hS), Dd = P(-hL, top, hS);
-  const a = P(-hL, eaveY, -hS), b = P(hL, eaveY, -hS), c = P(hL, eaveY, hS), d = P(-hL, eaveY, hS);
-  const R1 = P(-rh, ridge, 0), R2 = P(rh, ridge, 0);
+  const P = (u, y, v) => (g.alongX ? [u, y, v] : [v, y, -u]);
+  const A = P(-hL, top, -hS), B = P(hL, top, -hS), C = P(hL, top, hS), D = P(-hL, top, hS);
+  const a = P(-hL, e, -hS), b = P(hL, e, -hS), c = P(hL, e, hS), d = P(-hL, e, hS);
+  const R1 = P(-hL, ridge, 0), R2 = P(hL, ridge, 0), r1 = P(-hL, ridge - t, 0), r2 = P(hL, ridge - t, 0);
 
   const tris = [
-    [Dd, C, R2], [Dd, R2, R1],   // +v slope
-    [B, A, R1], [B, R1, R2],     // -v slope
-    [C, B, R2], [A, Dd, R1],     // hip ends
-    [a, b, c], [a, c, d],        // soffit
-    [d, c, C], [d, C, Dd], [b, a, A], [b, A, B], // fascia
-    [c, b, B], [c, B, C], [a, d, Dd], [a, Dd, A],
+    [D, C, R2], [D, R2, R1], [B, A, R1], [B, R1, R2],   // slopes
+    [d, r2, c], [d, r1, r2], [b, r1, a], [b, r2, r1],   // soffits
+    [d, c, C], [d, C, D], [b, a, A], [b, A, B],         // fascia
+    [a, R1, A], [a, r1, R1], [r1, D, R1], [r1, d, D],   // rakes
+    [b, B, R2], [b, R2, r2], [r2, R2, C], [r2, C, c],
   ];
   // (u, v) -> (x, z) is a proper rotation in both cases, so winding holds.
   const pos = [];
@@ -171,9 +168,43 @@ export function hipRoof(r, eaveY, pitch, thick, mat) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.computeVertexNormals();
-  const m = mesh(geo, mat, 'roof');
-  m.position.set((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2);
-  return m;
+  const roof = mesh(geo, mats.roof, 'roof');
+  roof.position.set((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2);
+
+  // Gable ends: a pentagon across the wall, extruded inward one wall thick.
+  const hW = hS - p.overhang, s = new THREE.Shape();
+  s.moveTo(-hW, e); s.lineTo(hW, e); s.lineTo(hW, e + k * p.overhang);
+  s.lineTo(0, e + k * hS); s.lineTo(-hW, e + k * p.overhang); s.lineTo(-hW, e);
+  const endGeo = new THREE.ExtrudeGeometry(s, { depth: p.wallT, bevelEnabled: false });
+  const ends = (g.alongX
+    ? [[w.x0, g.mid, Math.PI / 2], [w.x1, g.mid, -Math.PI / 2]]
+    : [[g.mid, w.z0, 0], [g.mid, w.z1, Math.PI]]
+  ).map(([x, z, ry]) => {
+    const m = mesh(endGeo, mats.brick, 'gable');
+    m.position.set(x, 0, z);
+    m.rotation.y = ry;
+    return m;
+  });
+  return { roof, ends };
+}
+
+// Solar panels from a roof layout (data/roofpv.json, npm run roofpv), on the
+// south slopes: dark where they pay, pale red where shade leaves a spot out.
+export function pvPanels(layout, mats = makeMaterials()) {
+  const g = new THREE.Group(); g.name = 'pv';
+  const standoff = 0.4, thick = 0.13;
+  for (const sl of layout.slopes) {
+    if (!sl.south) continue;
+    const n = sl.normal, lift = standoff + thick / 2;
+    for (const q of sl.panels) {
+      // Box y along the slope normal, z down the slope (a south slope).
+      const b = box(sl.w - 0.02, thick, sl.l - 0.02, q.kept ? mats.pv : mats.pvShaded, q.kept ? 'pv_panel' : 'pv_shaded');
+      b.position.set(q.c[0] + n[0] * lift, q.c[1] + n[1] * lift, q.c[2] + n[2] * lift);
+      b.rotation.x = sl.tilt;
+      g.add(b);
+    }
+  }
+  return g;
 }
 
 const FILL = { window: 'glass', glassDoor: 'glass', arch: 'glass', door: 'door', garageDoor: 'garage', open: 'open' };
@@ -303,7 +334,8 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
     stair.add(lr);
     walls.add(stair);
 
-    roofs.add(hipRoof(c.roof, plate, p.pitch, p.roofThick, mats.roof));
+    const { roof, ends } = gableRoof(p, 'center', mats);
+    roofs.add(roof); cc.add(...ends);
   }
 
   // ---- North leg: single volume
@@ -318,8 +350,10 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
     g.add(placeWall('S', w, t, h, on('north.S'), mats));
     g.add(placeWall('N', w, t, h, on('north.N'), mats));
     g.add(placeWall('E', w, t, h, on('north.E'), mats));
+    const { roof, ends } = gableRoof(p, 'north', mats);
+    g.add(...ends);
     walls.add(g);
-    roofs.add(hipRoof(L.roof, h, p.pitch, p.roofThick, mats.roof));
+    roofs.add(roof);
   }
 
   // ---- South leg: single volume, overhead doors onto the drive
@@ -327,8 +361,10 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
     const L = p.south, w = sw, h = L.wall;
     const g = new THREE.Group(); g.name = 'south_leg';
     for (const f of ['S', 'W', 'N', 'E']) g.add(placeWall(f, w, t, h, on(`south.${f}`), mats));
+    const { roof, ends } = gableRoof(p, 'south', mats);
+    g.add(...ends);
     walls.add(g);
-    roofs.add(hipRoof(L.roof, h, p.pitch, p.roofThick, mats.roof));
+    roofs.add(roof);
   }
 
   // ---- Site context (approximate, from aerials)
@@ -356,36 +392,6 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
     fE.position.set(fx1, fh / 2, (fz0 + cw.z0) / 2);
     site.add(fN, fE);
 
-    const trees = new THREE.Group(); trees.name = 'trees';
-    const conifer = (x, z, h) => {
-      const g = new THREE.Group();
-      const tr = mesh(new THREE.CylinderGeometry(0.5, 0.7, h * 0.2, 6), mats.trunk);
-      tr.position.y = h * 0.1;
-      const cone = mesh(new THREE.ConeGeometry(h * 0.22, h * 0.85, 8), mats.conifer);
-      cone.position.y = h * 0.15 + h * 0.425;
-      g.add(tr, cone);
-      g.position.set(x, 0, z);
-      trees.add(g);
-    };
-    const leafy = (x, z, r, mat = mats.leaf) => {
-      const g = new THREE.Group();
-      const tr = mesh(new THREE.CylinderGeometry(0.6, 0.9, r * 1.2, 6), mats.trunk);
-      tr.position.y = r * 0.6;
-      const crown = mesh(new THREE.IcosahedronGeometry(r, 1), mat);
-      crown.position.y = r * 1.6;
-      crown.scale.y = 0.8;
-      g.add(tr, crown);
-      g.position.set(x, 0, z);
-      trees.add(g);
-    };
-    conifer(34, -44, 36);
-    conifer(-93, -68, 26); conifer(-102, -45, 22); conifer(-129, 70, 24);
-    conifer(-112, 47, 20); conifer(-4, 88, 22); conifer(12, 70, 26);
-    conifer(24, 96, 20); conifer(-84, 4, 18);
-    leafy(-50, -8, 5);
-    leafy(45, 4, 11, mats.olive); leafy(40, -24, 9);
-    leafy(-38, 104, 8, mats.olive); leafy(58, 30, 10, mats.olive);
-    site.add(trees);
   }
 
   return root;

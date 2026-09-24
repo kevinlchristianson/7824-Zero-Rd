@@ -2,7 +2,8 @@
 
 Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one set of geometry.
 
-- **`index.html`**: parametric three.js massing model (3D viewer).
+- **`index.html`**: parametric three.js massing model (3D viewer), with solar panels laid out on the south roof slopes. `npm run roofpv` rebuilds the layout in `data/roofpv.json`.
+- **`wiring.html`**: DC wiring for the shop's roof array: strings, home runs, the roof junction box, conduits to the inverters in the shop's SE corner, grounding, and the wire and parts list. `npm run roofpv` rebuilds `data/wiring.json` with the layout.
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
 - **`offgrid.html`**: off-grid questions sized hour by hour, in grid-down conservation mode: (A) batteries, generator and stored gas to carry the grid-tied house through its worst week; (B) full off grid with no gas on heat pumps, resistance and batteries; (C) the same with an outdoor wood boiler. `npm run offgrid` rebuilds `data/offgrid.json`.
@@ -15,7 +16,7 @@ All three read `model/params.js`: the plan dimensions, heights and the full door
 - **Center block**: two stories. The wall stack is 11′ ground level, then a 2′ floor structure, then a 9′ upper level. A 10′-deep porch with six arches stands outside it on the courtyard side, with an open deck on top along the upper level, and an exterior steel stair climbs the east face.
 - **North leg (shop)**: one tall volume. It has the center block's footprint turned 90°, plus a vestibule across its west end behind four arches.
 - **South leg**: one tall volume (garage), with overhead doors onto the south drive. Unheated.
-- Hip roofs throughout.
+- Gable roofs throughout (owner). The ridges are assumed to run the long way: north–south on the center, east–west on the legs.
 
 The center block and the shop are 48′ × 68′ inside (owner), with about 16″ of brick and foam; the buildings are rectangles butted together (the overlap seen from above is the eaves). Positions are scaled from Google Earth. The ruler reads 82.33 ft along the north leg's north roof edge, about 0.328 ft/px. The upper-level openings come from the owner: sixteen 41″ × 67″ windows, a 36″ door and a 72″ door. Everything else not listed under *Heating & cooling model* is estimated from the listing photos.
 
@@ -78,9 +79,10 @@ npm run thermal                 # print the model report
 npm run thermal:write           # refresh data/thermal-defaults.json for the page
 npm run solar                   # print the solar plan report
 npm run solar:write             # refresh data/solar-defaults.json for the page
+npm run roofpv                  # lay out panels on the south roofs; writes data/roofpv.json
 npm run weather                 # rebuild data/casper-tmy3.json from the EPW
 npm run export                  # export/7824-zero-rd.{obj,mtl,glb}
-node scripts/export.mjs --no-context   # building only, no ground/trees
+node scripts/export.mjs --no-context   # building only, no ground
 ```
 
 OBJ files are in feet (+X east, +Y up, +Z south). GLB files are in metres.

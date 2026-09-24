@@ -1,0 +1,385 @@
+<title>Shop Array Wiring</title>
+<meta name="description" content="DC wiring for the 72-panel array on the shop's south roof at 7824 Zero Rd: strings, home runs, junction box, conduits to the inverters, grounding and parts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f3f1ec;
+    --sheet: #fbfaf7;
+    --ink: #23201d;
+    --muted: #6d675f;
+    --rule: #d9d3c9;
+    --accent: #8a4f35;
+    --roof: #e8e2d8;
+    --hatch: #b3a998;
+    --pos: #b3261e;
+    --gnd: #2e7d32;
+    --s1: #2a7f8f;
+    --s2: #b58326;
+    --s3: #8a58a6;
+    --s4: #4c8a3c;
+    --s5: #b04a7a;
+    --s6: #4d5fb3;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #161412;
+      --sheet: #1d1a17;
+      --ink: #ece6dd;
+      --muted: #a39b90;
+      --rule: #3a342e;
+      --accent: #d39473;
+      --roof: #2b2622;
+      --hatch: #5e554b;
+      --pos: #ff8a80;
+      --gnd: #7bc67e;
+      --s1: #6fc3d1;
+      --s2: #e7bb66;
+      --s3: #c69ae0;
+      --s4: #95cf83;
+      --s5: #ea8fb8;
+      --s6: #9aa8ef;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #161412;
+    --sheet: #1d1a17;
+    --ink: #ece6dd;
+    --muted: #a39b90;
+    --rule: #3a342e;
+    --accent: #d39473;
+    --roof: #2b2622;
+    --hatch: #5e554b;
+    --pos: #ff8a80;
+    --gnd: #7bc67e;
+    --s1: #6fc3d1;
+    --s2: #e7bb66;
+    --s3: #c69ae0;
+    --s4: #95cf83;
+    --s5: #ea8fb8;
+    --s6: #9aa8ef;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 14px/1.5 var(--body);
+  }
+  .page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 28px 48px;
+    display: grid;
+    gap: 28px;
+  }
+  .eyebrow {
+    font: 600 12px/1 var(--display);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 6px;
+  }
+  h1 { font: 700 44px/0.95 var(--display); letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+  h2 {
+    font: 600 13px/1 var(--display);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .head { display: grid; gap: 14px; }
+  .lede { color: var(--muted); margin: 0; max-width: 72ch; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 24px; margin: 0; }
+  .facts div { border-top: 1px solid var(--rule); padding-top: 8px; }
+  .facts dt { font: 600 12px/1.2 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .facts dd { margin: 4px 0 0; font: 500 14px/1.35 var(--mono); font-variant-numeric: tabular-nums; }
+
+  .fig { margin: 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 16px; display: grid; gap: 12px; }
+  .fig h2 { margin-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  .fig svg { display: block; width: 100%; min-width: 920px; height: auto; }
+  .fig figcaption { color: var(--muted); font-size: 13px; max-width: 90ch; }
+  .key { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12.5px; color: var(--muted); }
+  .key span { display: inline-flex; align-items: center; gap: 6px; }
+  .key i { display: inline-block; width: 18px; height: 0; border-top: 3px solid currentColor; }
+  .key i.dash { border-top-style: dashed; border-top-width: 2px; }
+  .key b { font: 600 12.5px var(--mono); color: var(--ink); }
+
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font: 600 12px/1.2 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .notes { margin: 0; padding-left: 18px; display: grid; gap: 7px; color: var(--muted); font-size: 13px; max-width: 95ch; }
+  .notes b { color: var(--ink); font-weight: 600; }
+
+  /* drawing */
+  .d-text { fill: var(--ink); font: 12px var(--body); }
+  .d-muted { fill: var(--muted); font: 11.5px var(--body); }
+  .d-mono { fill: var(--ink); font: 11px var(--mono); }
+  .d-label { fill: var(--ink); font: 600 12.5px var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .d-line { stroke: var(--ink); fill: none; }
+  .d-rule { stroke: var(--muted); fill: none; }
+  .d-sheet { fill: var(--sheet); }
+  .d-roof { fill: var(--roof); stroke: var(--ink); stroke-width: 1.2; }
+  .d-gnd { stroke: var(--gnd); fill: none; }
+  .d-pos { fill: var(--pos); }
+  .s0 { --c: var(--s1); } .s1 { --c: var(--s2); } .s2 { --c: var(--s3); }
+  .s3 { --c: var(--s4); } .s4 { --c: var(--s5); } .s5 { --c: var(--s6); }
+
+  @media (max-width: 860px) {
+    .grid2 { grid-template-columns: 1fr; }
+    h1 { font-size: 38px; }
+    .page { padding-inline: 16px; }
+  }
+</style>
+
+<main class="page">
+  <header class="head">
+    <div>
+      <p class="eyebrow">7824 Zero Rd · Shop roof, south slope</p>
+      <h1>Shop Array Wiring</h1>
+    </div>
+    <p class="lede" id="lede">Loading the wiring plan…</p>
+    <dl class="facts" id="facts"></dl>
+  </header>
+
+  <figure class="fig">
+    <h2>Roof plan, looking north at the south slope</h2>
+    <div class="scroll"><svg id="plan" role="img" aria-label="Roof plan of the shop's south slope showing six colored strings of twelve panels, their home runs to a junction box at the east end, and the conduits to the inverters"></svg></div>
+    <div class="key" id="plan-key"></div>
+    <figcaption id="plan-cap"></figcaption>
+  </figure>
+
+  <figure class="fig">
+    <h2>One-line diagram</h2>
+    <div class="scroll"><svg id="oneline" role="img" aria-label="One-line diagram: six strings run to the roof junction box, then two conduits carry three strings each to inverters A and B, one string per MPPT input"></svg></div>
+    <figcaption>Each string gets its own MPPT input, so no strings are paralleled. The ground path runs from the row lugs to the junction box ground bar, then with the conductors in each conduit to the inverters.</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <section>
+      <h2>String schedule</h2>
+      <div class="scroll"><table id="schedule"></table></div>
+    </section>
+    <section>
+      <h2>Wire and parts</h2>
+      <div class="scroll"><table id="bom"></table></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Notes</h2>
+    <ul class="notes" id="notes"></ul>
+  </section>
+</main>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const ftin = v => { const f = Math.floor(v + 1e-6), i = Math.round((v - f) * 12); return i === 12 ? `${f + 1}′` : i ? `${f}′‑${i}″` : `${f}′`; };
+const n0 = v => Math.round(v).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+let D;
+try { D = await (await fetch(new URL('./data/wiring.json', import.meta.url), { cache: 'no-cache' })).json(); }
+catch { $('#lede').textContent = 'The wiring data didn’t load. Reload the page to try again.'; throw new Error('no data'); }
+
+const S = D.strings, B = D.bom, I = D.inputs, minus = v => String(v).replace('-', '−'), lowF = minus(Math.round(I.lowC * 9 / 5 + 32));
+const kw = (D.panels.length * D.panel.watts / 1000).toFixed(1);
+$('#lede').textContent = `${D.panels.length} ${I.panel.name} panels in landscape on the shop's south slope, wired as ${S.length} strings of ${I.perString}. The strings run up and down the columns to a junction box at the east end, then two short conduits drop to the two ${I.inverter.name} inverters in the shop's southeast corner.`;
+const facts = [
+  ['Array', `${D.panels.length} × ${D.panel.watts} W = ${kw} kW`],
+  ['Strings', `${S.length} × ${I.perString} panels, ${Math.round(S[0].vocCold)} V at ${lowF}°F`],
+  ['Inverters', `A: ${S.filter(s => s.inverter === 'A').map(s => s.id).join(' ')} · B: ${S.filter(s => s.inverter === 'B').map(s => s.id).join(' ')}`],
+  ['Junction box', `${ftin(D.jbox.x)} from the west gable, ${ftin(D.jbox.w)} up the slope`],
+];
+$('#facts').innerHTML = facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+
+// ---------------------------------------------------------------- roof plan
+{
+  const R = D.roof, P = D.panel, sc = 12, mx = 64, my = 60, right = 230, bottom = 140;
+  const Wd = R.widthFt * sc, Hd = R.lengthFt * sc, VW = mx + Wd + right, VH = my + Hd + bottom;
+  const X = x => mx + x * sc, Y = w => my + (R.lengthFt - w) * sc;
+  const pts = a => a.map(([x, w]) => `${X(x).toFixed(1)},${Y(w).toFixed(1)}`).join(' ');
+  let g = `<defs>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="var(--sheet)"/><line x1="0" y1="0" x2="0" y2="8" stroke="var(--hatch)" stroke-width="2"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)"/></marker>
+  </defs>`;
+  // Roof slope and the setback line.
+  g += `<rect class="d-roof" x="${X(0)}" y="${Y(R.lengthFt)}" width="${Wd}" height="${Hd}"/>`;
+  g += `<rect class="d-rule" x="${X(R.edgeFt)}" y="${Y(R.lengthFt - R.ridgeFt)}" width="${(R.widthFt - 2 * R.edgeFt) * sc}" height="${(R.lengthFt - R.ridgeFt - R.edgeFt) * sc}" stroke-dasharray="3 4" stroke-width="1"/>`;
+  // The center block butts into the lower east corner and stands south of it.
+  const cx = R.center.x;
+  g += `<rect x="${X(cx)}" y="${Y(R.center.w)}" width="${(R.widthFt - cx) * sc}" height="${R.center.w * sc}" fill="url(#hatch)" stroke="var(--ink)" stroke-width="1"/>`;
+  g += `<rect x="${X(cx)}" y="${Y(0)}" width="${(R.widthFt - cx) * sc + 40}" height="56" fill="url(#hatch)" stroke="var(--ink)" stroke-width="1"/>`;
+  g += `<text class="d-muted" x="${X(cx)}" y="${Y(0) + 74}">Center block, two-story: it shades this corner, so the rows step in</text>`;
+  // Labels and dimensions.
+  g += `<text class="d-label" x="${X(R.widthFt / 2)}" y="${Y(R.lengthFt) - 24}" text-anchor="middle">Ridge</text>`;
+  g += `<text class="d-label" x="${X(R.widthFt * 0.3)}" y="${Y(0) + 22}" text-anchor="middle">Eave</text>`;
+  g += `<text class="d-label" transform="translate(${X(0) - 16} ${Y(R.lengthFt / 2)}) rotate(-90)" text-anchor="middle">West gable</text>`;
+  g += `<text class="d-label" transform="translate(${X(R.widthFt) + 18} ${Y(R.lengthFt * 0.72)}) rotate(90)" text-anchor="middle">East gable</text>`;
+  g += `<line class="d-line" x1="${X(0)}" y1="${Y(R.lengthFt) - 10}" x2="${X(R.widthFt)}" y2="${Y(R.lengthFt) - 10}" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>`;
+  g += `<rect class="d-sheet" x="${X(R.widthFt * 0.78) - 34}" y="${Y(R.lengthFt) - 18}" width="68" height="16"/>`;
+  g += `<text class="d-mono" x="${X(R.widthFt * 0.78)}" y="${Y(R.lengthFt) - 6}" text-anchor="middle">${ftin(R.widthFt)}</text>`;
+  g += `<line class="d-line" x1="${X(0) - 34}" y1="${Y(0)}" x2="${X(0) - 34}" y2="${Y(R.lengthFt)}" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>`;
+  g += `<text class="d-mono" transform="translate(${X(0) - 40} ${Y(R.lengthFt * 0.2)}) rotate(-90)" text-anchor="middle">${ftin(R.lengthFt)} eave to ridge</text>`;
+  // Column numbers above the top row.
+  const colX = [...new Set(D.panels.map(q => q.x))].sort((a, b) => a - b);
+  colX.forEach((x, i) => { g += `<text class="d-muted" x="${X(x)}" y="${Y(R.lengthFt) + 12}" text-anchor="middle">${i + 1}</text>`; });
+  // Panels, numbered in string order.
+  for (const q of D.panels) {
+    const x0 = X(q.x - P.w / 2) + 1, y0 = Y(q.w + P.l / 2) + 1;
+    g += `<g class="s${q.string}"><rect x="${x0}" y="${y0}" width="${P.w * sc - 2}" height="${P.l * sc - 2}" fill="var(--c)" fill-opacity="0.16" stroke="var(--c)" stroke-width="1.2"/>`;
+    g += `<text class="d-mono" x="${x0 + 5}" y="${y0 + 13}" style="fill: var(--c)">${q.pos}</text></g>`;
+  }
+  // Home runs: dashed, along the rows under the panels, then to the box.
+  const runs = S.flatMap(s => [s.minus, s.plus].map(h => ({ ...h, k: S.indexOf(s) })));
+  const J = D.jbox, bw = 60, bh = 22;
+  runs.forEach((h, i) => {
+    const dx = (i - (runs.length - 1) / 2) * (bw - 8) / (runs.length - 1) / sc;
+    const [[x0, w0]] = h.pts, wl = w0 - 0.95 - i * 0.06, vx = J.x + dx, wj = w0 > J.w ? J.w + bh / 2 / sc : J.w - bh / 2 / sc;
+    g += `<polyline class="s${h.k}" points="${pts([[x0, w0], [x0, wl], [vx, wl], [vx, wj]])}" fill="none" stroke="var(--c)" stroke-width="1.5" stroke-dasharray="5 3"/>`;
+  });
+  // Strings through the panel centers, with jumpers and end marks.
+  for (const [k, s] of S.entries()) g += `<polyline class="s${k}" points="${pts(s.path)}" fill="none" stroke="var(--c)" stroke-width="2.4" stroke-linejoin="round"/>`;
+  for (const j of D.jumpers) {
+    const k = S.findIndex(s => s.id === j.string);
+    g += `<line class="s${k}" x1="${X(j.from[0])}" y1="${Y(j.from[1])}" x2="${X(j.to[0])}" y2="${Y(j.to[1])}" stroke="var(--c)" stroke-width="7" stroke-opacity="0.35" stroke-linecap="round"/>`;
+  }
+  for (const [k, s] of S.entries()) {
+    const [a, b] = [s.path[0], s.path.at(-1)];
+    g += `<g class="s${k}"><circle cx="${X(a[0])}" cy="${Y(a[1])}" r="9" class="d-sheet" stroke="var(--c)" stroke-width="2"/><text class="d-text" x="${X(a[0])}" y="${Y(a[1]) + 4.5}" text-anchor="middle" style="font-weight:600">−</text>`;
+    g += `<circle cx="${X(b[0])}" cy="${Y(b[1])}" r="9" class="d-sheet" stroke="var(--pos)" stroke-width="2"/><text class="d-pos" x="${X(b[0])}" y="${Y(b[1]) + 4.5}" text-anchor="middle" style="font: 600 13px var(--body)">+</text>`;
+    g += `<rect x="${X(a[0]) + 11}" y="${Y(a[1]) - 21}" width="30" height="16" rx="2" fill="var(--c)"/><text x="${X(a[0]) + 26}" y="${Y(a[1]) - 9}" text-anchor="middle" style="font: 600 11.5px var(--mono); fill: var(--sheet)">${s.id}</text></g>`;
+  }
+  // Ground: row lugs linked down the stepped east side, tied to the box.
+  const G = D.ground;
+  g += `<polyline class="d-gnd" points="${pts(G.chain)}" stroke-width="2" stroke-dasharray="1.5 3" stroke-linecap="round"/>`;
+  const tie = [G.tie[0], [J.x + (bw / 2 + 14) / sc, G.tie[0][1]], [J.x + (bw / 2 + 14) / sc, J.w], [J.x + bw / 2 / sc, J.w]];
+  g += `<polyline class="d-gnd" points="${pts(tie)}" stroke-width="2" stroke-dasharray="1.5 3" stroke-linecap="round"/>`;
+  for (const l of G.lugs) g += `<rect x="${X(l.x) - 4}" y="${Y(l.w) - 4}" width="8" height="8" fill="var(--gnd)"/>`;
+  g += `<text class="d-muted" x="${X(G.lugs[2].x) + 8}" y="${Y(G.lugs[2].w) - 8}" style="fill: var(--gnd)">bare Cu ground, ${n0(G.ft)} ft</text>`;
+  // Junction box and the drop to the inverters.
+  g += `<rect x="${X(J.x) - bw / 2}" y="${Y(J.w) - bh / 2}" width="${bw}" height="${bh}" class="d-sheet" stroke="var(--ink)" stroke-width="1.8"/>`;
+  g += `<text class="d-mono" x="${X(J.x)}" y="${Y(J.w) + 4}" text-anchor="middle" style="font-weight:600">J-box</text>`;
+  const ix = X(R.widthFt) + 44, iy = Y(J.w) - 128;
+  const invBox = (y, id, list) => `<rect x="${ix}" y="${y}" width="172" height="52" class="d-sheet" stroke="var(--ink)" stroke-width="1.4"/>
+    <text class="d-text" x="${ix + 10}" y="${y + 19}" style="font-weight:600">Inverter ${id} · ${esc(I.inverter.name)}</text>
+    <text class="d-muted" x="${ix + 10}" y="${y + 37}">${list.join(', ')} · one per MPPT</text>`;
+  const A = S.filter(s => s.inverter === 'A').map(s => s.id), Bs = S.filter(s => s.inverter === 'B').map(s => s.id);
+  g += invBox(iy, 'A', A) + invBox(iy + 66, 'B', Bs);
+  g += `<text class="d-label" x="${ix}" y="${iy - 26}">Shop SE corner</text><text class="d-muted" x="${ix}" y="${iy - 10}">inside, directly below the J-box</text>`;
+  for (const [t, y] of [[0, iy + 26], [1, iy + 92]]) {
+    g += `<polyline class="d-line" points="${X(J.x) + bw / 2},${Y(J.w) - 4 + t * 8} ${ix - 18},${Y(J.w) - 4 + t * 8} ${ix - 18},${y} ${ix},${y}" stroke-width="2.2" marker-end="url(#arr)"/>`;
+  }
+  g += `<text class="d-muted" x="${ix - 12}" y="${Y(J.w) + 26}">2 × ¾″ conduit, ${n0(D.conduits[0].ft)} ft each</text>`;
+  // Scale bar.
+  const sy = Y(0) + 96;
+  g += `<line class="d-line" x1="${X(0)}" y1="${sy}" x2="${X(20)}" y2="${sy}" stroke-width="1.4"/>`;
+  for (const f of [0, 10, 20]) g += `<line class="d-line" x1="${X(f)}" y1="${sy - 5}" x2="${X(f)}" y2="${sy + 5}" stroke-width="1.4"/><text class="d-muted" x="${X(f)}" y="${sy + 19}" text-anchor="middle">${f} ft</text>`;
+  const svg = $('#plan');
+  svg.setAttribute('viewBox', `0 0 ${Math.ceil(VW)} ${Math.ceil(VH)}`);
+  svg.innerHTML = g;
+  $('#plan-key').innerHTML = S.map((s, k) => `<span class="s${k}" style="color: var(--c)"><i></i><b>${s.id}</b>&nbsp;inverter ${s.inverter}, ${esc(s.input)}</span>`).join('')
+    + `<span><i class="dash"></i>home run</span><span style="color: var(--gnd)"><i class="dash"></i>ground</span>`;
+  $('#plan-cap').textContent = `Drawn to scale, looking north from the courtyard: west on the left, eave at the bottom. Numbers give each panel's place in its string, from − to +. Each string runs up and down the columns; the thick faded links are the ${D.jumpers.length} short jumpers where a string steps diagonally. Every string's − and + home runs follow the rails under the panels to the junction box near the eave at the east end, which sits right above the inverters.`;
+}
+
+// ---------------------------------------------------------------- one-line
+{
+  const VW = 1180, top = 34, bh = 50, gap = 12, VH = top + S.length * (bh + gap) + 96;
+  const sx = 16, sw = 250, jx = 420, jw = 96, ix = 720, iw = 220, ax = 1010;
+  const sy = i => top + i * (bh + gap);
+  let g = `<defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)"/></marker><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--ink)"/></marker></defs>`;
+  const jTop = top - 6, jBot = sy(S.length - 1) + bh + 6;
+  // Strings.
+  S.forEach((s, i) => {
+    const y = sy(i);
+    g += `<g class="s${i}"><rect x="${sx}" y="${y}" width="${sw}" height="${bh}" class="d-sheet" stroke="var(--c)" stroke-width="1.6"/><rect x="${sx}" y="${y}" width="6" height="${bh}" fill="var(--c)"/>`;
+    g += `<text class="d-text" x="${sx + 16}" y="${y + 20}" style="font-weight:600">${s.id} · ${s.n} × ${D.panel.watts} W</text>`;
+    g += `<text class="d-muted" x="${sx + 16}" y="${y + 38}">${Math.round(s.vocCold)} V at ${lowF}°F · ${s.amps.toFixed(1)} A · Tigo on each</text></g>`;
+    // + and − home runs to the junction box terminals.
+    for (const [t, pol] of [[0, '+'], [1, '−']]) {
+      const ty = jTop + 16 + (i * 2 + t) * ((jBot - jTop - 56) / (S.length * 2 - 1)), vx = sx + sw + 60 + i * 8 + t * 4;
+      g += `<polyline points="${sx + sw},${y + 16 + t * 18} ${vx},${y + 16 + t * 18} ${vx},${ty} ${jx},${ty}" fill="none" style="stroke: ${pol === '+' ? 'var(--pos)' : 'var(--ink)'}" stroke-width="1.3"/>`;
+      g += `<text class="d-mono" x="${jx + 6}" y="${ty + 4}" style="font-size:10px">${s.id}${pol}</text>`;
+    }
+  });
+  g += `<text class="d-muted" x="${sx}" y="${top - 14}">10 AWG PV wire, red + / black −, ${n0(Math.min(...S.flatMap(s => [s.minus.ft, s.plus.ft])))}–${n0(Math.max(...S.flatMap(s => [s.minus.ft, s.plus.ft])))} ft</text>`;
+  // Junction box with terminals and a ground bar.
+  g += `<rect x="${jx}" y="${jTop}" width="${jw}" height="${jBot - jTop}" class="d-sheet" stroke="var(--ink)" stroke-width="1.8"/>`;
+  g += `<text class="d-label" x="${jx + jw / 2}" y="${jTop - 8}" text-anchor="middle">J-box on roof</text>`;
+  g += `<rect x="${jx + 8}" y="${jBot - 22}" width="${jw - 16}" height="10" fill="var(--gnd)"/><text class="d-muted" x="${jx + jw / 2}" y="${jBot + 18}" text-anchor="middle" style="fill: var(--gnd)">ground bar</text>`;
+  // Two conduits to the inverters.
+  const invY = [top + 10, top + 10 + (VH - top - 96) / 2];
+  ['A', 'B'].forEach((id, t) => {
+    const y = invY[t], list = S.filter(s => s.inverter === id), c = D.conduits[t];
+    const cy = y + 60;
+    g += `<line class="d-line" x1="${jx + jw}" y1="${cy}" x2="${ix}" y2="${cy}" stroke-width="5" stroke-linecap="butt" marker-end="url(#arr3)"/>`;
+    g += `<text class="d-text" x="${(jx + jw + ix) / 2}" y="${cy - 12}" text-anchor="middle">Conduit ${id}: ${c.strings.join(', ')}</text>`;
+    g += `<text class="d-muted" x="${(jx + jw + ix) / 2}" y="${cy + 22}" text-anchor="middle">¾″ conduit, ${n0(c.ft)} ft</text><text class="d-muted" x="${(jx + jw + ix) / 2}" y="${cy + 38}" text-anchor="middle">6 × 10 AWG THWN-2 + ground</text>`;
+    g += `<rect x="${ix}" y="${y}" width="${iw}" height="136" class="d-sheet" stroke="var(--ink)" stroke-width="1.6"/>`;
+    g += `<text class="d-text" x="${ix + 12}" y="${y + 22}" style="font-weight:600">Inverter ${id} · ${esc(I.inverter.name)}</text>`;
+    list.forEach((s, m) => {
+      const k = S.indexOf(s);
+      g += `<g class="s${k}"><rect x="${ix + 12}" y="${y + 34 + m * 22}" width="10" height="10" fill="var(--c)"/><text class="d-mono" x="${ix + 30}" y="${y + 43 + m * 22}">${esc(s.input)} ← ${s.id}</text></g>`;
+    });
+    g += `<text class="d-muted" x="${ix + 12}" y="${y + 108}">${(list.length * I.perString * D.panel.watts / 1000).toFixed(1)} kW DC in, 12 kW AC out</text><text class="d-muted" x="${ix + 12}" y="${y + 125}">rapid-shutdown transmitter built in</text>`;
+    g += `<line class="d-line" x1="${ix + iw}" y1="${y + 60}" x2="${ax}" y2="${y + 60}" stroke-width="1.6" marker-end="url(#arr2)"/>`;
+    g += `<text class="d-muted" x="${ix + iw + 10}" y="${y + 52}">240 V AC</text>`;
+  });
+  g += `<rect x="${ax}" y="${invY[0] + 34}" width="150" height="${invY[1] - invY[0] + 52}" class="d-sheet" stroke="var(--ink)" stroke-width="1.4"/>`;
+  g += `<text class="d-text" x="${ax + 12}" y="${invY[0] + 58}" style="font-weight:600">Main panel</text><text class="d-muted" x="${ax + 12}" y="${invY[0] + 76}">and net meter</text><text class="d-muted" x="${ax + 12}" y="${invY[0] + 94}">(AC side not detailed)</text>`;
+  // Ground path along the bottom.
+  const gy = VH - 36;
+  g += `<polyline class="d-gnd" points="${sx + 8},${gy} ${jx + jw / 2},${gy} ${jx + jw / 2},${jBot - 12}" stroke-width="2"/>`;
+  g += `<polyline class="d-gnd" points="${jx + jw / 2},${gy} ${ix + iw / 2},${gy} ${ix + iw / 2},${invY[1] + 136}" stroke-width="2"/>`;
+  g += `<text class="d-muted" x="${sx + 8}" y="${gy - 8}" style="fill: var(--gnd)">7 row lugs → bare Cu, ${n0(D.ground.ft)} ft → J-box ground bar</text>`;
+  g += `<text class="d-muted" x="${jx + jw / 2 + 10}" y="${gy + 18}" style="fill: var(--gnd)">green 10 AWG in each conduit → inverter grounds → grounding electrode</text>`;
+  const svg = $('#oneline');
+  svg.setAttribute('viewBox', `0 0 ${VW} ${Math.ceil(VH)}`);
+  svg.innerHTML = g;
+}
+
+// ---------------------------------------------------------------- tables
+$('#schedule').innerHTML = `<thead><tr><th>String</th><th>To</th><th>Columns</th><th>Voc at ${lowF}°F</th><th>Current</th><th>Home runs − / +</th></tr></thead><tbody>`
+  + S.map((s, k) => `<tr><td class="s${k}"><span class="chip" style="background: var(--c)"></span><b>${s.id}</b></td><td>Inverter ${s.inverter}, ${esc(s.input)}</td><td class="num">${s.cols.map(c => c + 1).join(', ')}</td><td class="num">${Math.round(s.vocCold)} V</td><td class="num">${s.amps.toFixed(1)} A of ${s.iscMax} A</td><td class="num">${n0(s.minus.ft)} / ${n0(s.plus.ft)} ft</td></tr>`).join('')
+  + `</tbody>`;
+const spool = ft => (ft <= 250 ? 250 : ft <= 500 ? 500 : 1000);
+const bom = [
+  ['PV wire, 10 AWG red', `${n0(B.pvRedFt)} ft`, `+ home runs; a ${spool(B.pvRedFt)} ft spool`],
+  ['PV wire, 10 AWG black', `${n0(B.pvBlackFt + B.jumperFt)} ft`, `− home runs and ${D.jumpers.length} jumpers; a ${spool(B.pvBlackFt + B.jumperFt)} ft spool`],
+  ['THWN-2, 10 AWG red / black', `${n0(B.thwnRedFt)} ft each`, `in the two conduits, 6 per conduit`],
+  ['THWN-2, 10 AWG green', `${n0(B.greenFt)} ft`, 'one ground per conduit'],
+  ['Bare copper ground', `${n0(B.bareFt)} ft`, '#10 minimum under the array, #6 where exposed'],
+  ['¾″ conduit and roof flashing', `2 × ${n0(D.conduits[0].ft)} ft`, 'one flashing per conduit'],
+  ['Tigo TS4-A-F', `${B.rsd}`, 'one under each panel'],
+  ['MC4 connectors', `${B.mc4Pairs} pairs`, 'plus spares; same make as the Tigo leads'],
+  ['Junction box terminals', `${B.terminals}`, 'DC-rated for 10 AWG, plus a ground bar'],
+  ['Row grounding lugs', `${D.ground.lugs.length}`, 'one per row (in your IronRidge list)'],
+];
+$('#bom').innerHTML = `<thead><tr><th>Item</th><th>Amount</th><th>Note</th></tr></thead><tbody>` + bom.map(([a, b, c]) => `<tr><td>${a}</td><td class="num">${b}</td><td>${c}</td></tr>`).join('') + `</tbody>`;
+
+const notes = [
+  `<b>Voltage.</b> ${I.perString} × ${I.panel.voc} V open-circuit, raised for Casper's ${lowF}°F design low with an assumed ${minus((I.panel.vocPerC * 100).toFixed(2))}%/°C coefficient, is ${Math.round(S[0].vocCold)} V, under the ${I.inverter.name}'s ${I.inverter.maxV} V limit. Check the coefficient on the ZnShine spec sheet.`,
+  `<b>Current.</b> ${I.panel.isc} A × 1.25 = ${S[0].amps.toFixed(1)} A per string. MPPT 2 and 3 take up to 19 A and MPPT 1 takes 31 A, so each string gets an input of its own and none are paralleled.`,
+  `<b>Lengths</b> include ${I.slackFt} ft of slack at each end. Home runs follow the rails under the panels, so the real runs can differ by a few feet.`,
+  `<b>Junction box.</b> It sits on bare roof near the eave at the east end, directly above the inverters, so it needs a flashed roof-mount box rather than the rail-mounted JayBox.`,
+  `<b>Two conduits.</b> Twelve current-carrying wires in one conduit would derate 10 AWG below what these strings need in a hot attic.`,
+  `<b>Rapid shutdown.</b> A roof array needs a device under every panel. The 18kPV's built-in transmitter runs the Tigo units, and their leads link the panels, so only the two diagonal steps need jumpers.`,
+  `<b>Connectors</b> must be the same make as the Tigo leads they plug into.`,
+  `This is a planning drawing from the model, not a stamped plan. Have the electrical inspector review it before you buy.`,
+];
+$('#notes').innerHTML = notes.map(t => `<li>${t}</li>`).join('');
+</script>

@@ -13,7 +13,8 @@
     "solar:write": "node scripts/solar.mjs --write",
     "offgrid": "node scripts/offgrid.mjs",
     "tanks": "node scripts/tanks.mjs",
-    "finance": "node scripts/finance.mjs"
+    "finance": "node scripts/finance.mjs",
+    "roofpv": "node scripts/roofpv.mjs"
   },
   "dependencies": {
     "three": "0.160.0"
