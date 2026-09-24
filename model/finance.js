@@ -33,6 +33,7 @@ export const FIN_INPUTS = {
     usb: 23431, usbMin: 235, usbDue: '2028-02',
     rentalValue: 400000, rentalSold: false,
     savings: 0, savingsApr: 0.04,                         // cash savings account; only touched when it is set to cover the monthly overage
+    helocParts: [],                                       // [phase id, balance]: phases already drawn on the HELOC and their share of it
     helocPayFrom: '',                                    // first month a HELOC payment is due ('' = due now); until then its interest is added to the balance
     renoLeft: 0, renoBy: '2026-12',                       // renovation still to draw on the HELOC, spread evenly over the months through renoBy
     // Owner: no HELOC payments until the renovation is done. Its interest is
@@ -116,6 +117,9 @@ function simCore(inp) {
   const wfDue = calOf(A.wfDue), usbDue = calOf(A.usbDue), rent2From = calOf(I.income.rent2From), sellOn = calOf(S.sellOn);
   const renoEnd = calOf(A.renoBy || I.asOf), renoMonths = Math.max(1, renoEnd - n0);
   let renoLeft = A.renoLeft || 0, held = 0;
+  // Phases drawn on the renovation HELOC keep their share of it, shrinking with the balance.
+  const parts = Object.fromEntries(A.helocParts || []); let partsAt = A.heloc;
+  const syncParts = () => { const f = partsAt > 0.5 ? heloc / partsAt : 0; for (const id in parts) parts[id] = Math.max(0, parts[id] * f); partsAt = heloc; };
   const renoOn = cal => (A.renoLeft || 0) > 0.5 && cal <= renoEnd;
   let sav = A.savings || 0, brok = A.brokerage, heloc = A.heloc, mtg = A.mortgage, truck = A.truck, wf = A.wf, usb = A.usb, sold = !!A.rentalSold;
   const phases = I.phases.map(p => ({ ...p, bal: p.status === 'open' ? p.bal : 0 }));
@@ -233,7 +237,7 @@ function simCore(inp) {
       // Phases set to ride the renovation HELOC draw on it once it has room.
       for (const ph of phases.filter(p => p.status === 'pending' && p.via === 'heloc' && helocClosed == null)) {
         if (renoOn(cal) || cal < calOf(ph.from || I.asOf) || heloc + ph.amount > A.helocLimit + 0.5 || (ph.at != null && heloc > ph.at + 0.5)) continue;   // never while the renovation is still drawing
-        heloc += ph.amount; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
+        syncParts(); heloc += ph.amount; parts[ph.id] = (parts[ph.id] ?? 0) + ph.amount; partsAt = heloc; ph.status = 'done'; amort.heloc[k].draw += ph.amount;
         row.lumps.push({ what: `Draw the HELOC for: ${ph.name}`, amt: ph.amount, from: 'HELOC' });
         ev(t, 'open', `${ph.name}: drawn on the HELOC`, ph.amount, { id: ph.id, onHeloc: true });
       }
@@ -277,7 +281,8 @@ function simCore(inp) {
     for (const p of phases) amort['ph:' + p.id][k].bal = p.bal;
     const phaseBal = phases.reduce((a, p) => a + p.bal, 0);
     const debt = heloc + phaseBal + mtg + truck + wf + usb;
-    Object.assign(row, { renoLeft, sav, brok, heloc, phaseBal, phases: phases.map(p => ({ id: p.id, status: p.status, bal: p.bal })), mtg, truck, wf, usb, sold, value, debt, nw: brok + sav + (sold ? 0 : value) - debt });
+    syncParts();
+    Object.assign(row, { renoLeft, helocParts: { ...parts }, sav, brok, heloc, phaseBal, phases: phases.map(p => ({ id: p.id, status: p.status, bal: p.bal })), mtg, truck, wf, usb, sold, value, debt, nw: brok + sav + (sold ? 0 : value) - debt });
     rows.push(row);
   }
 
@@ -307,7 +312,7 @@ export function projectInputs(sim, cal) {
   if (!r) return null;
   const I = clone(sim.inputs);
   I.asOf = cal === calOf(sim.inputs.asOf) + 1 ? nextMonthDay(sim.inputs.asOf) : dayOf(ymOf(cal)); I.note = '';
-  Object.assign(I.accounts, { renoLeft: round2(r.renoLeft), savings: round2(r.sav), brokerage: round2(r.brok), heloc: round2(r.heloc), mortgage: round2(r.mtg), truck: round2(r.truck), wf: round2(r.wf), usb: round2(r.usb), rentalValue: Math.round(r.value), rentalSold: r.sold });
+  Object.assign(I.accounts, { helocParts: Object.entries(r.helocParts).filter(([, v]) => v > 0.5).map(([id, v]) => [id, round2(v)]), renoLeft: round2(r.renoLeft), savings: round2(r.sav), brokerage: round2(r.brok), heloc: round2(r.heloc), mortgage: round2(r.mtg), truck: round2(r.truck), wf: round2(r.wf), usb: round2(r.usb), rentalValue: Math.round(r.value), rentalSold: r.sold });
   I.phases = I.phases.map(p => { const q = r.phases.find(x => x.id === p.id); return { ...p, status: q.status, bal: round2(q.bal) }; });
   const yrs = (cal - sim.n0) / 12;
   I.income.rentalNet = round2(I.income.rentalNet * (1 + I.income.inflation) ** yrs);

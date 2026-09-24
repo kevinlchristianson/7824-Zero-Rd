@@ -576,7 +576,7 @@ function flowData(n = 36) {
     const phaseKeys = [...new Set([...Object.keys(r.req), ...Object.keys(r.extra)].filter(k => k.startsWith('ph:')))];
     return {
       cal: r.cal,
-      in: [['Rent and savings', r.rent + r.rent2 + r.save, COLOR.rental], ['Paycheck', r.paycheck, COLOR.pay], ['From savings account', r.fromSav, COLOR.sav], ['From brokerage', r.fromBrok, COLOR.brok]],
+      in: [['Rent', r.rent + r.rent2, COLOR.rental], ['Bill savings', r.save, loanColor('solar')], ['Out of pocket', r.paycheck, COLOR.pay], ['From savings account', r.fromSav, COLOR.sav], ['From brokerage', r.fromBrok, COLOR.brok]],
       out: [['Rental mortgage', pay('mortgage'), COLOR.rental], ['Truck and cards', pay('truck') + pay('wf') + pay('usb'), COLOR.other], ['HELOC', pay('heloc'), COLOR.heloc], ['Phase lines', sum(phaseKeys.map(pay)), COLOR.phase], ['To brokerage', r.extra.brokerage ?? 0, COLOR.brok]],
     };
   });
@@ -606,10 +606,10 @@ function renderFlow() {
     h.addEventListener('pointerleave', hideTip);
   });
   legend($('#flow-legend'), [
-    { label: 'Rental: rent in, mortgage out', color: COLOR.rental }, { label: 'Paycheck', color: COLOR.pay }, ...(D.some(d => d.in[2][1] > 0.5) ? [{ label: 'Savings account', color: COLOR.sav }] : []), { label: 'Brokerage', color: COLOR.brok },
+    { label: 'Rental: rent in, mortgage out', color: COLOR.rental }, ...(D.some(d => d.in[1][1] > 0.5) ? [{ label: 'Bill savings (solar and other phases)', color: loanColor('solar') }] : []), { label: 'Out of pocket', color: COLOR.pay }, ...(D.some(d => d.in[3][1] > 0.5) ? [{ label: 'Savings account', color: COLOR.sav }] : []), { label: 'Brokerage', color: COLOR.brok },
     { label: 'HELOC', color: COLOR.heloc }, { label: 'Phase lines', color: COLOR.phase }, { label: 'Truck and cards', color: COLOR.other },
   ]);
-  table($('#flow-table'), ['Month', 'Rent + bill savings', 'Out of pocket', 'From savings account', 'From brokerage', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'To brokerage'],
+  table($('#flow-table'), ['Month', 'Rent', 'Bill savings', 'Out of pocket', 'From savings account', 'From brokerage', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'To brokerage'],
     D.map(d => ({ cells: [L(d.cal), ...d.in.map(x => usd(x[1])), ...d.out.map(x => usd(x[1]))] })), { num: j => j > 0 });
   const r2 = SIM.rows.find(r => r.rent2 > 0);
   $('#flow-sub').textContent = `The next ${n} months. Above the line is what comes in; below, where it goes, by account (interest and principal together). The two always match. One-time moves (gifts, card payoffs, opening a line) aren't in the bars; they're in the month cards and steps.${r2 ? ` The step up in ${L(r2.cal)} is the second rent starting.` : ''}`;
@@ -633,7 +633,10 @@ function renderDebt() {
   const node = $('#debt'), W = Math.max(300, node.clientWidth), H = 300, m = { l: 52, r: 12, t: 12, b: 26 };
   // Stop the axis a year past the month every balance reaches zero.
   const zero = SIM.summary.debtFree, R = zero == null ? SIM.rows : SIM.rows.filter(r => r.cal <= zero + 12), plan = planPoints();
-  const lay = [['Rental mortgage', r => r.mtg, COLOR.rental], ['Truck', r => r.truck, loanColor('truck')], ['Wells Fargo card', r => r.wf, loanColor('wf')], ['US Bank card', r => r.usb, loanColor('usb')], ['HELOC', r => r.heloc, COLOR.heloc], ['Phase lines', r => r.phaseBal, COLOR.phase]];
+  const lay = [['Rental mortgage', r => r.mtg, COLOR.rental], ['Truck', r => r.truck, loanColor('truck')], ['Wells Fargo card', r => r.wf, loanColor('wf')], ['US Bank card', r => r.usb, loanColor('usb')], ['Reno phase 1 HELOC', r => r.heloc - sum(Object.values(r.helocParts ?? {})), COLOR.heloc],
+    // A phase drawn on the HELOC shows as its own band inside it, in the phase's colour.
+    ...[...new Set(SIM.rows.flatMap(r => Object.keys(r.helocParts ?? {})))].map(id => [`${shortPhase(id)} (on HELOC 1)`, r => r.helocParts?.[id] ?? 0, loanColor('ph:' + id)]),
+    ['Phase lines', r => r.phaseBal, COLOR.phase]];
   const c0 = Math.min(SIM.n0, plan?.base ? calOf(plan.base.asOf) : SIM.n0), c1 = R.at(-1).cal;
   const hist = checkins.map(c => ({ cal: calOf(c.asOf), debt: actualDebt(c.inputs), brok: c.inputs.accounts.brokerage }));
   const top = Math.max(...R.map(r => r.debt), actualDebt(SIM.inputs), ...hist.map(h => h.debt), ...(plan?.pts ?? []).map(p => p.debt), 1);
@@ -642,7 +645,7 @@ function renderDebt() {
   let g = '';
   for (const t of ticks) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${k$(t).replace('$0k', '$0')}</text>`;
   for (let yr = Math.ceil(c0 / 12); yr * 12 <= c1; yr += 2) g += `<text x="${x(yr * 12)}" y="${H - 8}" text-anchor="middle">${yr}</text>`;
-  const pts = [{ cal: SIM.n0, r: { mtg: SIM.inputs.accounts.mortgage, truck: SIM.inputs.accounts.truck, wf: SIM.inputs.accounts.wf, usb: SIM.inputs.accounts.usb, heloc: SIM.inputs.accounts.heloc, phaseBal: sum(SIM.inputs.phases.map(p => p.status === 'open' ? p.bal : 0)), brok: SIM.inputs.accounts.brokerage } }, ...R.map(r => ({ cal: r.cal, r }))];
+  const pts = [{ cal: SIM.n0, r: { mtg: SIM.inputs.accounts.mortgage, truck: SIM.inputs.accounts.truck, wf: SIM.inputs.accounts.wf, usb: SIM.inputs.accounts.usb, heloc: SIM.inputs.accounts.heloc, helocParts: Object.fromEntries(SIM.inputs.accounts.helocParts || []), phaseBal: sum(SIM.inputs.phases.map(p => p.status === 'open' ? p.bal : 0)), brok: SIM.inputs.accounts.brokerage } }, ...R.map(r => ({ cal: r.cal, r }))];
   let base = pts.map(() => 0);
   for (const [, f, col] of lay) {
     const topv = pts.map((p, i) => base[i] + f(p.r));
