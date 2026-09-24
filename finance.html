@@ -9,7 +9,7 @@
     --rule: #d9d3c9; --grid: #e8e3da; --accent: #8a4f35; --accent-wash: rgba(138, 79, 53, 0.10);
     --focus: #2f6f8f; --warn: #b3261e; --warn-wash: rgba(179, 38, 30, 0.08); --good: #0a7d0a;
     /* Series follow the account: rental blue, HELOC orange, phase lines violet, brokerage aqua, paycheck yellow; truck and cards are the neutral "other debt". */
-    --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6;
+    --c-rental: #2a78d6; --c-heloc: #eb6834; --c-phase: #4a3aa7; --c-brok: #1baf7a; --c-pay: #eda100; --c-other: #a39d93; --c-int: #c9c2b6; --c-sav: #7cc9ad;
     /* Each loan's own colour in the amortization tabs: phase lines keep violet as a family but each gets its own hue; truck and cards split the neutrals. */
     --a-solar: #c98a00; --a-reno2: #4a3aa7; --a-hp: #c2417a; --a-batt: #0f8a94; --a-wood: #8a5a2b; --a-truck: #4f6475; --a-wf: #b0463a; --a-usb: #6e7f2e;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
@@ -22,7 +22,7 @@
       --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
       --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
       --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
-      --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
+      --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a;
       --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
     }
   }
@@ -31,7 +31,7 @@
     --paper: #141210; --sheet: #1d1a17; --ink: #ece6dd; --ink-2: #cfc7bb; --muted: #a39b90;
     --rule: #3a342e; --grid: #2c2824; --accent: #d39473; --accent-wash: rgba(211, 148, 115, 0.14);
     --focus: #7fb7d1; --warn: #f2877e; --warn-wash: rgba(242, 135, 126, 0.12); --good: #6fcf6f;
-    --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d;
+    --c-rental: #3987e5; --c-heloc: #d95926; --c-phase: #9085e9; --c-brok: #199e70; --c-pay: #c98500; --c-other: #7d766c; --c-int: #4a443d; --c-sav: #0e6b4a;
     --a-solar: #e0a82e; --a-reno2: #9085e9; --a-hp: #e2729f; --a-batt: #3fb6bf; --a-wood: #b98552; --a-truck: #8aa1b3; --a-wf: #e07a6c; --a-usb: #a4b865;
   }
   body { margin: 0; background: var(--sheet); color: var(--ink); font: 14px/1.5 var(--body); }
@@ -98,9 +98,10 @@
   .data tr.pick td { font-weight: 600; }
   .data tr.pick td:first-child::before { content: '▸ '; }
   .cellnote { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
-  .flag { margin: 16px 0 0; padding: 12px 16px; border-left: 4px solid var(--warn); background: var(--warn-wash); color: var(--ink); display: grid; gap: 4px; }
+  .flag { margin: 16px 0 0; padding: 12px 16px; border-left: 4px solid var(--warn); background: var(--warn-wash); color: var(--ink); display: grid; gap: 8px; }
   .flag strong { color: var(--warn); font: 700 16px/1.2 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
   .flag p { margin: 0; max-width: 80ch; }
+  .flag .btns { align-items: center; }
   .pill { display: inline-block; font: 600 10.5px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 6px 2px; border-radius: 2px; white-space: nowrap; }
   .pill.ok { color: var(--good); box-shadow: inset 0 0 0 1px currentColor; }
   .pill.warn { color: var(--warn); background: var(--warn-wash); }
@@ -289,7 +290,7 @@ const getIn = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o)
 const setIn = (o, p, v) => { const k = p.split('.'), l = k.pop(); k.reduce((a, x) => a[x], o)[l] = v; };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const CACHE = 'zero-rd-finance-v1';
-const COLOR = { rental: 'var(--c-rental)', heloc: 'var(--c-heloc)', phase: 'var(--c-phase)', brok: 'var(--c-brok)', pay: 'var(--c-pay)', other: 'var(--c-other)', int: 'var(--c-int)' };
+const COLOR = { rental: 'var(--c-rental)', heloc: 'var(--c-heloc)', phase: 'var(--c-phase)', brok: 'var(--c-brok)', pay: 'var(--c-pay)', other: 'var(--c-other)', int: 'var(--c-int)', sav: 'var(--c-sav)' };
 
 // ---------------------------------------------------------------- state
 function merge(base, over) {
@@ -417,11 +418,26 @@ const loanColor = key => { const k = key.startsWith('ph:') ? key.slice(3) : key;
 // ---------------------------------------------------------------- KPIs
 // Owner's rule: if rent plus the paycheck can't cover the monthly payments, there's too much debt. Flag it.
 function renderFlag() {
-  const I = SIM.inputs, gap = SIM.rows.filter(r => r.fromBrok > 0.5), f = $('#flag');
+  const I = SIM.inputs, St = I.strategy, gap = SIM.rows.filter(r => r.over > 0.5), f = $('#flag');
   f.hidden = !gap.length;
   if (!gap.length) return;
-  const worst = gap.reduce((a, r) => r.fromBrok > a.fromBrok ? r : a);
-  f.replaceChildren(el('strong', null, 'Too much debt'), el('p', null, `In ${gap.length} month${gap.length > 1 ? 's' : ''} (${L(gap[0].cal)}${gap.length > 1 ? ` to ${L(gap.at(-1).cal)}` : ''}) the required payments run past rent plus what you put in out of pocket, by ${usd(sum(gap.map(r => r.fromBrok)))} in all; the worst is ${usd(worst.fromBrok)} in ${L(worst.cal)}. ${I.strategy.shortfall === 'brokerage' ? 'Brokerage covers it for now' : 'The paycheck is set to cover it'}, but the debt's monthly cost is more than the income can carry: pay a balance down, push a draw later or hold off on new debt until this clears.`));
+  const total = sum(gap.map(r => r.over)), worst = gap.reduce((a, r) => r.over > a.over ? r : a);
+  const sav = I.accounts.savings || 0, covers = sav >= total - 0.5;
+  const span = gap.length > 1 ? `${L(gap[0].cal)} to ${L(gap.at(-1).cal)}` : L(gap[0].cal);
+  const q = el('p');
+  q.append(el('b', null, 'Can savings cover it? '), document.createTextNode(sav < 0.5
+    ? 'Your savings account is at $0 in the model. Enter its balance under Accounts to check.'
+    : covers ? `Yes. Savings (${usd(sav)}) covers the whole ${usd(total)}, with ${usd(sav - total)} left.` : `Partly. Savings (${usd(sav)}) is ${usd(total - sav)} short of the ${usd(total)}; brokerage would cover the rest.`));
+  const choice = el('div', 'btns');
+  const pick = (val, label) => { const b = el('button', 'btn' + (St.shortfall === val ? ' primary' : ''), label); b.type = 'button'; b.setAttribute('aria-pressed', String(St.shortfall === val)); b.addEventListener('click', () => { if (inputs.strategy.shortfall === val) return; inputs.strategy.shortfall = val; edited = true; scheduleSave(); buildForm(); run(); }); return b; };
+  choice.append(el('span', 'kpi-label', 'Pay the overage from'), pick('savings', 'Savings'), pick('brokerage', 'Brokerage'));
+  const src = St.shortfall === 'savings' ? `Now paid from savings${covers ? '' : ', then brokerage once it runs out'}.` : St.shortfall === 'brokerage' ? 'Now paid from brokerage.' : 'Now paid by raising the paycheck to cover it (workbook rule).';
+  const tw = el('div', 'table-wrap');
+  table(tw, ['Month', 'Payments due', 'Rent + bill savings', 'Out of pocket', 'Overage', 'From savings', 'From brokerage'],
+    gap.map(r => ({ cells: [L(r.cal), usd(r.reqTotal), usd(r.rent + r.rent2 + r.save), usd(r.reqTotal - r.rent - r.rent2 - r.save - r.over), usd(r.over), r.fromSav > 0.5 ? usd(r.fromSav) : '—', r.fromBrok > 0.5 ? usd(r.fromBrok) : '—'] })), { num: j => j > 0 });
+  f.replaceChildren(el('strong', null, `Too much debt: ${usd(total)} over`),
+    el('p', null, `In ${gap.length} month${gap.length > 1 ? 's' : ''} (${span}) the payments due run past rent, bill savings and your out-of-pocket, by ${usd(total)} in all; the worst is ${usd(worst.over)} in ${L(worst.cal)}. The debt's monthly cost is more than the income carries: pay a balance down, push a draw later or hold off on new debt until this clears.`),
+    q, choice, el('p', 'kpi-sub', src), tw);
 }
 
 function renderKpis() {
@@ -430,8 +446,8 @@ function renderKpis() {
   const target = r1.extra.heloc ? 'the HELOC' : Object.keys(r1.extra).find(k => k.startsWith('ph:')) ? acctName(Object.keys(r1.extra).find(k => k.startsWith('ph:'))) : null;
   const low = S.minBrok, lowWarn = low.v < I.strategy.floor - 1;
   const tiles = [
-    ['hero', `${L(r1.cal)}`, extra > 1 ? usd(extra) : r1.fromBrok > 1 ? `−${usd(r1.fromBrok)}` : '$0',
-      extra > 1 ? `extra to ${target}, after every payment. ${usd(r1.paycheck)} from the paycheck.` : r1.fromBrok > 1 ? `Payments run ${usd(r1.fromBrok)} past rent and your ${usd(r1.paycheck)}: brokerage covers the gap this month.` : 'No surplus this month: rent and the paycheck just cover the payments.'],
+    ['hero', `${L(r1.cal)}`, extra > 1 ? usd(extra) : r1.over > 1 ? `−${usd(r1.over)}` : '$0',
+      extra > 1 ? `extra to ${target}, after every payment. ${usd(r1.paycheck)} from the paycheck.` : r1.over > 1 ? `Payments run ${usd(r1.over)} past rent and your ${usd(r1.paycheck)}: ${r1.fromSav > 0.5 ? 'savings' : r1.fromBrok > 0.5 ? 'brokerage' : 'the paycheck'} covers it this month.` : 'No surplus this month: rent and the paycheck just cover the payments.'],
     ['', 'Renovation HELOC gone', L(S.helocClosed), I.strategy.mode === 'separate' ? 'then a new HELOC for each phase' : 'phases redraw it along the way'],
     ['', 'Every debt gone', L(S.debtFree), S.sold ? `rental sold ${L(S.sold)}` : 'rental kept'],
     [lowWarn ? 'warn' : '', 'Lowest brokerage', usd(low.v), `${L(low.cal)}; floor ${usd(I.strategy.floor)}${lowWarn ? ' — breached' : ''}`],
@@ -451,7 +467,8 @@ function monthCard(r, isNow) {
   if (r.rent2 > 0) add('Second dwelling rent', usd(r.rent2, 2), '', COLOR.rental);
   if (Math.abs(r.save) > 0.5) add('Energy bill savings', usd(r.save, 2), '', COLOR.rental);
   add('From your paycheck', usd(r.paycheck, 2), '', COLOR.pay);
-  if (r.fromBrok > 0.5) add('From brokerage (the gap)', usd(r.fromBrok, 2), '', COLOR.brok);
+  if (r.fromSav > 0.5) add('From the savings account (the overage)', usd(r.fromSav, 2), '', COLOR.sav);
+  if (r.fromBrok > 0.5) add('From brokerage (the overage)', usd(r.fromBrok, 2), '', COLOR.brok);
   add('Payments', null, 'head');
   const names = { truck: 'Truck loan', mortgage: 'Rental mortgage', wf: 'Wells Fargo card, minimum', usb: 'US Bank card, minimum', heloc: 'HELOC interest' };
   for (const [k, v] of Object.entries(r.req)) add(k.startsWith('ph:') ? `${shortPhase(k.slice(3))} line interest` : names[k], usd(v, 2), '', acctColor(k));
@@ -490,8 +507,8 @@ function stepsList() {
   if (S.truckFree && I.accounts.truck > 0) push(S.truckFree, 'Truck paid off', `Its ${usd(I.accounts.truckPmt, 2)} a month goes to the debt being paid down from here. Cancel the autopay.`);
   const pre = SIM.rows.find(r => (r.extra.mortgage ?? 0) > 0.5);
   if (pre) push(pre.cal, 'Every phase paid: prepay the rental mortgage', 'All surplus now goes to the rental mortgage as extra principal.');
-  const gap = SIM.rows.filter(r => r.fromBrok > 0.5);
-  if (gap.length) push(gap.at(-1).cal + 1, 'Rent and the paycheck cover every payment', `Until then brokerage makes up the gap: ${usd(sum(gap.map(r => r.fromBrok)))} over ${gap.length} month${gap.length > 1 ? 's' : ''}.`);
+  const gap = SIM.rows.filter(r => r.over > 0.5);
+  if (gap.length) push(gap.at(-1).cal + 1, 'Rent and out of pocket cover every payment', `Until then the overage comes from ${I.strategy.shortfall === 'savings' ? 'savings' : I.strategy.shortfall === 'brokerage' ? 'brokerage' : 'a bigger paycheck'}: ${usd(sum(gap.map(r => r.over)))} over ${gap.length} month${gap.length > 1 ? 's' : ''}.`);
   return out.sort((a, b) => a.cal - b.cal);
 }
 function renderSteps() {
@@ -513,8 +530,8 @@ function renderTriggers() {
   const row = (when, what, proj, now) => rows.push({ cells: [when, what, proj, now] });
   const low = S.minBrok;
   row(`Brokerage under ${usd(St.floor)}`, St.refillFloor ? 'Surplus and gifts refill brokerage before any extra goes to debt.' : 'Refill is off: nothing tops it back up.', `Low ${usd(low.v)} in ${L(low.cal)}`, A.brokerage >= St.floor ? pill('ok', `${usd(A.brokerage)} now`) : pill('warn', `${usd(A.brokerage)}: under`));
-  const gap = SIM.rows.filter(r => r.fromBrok > 0.5);
-  row(`Payments run past rent + ${usd(I.income.paycheck)}`, St.shortfall === 'brokerage' ? 'The gap comes out of brokerage; the paycheck stays at its maximum.' : 'The paycheck covers the whole gap (workbook rule).', gap.length ? `${gap.length} months, ${usd(sum(gap.map(r => r.fromBrok)))}, through ${L(gap.at(-1).cal)}` : 'Not expected', SIM.rows[0].fromBrok > 0.5 ? pill('warn', `Too much debt: ${usd(SIM.rows[0].fromBrok)} next month`) : gap.length ? pill('warn', `Too much debt from ${L(gap[0].cal)}`) : pill('ok', 'Covered'));
+  const gap = SIM.rows.filter(r => r.over > 0.5);
+  row(`Payments run past rent + ${usd(I.income.paycheck)}`, St.shortfall === 'savings' ? 'The overage comes out of the savings account, then brokerage once it’s empty.' : St.shortfall === 'brokerage' ? 'The overage comes out of brokerage; out of pocket stays where you set it.' : 'The paycheck covers the whole overage (workbook rule).', gap.length ? `${gap.length} months, ${usd(sum(gap.map(r => r.over)))}, through ${L(gap.at(-1).cal)}` : 'Not expected', SIM.rows[0].over > 0.5 ? pill('warn', `Too much debt: ${usd(SIM.rows[0].over)} next month`) : gap.length ? pill('warn', `Too much debt from ${L(gap[0].cal)}`) : pill('ok', 'Covered'));
   for (const [k, name] of [['wf', 'Wells Fargo'], ['usb', 'US Bank']]) {
     const due = calOf(A[k + 'Due']), bal = A[k];
     if (bal <= 0.5) { row(`${name} card 0% ends ${L(due)}`, 'Paid off.', '—', pill('ok', 'Done')); continue; }
@@ -546,7 +563,7 @@ function flowData(n = 36) {
     const phaseKeys = [...new Set([...Object.keys(r.req), ...Object.keys(r.extra)].filter(k => k.startsWith('ph:')))];
     return {
       cal: r.cal,
-      in: [['Rent and savings', r.rent + r.rent2 + r.save, COLOR.rental], ['Paycheck', r.paycheck, COLOR.pay], ['From brokerage', r.fromBrok, COLOR.brok]],
+      in: [['Rent and savings', r.rent + r.rent2 + r.save, COLOR.rental], ['Paycheck', r.paycheck, COLOR.pay], ['From savings account', r.fromSav, COLOR.sav], ['From brokerage', r.fromBrok, COLOR.brok]],
       out: [['Rental mortgage', pay('mortgage'), COLOR.rental], ['Truck and cards', pay('truck') + pay('wf') + pay('usb'), COLOR.other], ['HELOC', pay('heloc'), COLOR.heloc], ['Phase lines', sum(phaseKeys.map(pay)), COLOR.phase], ['To brokerage', r.extra.brokerage ?? 0, COLOR.brok]],
     };
   });
@@ -576,10 +593,10 @@ function renderFlow() {
     h.addEventListener('pointerleave', hideTip);
   });
   legend($('#flow-legend'), [
-    { label: 'Rental: rent in, mortgage out', color: COLOR.rental }, { label: 'Paycheck', color: COLOR.pay }, { label: 'Brokerage', color: COLOR.brok },
+    { label: 'Rental: rent in, mortgage out', color: COLOR.rental }, { label: 'Paycheck', color: COLOR.pay }, ...(D.some(d => d.in[2][1] > 0.5) ? [{ label: 'Savings account', color: COLOR.sav }] : []), { label: 'Brokerage', color: COLOR.brok },
     { label: 'HELOC', color: COLOR.heloc }, { label: 'Phase lines', color: COLOR.phase }, { label: 'Truck and cards', color: COLOR.other },
   ]);
-  table($('#flow-table'), ['Month', 'Rent + savings', 'Paycheck', 'From brokerage', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'To brokerage'],
+  table($('#flow-table'), ['Month', 'Rent + bill savings', 'Out of pocket', 'From savings account', 'From brokerage', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'To brokerage'],
     D.map(d => ({ cells: [L(d.cal), ...d.in.map(x => usd(x[1])), ...d.out.map(x => usd(x[1]))] })), { num: j => j > 0 });
   const r2 = SIM.rows.find(r => r.rent2 > 0);
   $('#flow-sub').textContent = `The next ${n} months. Above the line is what comes in; below, where it goes, by account (interest and principal together). The two always match. One-time moves (gifts, card payoffs, opening a line) aren't in the bars; they're in the month cards and steps.${r2 ? ` The step up in ${L(r2.cal)} is the second rent starting.` : ''}`;
@@ -817,6 +834,7 @@ const GROUPS = () => [
     ['accounts.truck', 'Truck loan owed', 'usd'], ['accounts.truckApr', 'Truck rate', 'pct'], ['accounts.truckPmt', 'Truck payment', 'usd'],
     ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],
     ['accounts.usb', 'US Bank card owed', 'usd'], ['accounts.usbMin', 'US Bank minimum', 'usd'], ['accounts.usbDue', 'US Bank 0% ends', 'month'],
+    ['accounts.savings', 'Savings account', 'usd'], ['accounts.savingsApr', 'Savings rate', 'pct'],
     ['accounts.rentalValue', 'Rental worth', 'usd'], ['accounts.rentalSold', 'Rental already sold', 'bool'],
     ['income.paycheck', 'Out of pocket, per month', 'usd'], ['income.oopGrowth', 'Out of pocket grows, per year', 'pct'], ['income.paycheckSold', 'Out of pocket once the rental is sold', 'usd'],
   ] },
@@ -829,7 +847,7 @@ const GROUPS = () => [
   { name: 'Rules', fields: [
     ['strategy.mode', 'After the renovation HELOC', 'select', [['separate', 'Close it; a new HELOC per phase'], ['redraw', 'Phases redraw the HELOC']]],
     ['strategy.redrawAt', 'Redraw once the HELOC is down to', 'usd'], ['strategy.phaseApr', 'New HELOC rate', 'pct'],
-    ['strategy.shortfall', 'When payments outrun rent + paycheck', 'select', [['brokerage', 'Brokerage covers it'], ['paycheck', 'Paycheck covers it (workbook)']]],
+    ['strategy.shortfall', 'When payments outrun rent + out of pocket', 'select', [['savings', 'Savings account, then brokerage'], ['brokerage', 'Brokerage covers it'], ['paycheck', 'Paycheck covers it (workbook)']]],
     ['strategy.truckFirst', 'Gifts and surplus pay the truck first', 'bool'],
     ['strategy.floor', 'Brokerage floor', 'usd'], ['strategy.refillFloor', 'Refill brokerage to the floor first', 'bool'], ['strategy.autoKeep', 'Gifts keep enough to hold the floor', 'bool'],
     ['strategy.ret', 'Brokerage return', 'pct'],

@@ -32,6 +32,7 @@ export const FIN_INPUTS = {
     wf: 12116.75, wfMin: 122, wfDue: '2027-12',           // 0% until the due month, then paid in full
     usb: 23431, usbMin: 235, usbDue: '2028-02',
     rentalValue: 400000, rentalSold: false,
+    savings: 0, savingsApr: 0.04,                         // cash savings account; only touched when it is set to cover the monthly overage
     renoLeft: 0, renoBy: '2026-12',                       // renovation still to draw on the HELOC, spread evenly over the months through renoBy
     // Owner: no HELOC payments until the renovation is done. Its interest is
     // added to the balance meanwhile, the last draw fills the line to its
@@ -62,7 +63,7 @@ export const FIN_INPUTS = {
     sellOn: '2026-12',
     prepayMortgage: true,    // once every phase is paid, surplus prepays the rental mortgage
     refillFloor: true,       // surplus, and gifts, refill brokerage first while it is under the floor
-    shortfall: 'brokerage',  // when rent and savings don't cover the payments: 'brokerage' (owner: $1,500 is about the real maximum) or 'paycheck' (workbook: the paycheck covers it all)
+    shortfall: 'brokerage',  // when rent, bill savings and out of pocket don't cover the payments (the overage): 'savings' (the savings account, then brokerage once it's empty), 'brokerage', or 'paycheck' (workbook: the paycheck covers it all)
     floor: 20000, ret: 0.08,
     brokPayoff: false, cushion: 50000,   // workbook rule: brokerage pays a line off when it can keep the cushion
     autoKeep: true,          // hold back enough of the gift before a brokerage low to keep the floor
@@ -115,7 +116,7 @@ function simCore(inp) {
   const renoEnd = calOf(A.renoBy || I.asOf), renoMonths = Math.max(1, renoEnd - n0);
   let renoLeft = A.renoLeft || 0, held = 0;
   const renoOn = cal => (A.renoLeft || 0) > 0.5 && cal <= renoEnd;
-  let brok = A.brokerage, heloc = A.heloc, mtg = A.mortgage, truck = A.truck, wf = A.wf, usb = A.usb, sold = !!A.rentalSold;
+  let sav = A.savings || 0, brok = A.brokerage, heloc = A.heloc, mtg = A.mortgage, truck = A.truck, wf = A.wf, usb = A.usb, sold = !!A.rentalSold;
   const phases = I.phases.map(p => ({ ...p, bal: p.status === 'open' ? p.bal : 0 }));
   let helocClosed = heloc <= 0.5 && I.strategy.mode === 'separate' ? n0 : null;
   const gifts = I.gifts.filter(g => g.amount > 0 && calOf(g.month) > n0);
@@ -165,8 +166,12 @@ function simCore(inp) {
     const pay = S.shortfall === 'paycheck' ? Math.max(base, reqTotal - rent - rent2 - save) : base;
     paycheckIn += pay;
     let surplus = rent + rent2 + save + pay - reqTotal;
+    // The overage: what the payments need past rent, bill savings and the set out-of-pocket.
+    const over = Math.max(0, reqTotal - rent - rent2 - save - base);
+    const fromSav = S.shortfall === 'savings' && surplus < 0 ? Math.min(sav, -surplus) : 0;
+    sav -= fromSav; surplus += fromSav;
     const fromBrok = Math.max(0, -surplus);
-    Object.assign(row, { rent, rent2, save, paycheck: pay, req, reqTotal, fromBrok });
+    Object.assign(row, { rent, rent2, save, paycheck: pay, req, reqTotal, over, fromSav, fromBrok });
 
     // Lumps: cards at their 0% deadline, a sale on a date, gifts.
     for (const [key, due, name] of [['wf', wfDue, 'Wells Fargo card'], ['usb', usbDue, 'US Bank card']]) {
@@ -258,13 +263,13 @@ function simCore(inp) {
     // Sell once the mortgage is prepaid.
     if (!sold && S.sell === 'afterPayoff' && mtg <= 0.5 && phases.every(p => p.status === 'done') && heloc <= 0.5) sell(' (mortgage prepaid)');
 
-    brok *= 1 + S.ret / 12;
+    brok *= 1 + S.ret / 12; sav *= 1 + (A.savingsApr || 0) / 12;
     if (brok < minBrok.v) minBrok = { v: brok, cal };
     for (const [key] of DEBTS) amort[key][k].bal = { heloc, mortgage: mtg, truck, wf, usb }[key];
     for (const p of phases) amort['ph:' + p.id][k].bal = p.bal;
     const phaseBal = phases.reduce((a, p) => a + p.bal, 0);
     const debt = heloc + phaseBal + mtg + truck + wf + usb;
-    Object.assign(row, { renoLeft, brok, heloc, phaseBal, phases: phases.map(p => ({ id: p.id, status: p.status, bal: p.bal })), mtg, truck, wf, usb, sold, value, debt, nw: brok + (sold ? 0 : value) - debt });
+    Object.assign(row, { renoLeft, sav, brok, heloc, phaseBal, phases: phases.map(p => ({ id: p.id, status: p.status, bal: p.bal })), mtg, truck, wf, usb, sold, value, debt, nw: brok + sav + (sold ? 0 : value) - debt });
     rows.push(row);
   }
 
@@ -294,7 +299,7 @@ export function projectInputs(sim, cal) {
   if (!r) return null;
   const I = clone(sim.inputs);
   I.asOf = cal === calOf(sim.inputs.asOf) + 1 ? nextMonthDay(sim.inputs.asOf) : dayOf(ymOf(cal)); I.note = '';
-  Object.assign(I.accounts, { renoLeft: round2(r.renoLeft), brokerage: round2(r.brok), heloc: round2(r.heloc), mortgage: round2(r.mtg), truck: round2(r.truck), wf: round2(r.wf), usb: round2(r.usb), rentalValue: Math.round(r.value), rentalSold: r.sold });
+  Object.assign(I.accounts, { renoLeft: round2(r.renoLeft), savings: round2(r.sav), brokerage: round2(r.brok), heloc: round2(r.heloc), mortgage: round2(r.mtg), truck: round2(r.truck), wf: round2(r.wf), usb: round2(r.usb), rentalValue: Math.round(r.value), rentalSold: r.sold });
   I.phases = I.phases.map(p => { const q = r.phases.find(x => x.id === p.id); return { ...p, status: q.status, bal: round2(q.bal) }; });
   const yrs = (cal - sim.n0) / 12;
   I.income.rentalNet = round2(I.income.rentalNet * (1 + I.income.inflation) ** yrs);
