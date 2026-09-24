@@ -457,6 +457,7 @@ function stepsList() {
   const push = (cal, title, detail) => out.push({ cal, title, detail });
   for (const e of SIM.events) {
     if (e.kind === 'gift') { const set = inputs.gifts.find(g => calOf(g.month) === e.cal)?.keep ?? 0; push(e.cal, `Gift arrives: ${usd(e.amt)}`, `${e.keep > 0.5 ? `Keep ${usd(e.keep)} in brokerage${e.keep > set + 1 ? ` (${usd(e.keep - set)} more than you set, to hold the ${usd(I.strategy.floor)} floor through the low in ${L(SIM.summary.minBrok.cal)})` : ''}; ` : ''}${e.to.map(([k, v]) => `${usd(v)} to ${k === 'heloc' ? 'the HELOC' : 'the ' + acctName(k)}`).join(', ') || 'the rest to brokerage'}.`); }
+    else if (e.kind === 'draw') push(e.cal, `Renovation draw: ${usd(e.amt)}`, 'On the HELOC, as the work is billed. Its interest starts the next month.');
     else if (e.kind === 'card') push(e.cal, e.what, `Its 0% ends this month. Pay the ${usd(e.amt)} balance in full from brokerage; don't let it roll to the regular rate.`);
     else if (e.kind === 'close') push(e.cal, e.what, /HELOC/.test(e.what) ? 'Ask the bank to close the line (or freeze it at $0) so it can’t be redrawn.' : 'Close the line; the next phase opens.');
     else if (e.kind === 'open' && e.onHeloc) push(e.cal, e.what, `The HELOC is down to your trigger: draw ${usd(e.amt)} and start it. Surplus keeps paying the HELOC down afterward.`);
@@ -790,7 +791,7 @@ const pctIn = v => Math.round(v * 1e5) / 1e3, pctOut = v => v / 100;
 const GROUPS = () => [
   { name: 'Accounts', open: true, note: 'Balances on the as-of day, from your statements.', fields: [
     ['accounts.brokerage', 'Brokerage', 'usd'],
-    ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'],
+    ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.renoLeft', 'Renovation still to draw on it', 'usd'], ['accounts.renoBy', 'Drawn by the end of', 'month'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'],
     ['accounts.mortgage', 'Rental mortgage owed', 'usd'], ['accounts.mortgageApr', 'Mortgage rate', 'pct'], ['accounts.mortgagePmt', 'Mortgage payment', 'usd'],
     ['accounts.truck', 'Truck loan owed', 'usd'], ['accounts.truckApr', 'Truck rate', 'pct'], ['accounts.truckPmt', 'Truck payment', 'usd'],
     ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],
