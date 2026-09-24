@@ -879,7 +879,8 @@ const GROUPS = () => [
   { name: 'Gifts', gifts: true, note: 'Keep: what stays in brokerage; the rest pays down debt.' },
   { name: 'Rules', fields: [
     ['strategy.mode', 'After the renovation HELOC', 'select', [['separate', 'Close it; a new HELOC per phase'], ['redraw', 'Phases redraw the HELOC']]],
-    ['strategy.redrawAt', 'Redraw once the HELOC is down to', 'usd'], ['strategy.phaseApr', 'New HELOC rate', 'pct'],
+    // Only the redraw rule uses this trigger; each phase's own "Draw once the HELOC is down to" is under Phases.
+    ...(inputs.strategy.mode === 'redraw' ? [['strategy.redrawAt', 'Redraw once the HELOC is down to', 'usd']] : []), ['strategy.phaseApr', 'New HELOC rate', 'pct'],
     ['strategy.shortfall', 'When payments outrun rent + out of pocket', 'select', [['savings', 'Savings account, then brokerage'], ['brokerage', 'Brokerage covers it'], ['paycheck', 'Paycheck covers it (workbook)']]],
     ['strategy.truckFirst', 'Gifts and surplus pay the truck first', 'bool'],
     ['strategy.floor', 'Brokerage floor', 'usd'], ['strategy.refillFloor', 'Refill brokerage to the floor first', 'bool'], ['strategy.autoKeep', 'Gifts keep enough to hold the floor', 'bool'],
@@ -911,6 +912,7 @@ function field(path, label, type, opts) {
     else { val = Number(c.value); if (c.value === '' || !Number.isFinite(val)) return; if (type === 'pct') val = pctOut(val); if (type === 'int') val = Math.max(1, Math.min(40, Math.round(val))); }
     if (getIn(inputs, path) === val) return;
     setIn(inputs, path, val); edited = true; scheduleSave(); rerun();
+    if (path === 'strategy.mode') buildForm();
   };
   c.addEventListener('change', on);
   if (c.tagName === 'INPUT' && c.type !== 'checkbox') c.addEventListener('input', on);
@@ -919,9 +921,11 @@ function field(path, label, type, opts) {
 }
 function buildForm() {
   $('#asof').value = inputs.asOf; $('#note').value = inputs.note ?? '';
-  const form = $('#form'); form.replaceChildren();
+  const form = $('#form'), fresh = !form.children.length;
+  const wasOpen = new Set([...form.querySelectorAll(':scope > details')].filter(d => d.open).map(d => d.querySelector('summary')?.textContent));
+  form.replaceChildren();
   for (const g of GROUPS()) {
-    const d = el('details'); if (g.open) d.open = true;
+    const d = el('details'); if (fresh ? g.open : wasOpen.has(g.name)) d.open = true;
     d.append(el('summary', null, g.name));
     if (g.note) d.append(el('p', 'groupnote', g.note));
     if (g.fields) for (const [p, l, t, o] of g.fields) d.append(field(p, l, t, o));
