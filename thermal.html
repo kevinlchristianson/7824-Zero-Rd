@@ -259,8 +259,8 @@
         <p class="sub">What each space is held at, the heat it needs on a design day, and a year's heating and cooling.</p>
         <div class="zones-grid">
           <figure class="plan">
-            <svg id="plan" role="img" aria-label="Ground-level plan of the thermal zones: shop, vestibule, center block with its open loggia, and the south leg, with shared walls highlighted"></svg>
-            <figcaption>Ground-level plan, north up, to scale. Heavy lines are walls shared between zones. The upper level covers the whole center block, loggia included.</figcaption>
+            <svg id="plan" role="img" aria-label="Ground-level plan of the thermal zones: shop, vestibule, center block with the open porch on its west face, and the south leg, with shared walls highlighted"></svg>
+            <figcaption>Ground-level plan, north up, to scale. Heavy lines are walls shared between zones. The arched porch is outdoors, with the upper level's deck on top.</figcaption>
           </figure>
           <div class="table-wrap"><table id="zone-table"></table></div>
         </div>
@@ -500,11 +500,11 @@ function doorMarks(P, C, L) {
     let xa, xb, za, zb, lx, lz, lab;
     if (o.panel === 'center.N' && o.to) { const cx = C.x1 - o.x; xa = cx - o.w / 2; xb = cx + o.w / 2; za = zb = C.z0; lx = cx; lz = C.z0 + 6.5; }
     else if (o.panel === 'center.S' && o.to) { const cx = C.x0 + o.x; xa = cx - o.w / 2; xb = cx + o.w / 2; za = zb = C.z1; lx = cx; lz = C.z1 - 3; }
-    else if (o.panel === 'loggia.W') { const cz = L.z0 + o.x; xa = xb = L.x1; za = cz - o.w / 2; zb = cz + o.w / 2; lx = L.x1 + 2; lz = cz + 1.6; }
+    else if (o.panel === 'center.W' && o.zone === 'ground') { const cz = C.z0 + P.wallT + o.x; xa = xb = C.x0; za = cz - o.w / 2; zb = cz + o.w / 2; lx = C.x0 + 2; lz = cz + 1.6; }
     else continue;
     lab = `${Math.round(o.w * 12)}″`;
     out += `<line x1="${xa}" y1="${za}" x2="${xb}" y2="${zb}" stroke="var(--sheet)" stroke-width="3"/>`;
-    out += `<text x="${lx}" y="${lz}" text-anchor="${o.panel === 'loggia.W' ? 'start' : 'middle'}" class="ps">${lab}</text>`;
+    out += `<text x="${lx}" y="${lz}" text-anchor="${o.panel === 'center.W' ? 'start' : 'middle'}" class="ps">${lab}</text>`;
   }
   return out;
 }
@@ -513,7 +513,7 @@ function renderPlan() {
   const P = DEFAULTS, C = wallsOf(P.center.roof, P.overhang), N = wallsOf(P.north.roof, P.overhang);
   const S = wallsOf(P.south.roof, P.overhang), vd = vestibuleDepth(P);
   const SHOP = { ...N, x0: N.x0 + vd }, VEST = { ...N, x1: N.x0 + vd };
-  const L = { x0: C.x0, x1: C.x0 + P.center.loggiaDepth, z0: N.z1, z1: S.z0 };
+  const L = { x0: C.x0 - P.center.porchDepth, x1: C.x0, z0: N.z1, z1: S.z0 };
   const x0 = N.x0 - 12, x1 = C.x1 + 6, z0 = N.z0 - 12, z1 = S.z1 + 6;
   const rect = (r, fill, op, extra = '') => `<rect x="${r.x0}" y="${r.z0}" width="${r.x1 - r.x0}" height="${r.z1 - r.z0}" fill="${fill}" fill-opacity="${op}" stroke="currentColor" stroke-width="0.5" ${extra}/>`;
   const line = (a, b, c, d) => `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="square"/>`;
@@ -527,7 +527,7 @@ function renderPlan() {
     ${rect(VEST, 'var(--muted)', 0.08)}
     ${rect(SHOP, 'var(--z-shop)', 0.16)}
     ${rect(C, 'var(--z-ground)', 0.16)}
-    ${rect(L, 'var(--sheet)', 1)}
+    ${rect(L, 'var(--muted)', 0.04, 'stroke-dasharray="1.5 1"')}
     ${line(C.x0, C.z0, N.x1, C.z0)}${line(C.x0, C.z0, C.x0, N.z1)}
     ${line(C.x0, C.z1, S.x1, C.z1)}${line(C.x0, S.z0, C.x0, C.z1)}
     ${line(SHOP.x0, N.z0, SHOP.x0, N.z1)}
@@ -536,7 +536,7 @@ function renderPlan() {
     ${txt(C.x1 - 22, 12, 'CENTER', 'pl')}
     ${txt(C.x1 - 22, 19, `ground ${i.ground.minF}° · ${i.ground.occF}°`, 'ps')}
     ${txt(C.x1 - 22, 25, `upper ${i.upper.heatF}°`, 'ps')}
-    ${txt(cx(L) + 1.6, cz(L), 'LOGGIA · OPEN', 'ps', -90)}
+    ${txt(cx(L) + 1.6, cz(L), 'PORCH · DECK ABOVE', 'ps', -90)}
     ${txt(cx(S), cz(S) + 6, 'SOUTH LEG', 'pl')}
     ${txt(cx(S), cz(S) + 13, 'unheated', 'ps')}
     ${txt(VEST.x0 - 3, cz(VEST), 'VESTIBULE · UNHEATED', 'ps', -90)}
@@ -899,7 +899,7 @@ function renderMethod() {
   const mild = M.coolMild[ZONES.indexOf('upper')] / Math.max(1, M.coolTot[ZONES.indexOf('upper')]) * 100;
   const items = [
     ['Weather', `${R.station}, ${R.dataset}: 8,760 hours of temperature, sun and wind. Design points from the ASHRAE 2009 Handbook entries in the same file.`],
-    ['Zones', `Floor areas from the massing model: shop ${nf(z.shop.A)} ft², ground level ${nf(z.ground.A)} ft² (the ${nf(R.env.loggiaArea)} ft² loggia is outdoors), upper level ${nf(z.upper.A)} ft², vestibule ${nf(z.vest.A)} ft², south leg ${nf(z.garage.A)} ft². Each zone has an air node and a mass node (4″ of slab, or finishes upstairs), stepped every 15 minutes.`],
+    ['Zones', `Floor areas from the massing model: shop ${nf(z.shop.A)} ft², ground level ${nf(z.ground.A)} ft², upper level ${nf(z.upper.A)} ft², vestibule ${nf(z.vest.A)} ft², south leg ${nf(z.garage.A)} ft². Each zone has an air node and a mass node (4″ of slab, or finishes upstairs), stepped every 15 minutes.`],
     ['Walls and roofs', `Your R-values at ${i.framing}× for studs through the foam (1 if the foam is continuous), plus 12″ brick (R-${i.brickR}), drywall and air films. The edge of the 2′ floor structure counts as wall for both levels. The outside film thickens or thins with the wind, and the windward faces see more of it. Sun heats opaque walls through sol-air temperatures and heats vented attics before it reaches the R-${i.shop.ceilingR} and R-${i.upper.roofR} ceilings.`],
     ['Air leakage', `The LBL stack-and-wind model (ASHRAE Fundamentals) on hourly airport wind, shelter class ${i.site.shelter}. Tightness is a blower-door ACH50: ${i.shop.ach50} for the super-airtight shop (no windows, no windward doors), and a best guess of ${i.center.ach50} for the center with ${i.center.achLow}–${i.center.achHigh} run as the range. That works out to an average of ${nf(ach(0), 2)}, ${nf(ach(2), 2)} and ${nf(ach(3), 2)} air changes per hour in the shop, ground level and upper level.`],
     ['Openings', `The upper level's sixteen 41″ × 67″ windows and 72″ slider use U-${i.glass.windowU} and SHGC ${i.glass.windowSHGC}, with overhang shading and ${nf(i.glass.blinds * 100)}% of the sun getting past blinds. The shop and ground level have no windows. The 86″ walkthroughs to the shop and south leg count as insulated doors in the shared walls.`],

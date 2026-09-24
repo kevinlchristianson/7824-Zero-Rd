@@ -208,13 +208,24 @@ export function buildHouse(p = DEFAULTS, { context = true } = {}) {
     const cc = new THREE.Group(); cc.name = 'center';
     cc.add(placeWall('W', cw, t, plate, on('center.W'), mats));
 
-    // Loggia: recessed inner wall behind the arches.
-    const lw = { x0: cw.x0 + c.loggiaDepth, x1: cw.x0 + c.loggiaDepth + t + 1, z0: zA, z1: zB };
-    const L = zB - zA;
-    cc.add(placeWall('W', { ...lw, z0: zA - t, z1: zB + t }, t, c.ground, on('loggia.W'), mats));
-    const lf = box(c.loggiaDepth, 0.3, L, mats.concrete, 'loggia_floor');
-    lf.position.set(cw.x0 + c.loggiaDepth / 2, 0.15, (zA + zB) / 2);
-    cc.add(lf);
+    // Porch: the arcade stands porchDepth out from the west wall, between
+    // the legs, and carries an open deck along the upper level.
+    const pd = c.porchDepth, at = c.arcadeT, L = zB - zA, px = cw.x0 - pd;
+    const porch = new THREE.Group(); porch.name = 'porch';
+    porch.add(placeWall('W', { x0: px, x1: px + at, z0: zA - at, z1: zB + at }, at, floor2, on('porch.W'), mats));
+    const pf = box(pd, 0.3, L, mats.concrete, 'porch_floor');
+    pf.position.set(px + pd / 2, 0.15, (zA + zB) / 2);
+    const dk = box(pd, 1, L, mats.concrete, 'deck');
+    dk.position.set(px + pd / 2, floor2 - 0.5, (zA + zB) / 2);
+    const dr = box(0.15, 0.15, L, mats.steel, 'deck_rail');
+    dr.position.set(px + 0.1, floor2 + 3.5, (zA + zB) / 2);
+    porch.add(pf, dk, dr);
+    for (let i = 0; i <= 6; i++) {
+      const post = box(0.2, 3.5, 0.2, mats.steel, 'rail_post');
+      post.position.set(px + 0.1, floor2 + 1.75, zA + 0.2 + (L - 0.4) * i / 6);
+      porch.add(post);
+    }
+    cc.add(porch);
 
     // East, north and south faces. The upper east door opens onto the
     // exterior stair; the 72" north door onto a small balcony.

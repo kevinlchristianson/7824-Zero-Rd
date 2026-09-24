@@ -12,7 +12,7 @@ All three read `model/params.js`: the plan dimensions, heights and the full door
 
 ## The building
 
-- **Center block**: two stories. The wall stack is 11′ ground level, then a 2′ floor structure, then a 9′ upper level. A 6-arch loggia faces the courtyard, and an exterior steel stair climbs the east face.
+- **Center block**: two stories. The wall stack is 11′ ground level, then a 2′ floor structure, then a 9′ upper level. A 10′-deep porch with six arches stands outside it on the courtyard side, with an open deck on top along the upper level, and an exterior steel stair climbs the east face.
 - **North leg (shop)**: one tall volume. It has the center block's footprint turned 90°, plus a vestibule across its west end behind four arches.
 - **South leg**: one tall volume (garage), with overhead doors onto the south drive. Unheated.
 - Hip roofs throughout.

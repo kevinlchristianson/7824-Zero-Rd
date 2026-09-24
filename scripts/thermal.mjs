@@ -22,7 +22,7 @@ for (const z of ZONES) {
   const Z = r.env.zones[z];
   console.log(`  ${pad(ZONE_NAMES[z], 22)} floor ${lpad(Z.A.toFixed(0), 5)} ft²  volume ${lpad(Z.V.toFixed(0), 6)} ft³  ELA ${Z.ELA.toFixed(0)} in²`);
 }
-console.log(`  loggia ${r.env.loggiaLen} ft × depth → ${r.env.loggiaArea} ft²; party walls shop ${r.env.partyLen.shop} ft, south leg ${r.env.partyLen.garage} ft`);
+console.log(`  porch ${r.env.porchLen} ft × depth → ${r.env.porchArea} ft² (outdoors); party walls shop ${r.env.partyLen.shop} ft, south leg ${r.env.partyLen.garage} ft`);
 
 console.log('\nUA at rating films, Btu/h·°F (air leakage excluded)');
 console.log('  ' + pad('', 22) + GROUPS.map(([g]) => lpad(g, 9)).join(''));

@@ -23,7 +23,7 @@ export const ZONE_NAMES = {
 };
 export const GROUPS = [
   ['walls', 'Walls'], ['ceiling', 'Roof / attic'], ['windows', 'Windows & glass'],
-  ['doors', 'Doors'], ['slab', 'Slab edge'], ['floor', 'Floor over loggia'],
+  ['doors', 'Doors'], ['slab', 'Slab edge'], ['floor', 'Exposed floor'],
   ['air', 'Air leakage'], ['zones', 'To other zones'],
 ];
 
@@ -236,19 +236,21 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   const overlap = (A, B) => ov(A.x0, A.x1, B.x0, B.x1) * ov(A.z0, A.z1, B.z0, B.z1);
   const partyLen = R => FACES.reduce((s, f) => s + edgeIn(C, f, R), 0);
 
-  const loggiaLen = faceLen(C, 'W') - edgeIn(C, 'W', SHOP) - edgeIn(C, 'W', GAR);
-  const loggiaArea = Math.max(0, loggiaLen - 2 * t) * c.loggiaDepth;
+  // The arched porch sits outside the center's west wall, between the legs;
+  // the ground level's west wall faces it, the upper level's faces the deck.
+  const porchLen = faceLen(C, 'W') - edgeIn(C, 'W', SHOP) - edgeIn(C, 'W', GAR);
+  const porchArea = Math.max(0, porchLen) * c.porchDepth;
 
   const zones = {
     shop: { A: area(SHOP) - overlap(SHOP, C), H: p.north.wall, hStack: p.north.wall, hWind: p.north.wall, slabMass: true, furnish: 1.0 },
     vest: { A: area(VEST), H: p.north.wall, hStack: p.north.wall, hWind: p.north.wall, slabMass: true, furnish: 0.2 },
-    ground: { A: area(C) - loggiaArea, H: c.ground, hStack: c.ground, hWind: c.ground, slabMass: true, furnish: 1.0 },
+    ground: { A: area(C), H: c.ground, hStack: c.ground, hWind: c.ground, slabMass: true, furnish: 1.0 },
     upper: { A: area(C), H: c.upper, hStack: c.upper, hWind: plate, slabMass: false, furnish: 2.0 },
     garage: { A: area(GAR) - overlap(GAR, C), H: p.south.wall, hStack: p.south.wall, hWind: p.south.wall, slabMass: true, furnish: 0.5 },
   };
   for (const z of Object.values(zones)) z.V = z.A * z.H;
 
-  // Exterior wall runs [ft] by zone and face ('L' = facing the open loggia).
+  // Exterior wall runs [ft] by zone and face ('L' = under the porch).
   const runs = {
     shop: { N: faceLen(SHOP, 'N') - edgeIn(SHOP, 'N', C), E: faceLen(SHOP, 'E') - edgeIn(SHOP, 'E', C), S: faceLen(SHOP, 'S') - edgeIn(SHOP, 'S', C) },
     vest: { N: faceLen(VEST, 'N'), S: faceLen(VEST, 'S'), W: faceLen(VEST, 'W') },
@@ -256,13 +258,13 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
       N: faceLen(C, 'N') - edgeIn(C, 'N', SHOP) - edgeIn(C, 'N', GAR),
       E: faceLen(C, 'E') - edgeIn(C, 'E', SHOP) - edgeIn(C, 'E', GAR),
       S: faceLen(C, 'S') - edgeIn(C, 'S', SHOP) - edgeIn(C, 'S', GAR),
-      L: loggiaLen + 2 * c.loggiaDepth,
+      L: porchLen,
     },
     upper: { N: faceLen(C, 'N'), E: faceLen(C, 'E'), S: faceLen(C, 'S'), W: faceLen(C, 'W') },
     garage: Object.fromEntries(FACES.map(f => [f, faceLen(GAR, f) - edgeIn(GAR, f, C)])),
   };
 
-  const els = [];     // exterior elements (to out, attic or loggia)
+  const els = [];     // exterior elements (to out, attic or porch)
   const links = [];   // zone-to-zone conductances
   const openA = {};   // opening area subtracted from each wall run
   const key = (z, b) => `${z}:${b}`;
@@ -270,7 +272,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
 
   const shade = o => {
     const pn = o.panel;
-    if (pn === 'loggia.W') return { P: c.loggiaDepth, gap: c.ground - o.top, diffuse: 0.5 };
+    if (pn === 'center.W' && o.zone === 'ground') return { P: c.porchDepth, gap: c.ground - o.top, diffuse: 0.5 };
     if (pn.startsWith('center.')) return o.zone === 'upper' ? { P: p.overhang, gap: plate - o.top, diffuse: 1 } : { P: 0, gap: 0, diffuse: 1 };
     if (pn.startsWith('north.')) return { P: p.overhang, gap: p.north.wall - o.top, diffuse: 1 };
     return { P: p.overhang, gap: p.south.wall - o.top, diffuse: 1 };
@@ -287,8 +289,8 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
       openA[key(o.zone, o.to)] = (openA[key(o.zone, o.to)] || 0) + A;
       continue;
     }
-    const bound = o.panel === 'loggia.W' ? 'loggia' : 'out';
-    const b = bound === 'loggia' ? 'L' : o.face;
+    const bound = o.panel === 'center.W' && o.zone === 'ground' ? 'porch' : 'out';
+    const b = bound === 'porch' ? 'L' : o.face;
     openA[key(o.zone, b)] = (openA[key(o.zone, b)] || 0) + A;
     els.push({
       zone: o.zone, group: glazed ? 'windows' : 'doors', to: bound, face: o.face, A, Rcore, Rin: R_IN,
@@ -311,10 +313,10 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   const wallH = { ground: c.ground + c.floor / 2, upper: c.upper + c.floor / 2 };
   for (const z of ZONES) {
     for (const [b, run] of Object.entries(runs[z])) {
-      const gross = run * (b === 'L' ? zones[z].H : (wallH[z] ?? zones[z].H));
+      const gross = run * (wallH[z] ?? zones[z].H);
       const A = gross - (openA[key(z, b)] || 0);
       if (A <= 0) continue;
-      els.push({ zone: z, group: 'walls', to: b === 'L' ? 'loggia' : 'out', face: b === 'L' ? 'W' : b, A, Rcore: wallRcore[z], Rin: R_IN, alpha: WALL_ABS, gross });
+      els.push({ zone: z, group: 'walls', to: b === 'L' ? 'porch' : 'out', face: b === 'L' ? 'W' : b, A, Rcore: wallRcore[z], Rin: R_IN, alpha: WALL_ABS, gross });
     }
   }
 
@@ -325,9 +327,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
   ceil('upper', inp.upper.roofR);
   ceil('garage', inp.garage.ceilingR);
 
-  // Upper level floor over the open loggia.
   const floorR = inp.ground.ceilingR + GYP + SUBFLOOR;
-  els.push({ zone: 'upper', group: 'floor', to: 'loggia', face: 'H', A: loggiaArea, Rcore: floorR, Rin: R_FLOOR_IN });
 
   // Zone-to-zone.
   const link = (a, b, group, A, R) => A > 0 && links.push({ a, b, group, A, G: A / R });
@@ -362,7 +362,7 @@ export function buildEnvelope(p = DEFAULTS, inp = INPUTS) {
     Z.Ham = Z.slabMass ? Z.A / R_FLOOR_IN : 3.0 * Z.A;
   }
 
-  return { zones, els, links, runs, slabLen, loggiaArea, loggiaLen, partyLen: { shop: pShop, garage: pGar } };
+  return { zones, els, links, runs, slabLen, porchArea, porchLen, partyLen: { shop: pShop, garage: pGar } };
 }
 
 // UA [Btu/h·°F] by zone and group at rating films (15 mph), without air leakage.
@@ -505,7 +505,7 @@ const GIDX = Object.fromEntries(GROUPS.map(([k], i) => [k, i]));
 const NG = GROUPS.length, NZ = ZONES.length;
 const ZI = Object.fromEntries(ZONES.map((z, k) => [z, k]));
 const FIDX = { N: 0, E: 1, S: 2, W: 3, H: 4 };
-const TO = { out: 0, attic: 1, loggia: 2, out24: 3 };
+const TO = { out: 0, attic: 1, porch: 2, out24: 3 };
 
 // Envelope elements as flat arrays, compiled once per envelope.
 const compiled = new WeakMap();

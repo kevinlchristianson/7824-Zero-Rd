@@ -43,7 +43,10 @@ export const DEFAULTS = {
     name: 'Center (two-story)',
     roof: roofOf(W.center),
     ground: 11, floor: 2, upper: 9,
-    loggiaDepth: 8,
+    // Owner: the arches are a 10' deep porch outside the 48' x 68' box, on
+    // its west (courtyard) face, with an open deck on top along the upper
+    // level. Both levels are the full 48' x 68' inside.
+    porchDepth: 10, arcadeT: 1,
   },
   // Legs of the U: single-volume, one tall story each. The north leg's main
   // block (the shop) is the center's footprint turned 90 deg; a vestibule
@@ -88,7 +91,7 @@ export function centerPlate(p = DEFAULTS) {
 //   panel  the wall it sits in (see panelSpecs); x runs along that panel,
 //          left to right as seen from outside, from its inside corner
 //   zone   the thermal zone it serves: shop, vest, ground, upper, garage,
-//          or loggia for the open arcade (no thermal element)
+//          or porch for the open arcade (no thermal element)
 //   face   compass direction it faces
 //   kind   window | glassDoor | door | garageDoor | arch | open
 //   to     the space on the other side when that is another zone
@@ -113,17 +116,19 @@ export function openings(p = DEFAULTS) {
     list.push({ panel, zone, face, kind, ...o, ...extra });
   const upWin = (panel, face, x) => add(panel, 'upper', face, 'window', rect(x, uSill, uw.w, uw.h));
 
-  // Center, west (courtyard) face: open arcade, one upper window over each arch.
+  // Porch arcade on the courtyard side, 10' out from the center's west wall:
+  // six open arches, with one upper window in the wall behind over each.
+  // The arcade panel runs between the legs, so its x starts at zA.
   const zA = nw.z1, zB = sw.z0, bay = (zB - zA) / 6;
   for (let i = 0; i < 6; i++) {
-    const x = zA + bay * (i + 0.5) - (cw.z0 + t);
-    add('center.W', 'loggia', 'W', 'open', archAt(x, 7, c.ground - 1));
-    upWin('center.W', 'W', x);
+    const x = bay * (i + 0.5);
+    add('porch.W', 'porch', 'W', 'open', archAt(x, 7, c.ground - 1));
+    upWin('center.W', 'W', zA + x - (cw.z0 + t));
   }
-  // Ground level (owner): no windows; a 36" walkout to the courtyard through
-  // the loggia, and 86" walkthroughs into the shop and the south leg.
+  // Ground level (owner): no windows; a 36" walkout onto the porch, and 86"
+  // walkthroughs into the shop and the south leg.
   const m = (zB - zA) / 2, d86 = { w: 86 / 12, h: 80 / 12 };
-  add('loggia.W', 'ground', 'W', 'door', rect(m, 0, d36.w, d36.h));
+  add('center.W', 'ground', 'W', 'door', rect(zA + m - (cw.z0 + t), 0, d36.w, d36.h));
   add('center.N', 'ground', 'N', 'door', rect(cw.x1 - (cw.x0 + nw.x1) / 2, 0, d86.w, d86.h), { to: 'shop' });
   add('center.S', 'ground', 'S', 'door', rect((sw.x1 - cw.x0) / 2, 0, d86.w, d86.h), { to: 'garage' });
 
