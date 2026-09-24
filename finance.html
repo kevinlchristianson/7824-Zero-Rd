@@ -895,12 +895,12 @@ const GROUPS = () => [
     ['strategy.floor', 'Brokerage floor', 'usd'], ['strategy.refillFloor', 'Refill brokerage to the floor first', 'bool'], ['strategy.autoKeep', 'Gifts keep enough to hold the floor', 'bool'],
     ['strategy.ret', 'Brokerage return', 'pct'],
     ['strategy.prepayMortgage', 'Prepay the mortgage after the phases', 'bool'],
-    ['strategy.sell', 'Sell the rental', 'select', [['afterPayoff', 'When its mortgage is paid'], ['onDate', 'On a date'], ['never', 'Never']]],
-    ['strategy.sellOn', 'Sell on', 'month'],
     ['strategy.brokPayoff', 'Brokerage pays off a line when it can', 'bool'], ['strategy.cushion', 'Cushion to keep', 'usd'],
     ['horizonYears', 'Years to run', 'int'],
   ] },
-  { name: 'Rental sale', fields: [
+  { name: 'Rental sale', note: 'On a date: the equity pays off the truck, then the HELOC; the rest goes to brokerage.', fields: [
+    ['strategy.sell', 'Sell the rental', 'select', [['afterPayoff', 'When its mortgage is paid'], ['onDate', 'On a date'], ['never', 'Never']]],
+    ...(inputs.strategy.sell === 'onDate' ? [['strategy.sellOn', 'Sale date (closing month)', 'month']] : []),
     ['rental.appr', 'Appreciation per year', 'pct'], ['rental.commission', 'Commission', 'pct'], ['rental.basis', 'Tax basis', 'usd'], ['rental.capGains', 'Capital gains rate', 'pct'], ['rental.recapture', 'Depreciation recapture', 'usd'], ['escalation', 'Energy savings growth', 'pct'],
   ] },
 ];
@@ -921,7 +921,7 @@ function field(path, label, type, opts) {
     else { val = Number(c.value); if (c.value === '' || !Number.isFinite(val)) return; if (type === 'pct') val = pctOut(val); if (type === 'int') val = Math.max(1, Math.min(40, Math.round(val))); }
     if (getIn(inputs, path) === val) return;
     setIn(inputs, path, val); edited = true; scheduleSave(); rerun();
-    if (path === 'strategy.mode' || /^phases\.\d+\.via$/.test(path)) buildForm();
+    if (path === 'strategy.mode' || path === 'strategy.sell' || /^phases\.\d+\.via$/.test(path)) buildForm();
   };
   c.addEventListener('change', on);
   if (c.tagName === 'INPUT' && c.type !== 'checkbox') c.addEventListener('input', on);
