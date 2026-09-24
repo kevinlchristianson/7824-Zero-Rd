@@ -496,7 +496,8 @@ function stepsList() {
   for (const e of SIM.events) {
     if (e.kind === 'gift') { const set = inputs.gifts.find(g => calOf(g.month) === e.cal)?.keep ?? 0; push(e.cal, `Gift arrives: ${usd(e.amt)}`, `${e.keep > 0.5 ? `Keep ${usd(e.keep)} in brokerage${e.keep > set + 1 ? ` (${usd(e.keep - set)} more than you set, to hold the ${usd(I.strategy.floor)} floor through the low in ${L(SIM.summary.minBrok.cal)})` : ''}; ` : ''}${[...e.to.map(([k, v]) => `${usd(v)} to ${k === 'heloc' ? 'the HELOC' : 'the ' + acctName(k)}`), ...(e.amt - e.keep - sum(e.to.map(x => x[1])) > 0.5 ? [`${usd(e.amt - e.keep - sum(e.to.map(x => x[1])))} ${SIM.events.some(x => x.kind === 'held' && x.cal > e.cal) ? 'waits in brokerage until the renovation is done, then goes to the HELOC' : 'to brokerage'}`] : [])].join('; ') || 'the rest to brokerage'}.`); }
     else if (e.kind === 'draw') push(e.cal, `${/Last/.test(e.what) ? 'Last renovation draw' : 'Renovation draw'}: ${usd(e.amt)}`, /Last/.test(e.what) ? 'This fills the HELOC to its limit. Until the renovation is done you make no HELOC payments; its interest is added to the balance.' : 'On the HELOC, as the work is billed. No HELOC payment yet; its interest is added to the balance.');
-    else if (e.kind === 'held') push(e.cal, `Renovation done: ${usd(e.amt)} from brokerage to the HELOC`, 'What would have paid the HELOC down during the renovation (gift money past the truck, any surplus) waited in brokerage. Pay it onto the HELOC now, and start the monthly interest payment.');
+    else if (e.kind === 'held') push(e.cal, `Renovation done: ${usd(e.amt)} from brokerage to the HELOC`, `What would have paid the HELOC down during the renovation (gift money past the truck, any surplus) waited in brokerage. Pay it onto the HELOC now${I.accounts.helocPayFrom && calOf(I.accounts.helocPayFrom) > e.cal ? '' : ', and start the monthly interest payment'}.`);
+    else if (e.kind === 'helocpay') push(e.cal, `HELOC payments start: ${usd(e.amt)} interest`, 'The no-payment period ends. Until now its interest was added to the balance; from here the monthly interest is due, and any surplus still pays it down.');
     else if (e.kind === 'card') push(e.cal, e.what, `Its 0% ends this month. Pay the ${usd(e.amt)} balance in full from brokerage; don't let it roll to the regular rate.`);
     else if (e.kind === 'close') push(e.cal, e.what, /HELOC/.test(e.what) ? 'Ask the bank to close the line (or freeze it at $0) so it can’t be redrawn.' : 'Close the line; the next phase opens.');
     else if (e.kind === 'open' && e.onHeloc) push(e.cal, e.what, `The HELOC is down to your trigger: draw ${usd(e.amt)} and start it. Surplus keeps paying the HELOC down afterward.`);
@@ -621,7 +622,7 @@ function renderDebt() {
   if (!SIM) return;
   const node = $('#debt'), W = Math.max(300, node.clientWidth), H = 300, m = { l: 52, r: 12, t: 12, b: 26 };
   const R = SIM.rows, plan = planPoints();
-  const lay = [['Rental mortgage', r => r.mtg, COLOR.rental], ['Truck and cards', r => r.truck + r.wf + r.usb, COLOR.other], ['HELOC', r => r.heloc, COLOR.heloc], ['Phase lines', r => r.phaseBal, COLOR.phase]];
+  const lay = [['Rental mortgage', r => r.mtg, COLOR.rental], ['Truck', r => r.truck, loanColor('truck')], ['Wells Fargo card', r => r.wf, loanColor('wf')], ['US Bank card', r => r.usb, loanColor('usb')], ['HELOC', r => r.heloc, COLOR.heloc], ['Phase lines', r => r.phaseBal, COLOR.phase]];
   const c0 = Math.min(SIM.n0, plan?.base ? calOf(plan.base.asOf) : SIM.n0), c1 = R.at(-1).cal;
   const hist = checkins.map(c => ({ cal: calOf(c.asOf), debt: actualDebt(c.inputs), brok: c.inputs.accounts.brokerage }));
   const top = Math.max(...R.map(r => r.debt), actualDebt(SIM.inputs), ...hist.map(h => h.debt), ...(plan?.pts ?? []).map(p => p.debt), 1);
@@ -658,7 +659,7 @@ function renderDebt() {
   node.querySelector('.hit').addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); hideTip(); });
   legend($('#debt-legend'), [...lay.map(([l, , c]) => ({ label: l, color: c })), ...(plan?.pts?.length > 1 ? [{ label: `First plan (${dateLabel(plan.base.asOf)}), all debt`, kind: 'dash' }] : []), ...(hist.length ? [{ label: 'Check-ins, all debt', kind: 'dot' }] : [])]);
   const yearly = R.filter(r => r.cal % 12 === 11);
-  table($('#debt-table'), ['Year end', 'Mortgage', 'Truck + cards', 'HELOC', 'Phase lines', 'All debt', 'Brokerage', 'Net worth'], yearly.map(r => ({ cells: [L(r.cal), usd(r.mtg), usd(r.truck + r.wf + r.usb), usd(r.heloc), usd(r.phaseBal), usd(r.debt), usd(r.brok), usd(r.nw)] })), { num: j => j > 0 });
+  table($('#debt-table'), ['Year end', 'Mortgage', 'Truck', 'Wells Fargo', 'US Bank', 'HELOC', 'Phase lines', 'All debt', 'Brokerage', 'Net worth'], yearly.map(r => ({ cells: [L(r.cal), usd(r.mtg), usd(r.truck), usd(r.wf), usd(r.usb), usd(r.heloc), usd(r.phaseBal), usd(r.debt), usd(r.brok), usd(r.nw)] })), { num: j => j > 0 });
   const S = SIM.summary;
   $('#debt-sub').textContent = `Every balance stacked, from ${L(SIM.n0)} to ${L(c1)}: ${usd(actualDebt(SIM.inputs))} owed at the check-in, the renovation HELOC gone ${L(S.helocClosed)}, then the phase lines one at a time, then the rental mortgage${S.sold ? ` until the sale in ${L(S.sold)}` : ''}.${plan?.pts?.length > 1 ? ' The dashed line is the plan from your first check-in; the dots are what you actually owed at each check-in, so you can see ahead or behind at a glance.' : ' Save check-ins and the plan and your actual balances appear here too.'}`;
 }
@@ -831,7 +832,7 @@ const pctIn = v => Math.round(v * 1e5) / 1e3, pctOut = v => v / 100;
 const GROUPS = () => [
   { name: 'Accounts', open: true, note: 'Balances on the as-of day, from your statements.', fields: [
     ['accounts.brokerage', 'Brokerage', 'usd'],
-    ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.renoLeft', 'Renovation still to draw on it', 'usd'], ['accounts.renoBy', 'Drawn by the end of', 'month'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'],
+    ['accounts.heloc', 'Renovation HELOC owed', 'usd'], ['accounts.renoLeft', 'Renovation still to draw on it', 'usd'], ['accounts.renoBy', 'Drawn by the end of', 'month'], ['accounts.helocLimit', 'HELOC limit', 'usd'], ['accounts.helocApr', 'HELOC rate', 'pct'], ['accounts.helocPayFrom', 'First HELOC payment due', 'month'],
     ['accounts.mortgage', 'Rental mortgage owed', 'usd'], ['accounts.mortgageApr', 'Mortgage rate', 'pct'], ['accounts.mortgagePmt', 'Mortgage payment', 'usd'],
     ['accounts.truck', 'Truck loan owed', 'usd'], ['accounts.truckApr', 'Truck rate', 'pct'], ['accounts.truckPmt', 'Truck payment', 'usd'],
     ['accounts.wf', 'Wells Fargo card owed', 'usd'], ['accounts.wfMin', 'Wells Fargo minimum', 'usd'], ['accounts.wfDue', 'Wells Fargo 0% ends', 'month'],

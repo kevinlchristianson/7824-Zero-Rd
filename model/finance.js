@@ -33,6 +33,7 @@ export const FIN_INPUTS = {
     usb: 23431, usbMin: 235, usbDue: '2028-02',
     rentalValue: 400000, rentalSold: false,
     savings: 0, savingsApr: 0.04,                         // cash savings account; only touched when it is set to cover the monthly overage
+    helocPayFrom: '',                                    // first month a HELOC payment is due ('' = due now); until then its interest is added to the balance
     renoLeft: 0, renoBy: '2026-12',                       // renovation still to draw on the HELOC, spread evenly over the months through renoBy
     // Owner: no HELOC payments until the renovation is done. Its interest is
     // added to the balance meanwhile, the last draw fills the line to its
@@ -144,9 +145,9 @@ function simCore(inp) {
     if (!sold && mtg > 0) { const p = Math.min(A.mortgagePmt, mtg + iMtg); req.mortgage = p; amort.mortgage[k].interest = iMtg; amort.mortgage[k].principal = p - iMtg; mtg += iMtg - p; }
     if (wf > 0 && cal < wfDue) { const p = Math.min(A.wfMin, wf); req.wf = p; amort.wf[k].principal = p; wf -= p; }
     if (usb > 0 && cal < usbDue) { const p = Math.min(A.usbMin, usb); req.usb = p; amort.usb[k].principal = p; usb -= p; }
-    const reno = renoOn(cal);
-    if (heloc > 0 && reno) { heloc += iHeloc; amort.heloc[k].interest = iHeloc; amort.heloc[k].draw += iHeloc; row.lumps.push({ what: 'HELOC interest added to the balance (no payment during the renovation)', amt: iHeloc, from: 'HELOC' }); }
-    else if (heloc > 0) { req.heloc = iHeloc; amort.heloc[k].interest = iHeloc; }
+    const reno = renoOn(cal), payFrom = A.helocPayFrom ? calOf(A.helocPayFrom) : -Infinity;
+    if (heloc > 0 && (reno || cal < payFrom)) { heloc += iHeloc; amort.heloc[k].interest = iHeloc; amort.heloc[k].draw += iHeloc; row.lumps.push({ what: reno ? 'HELOC interest added to the balance (no payment during the renovation)' : `HELOC interest added to the balance (no payment due until ${labelOf(payFrom)})`, amt: iHeloc, from: 'HELOC' }); }
+    else if (heloc > 0) { req.heloc = iHeloc; amort.heloc[k].interest = iHeloc; if (cal === payFrom) ev(t, 'helocpay', 'HELOC payments start', iHeloc); }
     for (const p of phases) if (p.bal > 0) { const ip = p.bal * S.phaseApr / 12; req['ph:' + p.id] = ip; amort['ph:' + p.id][k].interest = ip; }
     const reqTotal = Object.values(req).reduce((a, b) => a + b, 0);
     // Renovation draws still to come land on the HELOC (their interest starts next month).
