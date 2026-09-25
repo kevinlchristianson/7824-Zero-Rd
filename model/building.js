@@ -26,7 +26,6 @@ function makeMaterials() {
     grass: m('dry_grass', 0xc4b58c),
     pv: m('pv_panel', 0x1f2a3c, { roughness: 0.35, metalness: 0.25 }),
     pvShaded: m('pv_shaded', 0xc4553a, { transparent: true, opacity: 0.55 }),
-    pvMore: m('pv_max_fit', 0x9ea4aa, { roughness: 0.4, metalness: 0.2 }),
   };
 }
 
@@ -189,34 +188,22 @@ export function gableRoof(p, key, mats) {
   return { roof, ends };
 }
 
-// One panel on its racking, centred over roof point c of a slope facing
-// 'S' (the default), 'E' or 'W': box y along the slope normal, the panel's
-// w along the eave and l up the slope.
-function panelOn(sl, c, mat, name) {
-  const thick = 0.13, n = sl.normal, lift = 0.4 + thick / 2, ew = sl.face === 'E' || sl.face === 'W';
-  const b = ew ? box(sl.l - 0.02, thick, sl.w - 0.02, mat, name) : box(sl.w - 0.02, thick, sl.l - 0.02, mat, name);
-  b.position.set(c[0] + n[0] * lift, c[1] + n[1] * lift, c[2] + n[2] * lift);
-  if (ew) b.rotation.z = sl.face === 'E' ? -sl.tilt : sl.tilt;
-  else b.rotation.x = sl.tilt;
-  return b;
-}
-
 // Solar panels from a roof layout (data/roofpv.json, npm run roofpv), on the
 // south slopes: dark where they pay, pale red where shade leaves a spot out.
 export function pvPanels(layout, mats = makeMaterials()) {
   const g = new THREE.Group(); g.name = 'pv';
+  const standoff = 0.4, thick = 0.13;
   for (const sl of layout.slopes) {
     if (!sl.south) continue;
-    for (const q of sl.panels) g.add(panelOn(sl, q.c, q.kept ? mats.pv : mats.pvShaded, q.kept ? 'pv_panel' : 'pv_shaded'));
+    const n = sl.normal, lift = standoff + thick / 2;
+    for (const q of sl.panels) {
+      // Box y along the slope normal, z down the slope (a south slope).
+      const b = box(sl.w - 0.02, thick, sl.l - 0.02, q.kept ? mats.pv : mats.pvShaded, q.kept ? 'pv_panel' : 'pv_shaded');
+      b.position.set(q.c[0] + n[0] * lift, q.c[1] + n[1] * lift, q.c[2] + n[2] * lift);
+      b.rotation.x = sl.tilt;
+      g.add(b);
+    }
   }
-  return g;
-}
-
-// The max fit's panels beyond the owner's, in grey: every spot that pays on
-// every slope that doesn't face north.
-export function pvMaxFit(layout, mats = makeMaterials()) {
-  const g = new THREE.Group(); g.name = 'pv_max_fit';
-  for (const sl of layout.maxFit?.slopes ?? []) for (const q of sl.extra) g.add(panelOn(sl, q.c, mats.pvMore, 'pv_max_fit'));
   return g;
 }
 
