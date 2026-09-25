@@ -125,6 +125,7 @@
     --focus: #2f6f8f;
     --pv: #1f2a3c;
     --pv-shade: #c4553a;
+    --pv-more: #9ea4aa;
     --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -280,6 +281,8 @@
   .pv-key span { display: inline-flex; align-items: center; gap: 6px; }
   .pv-key i { width: 14px; height: 10px; border-radius: 1px; background: var(--pv); }
   .pv-key i.shade { background: var(--pv-shade); opacity: 0.7; }
+  .pv-key i.more { background: var(--pv-more); }
+  .fit-note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
   .notes { font-size: 12.5px; color: var(--muted); margin: 0; padding-left: 16px; display: grid; gap: 6px; }
   .notes code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
 
@@ -306,6 +309,7 @@
         <label for="tgl-roofs"><input type="checkbox" id="tgl-roofs" checked> Roofs</label>
         <label for="tgl-site"><input type="checkbox" id="tgl-site" checked> Site</label>
         <label for="tgl-pv"><input type="checkbox" id="tgl-pv" checked> Panels</label>
+        <label for="tgl-max"><input type="checkbox" id="tgl-max" checked> Max fit</label>
       </div>
     </div>
     <div class="compass" aria-label="North arrow">
@@ -329,6 +333,15 @@
       <div class="vol" id="pv"></div>
       <dl class="totals" id="pv-totals" style="margin-top: 12px"></dl>
       <p class="pv-key"><span><i></i>Panel</span><span id="pv-key-shade"><i class="shade"></i>Left off: shade costs it over 10% of its sun</span></p>
+    </section>
+
+    <section id="fit-sec">
+      <h2>Max fit: every slope but the north ones</h2>
+      <div class="vol" id="fit"></div>
+      <dl class="totals" id="fit-totals" style="margin-top: 12px"></dl>
+      <p class="pv-key"><span><i></i><span id="fit-key-own">Your panels</span></span><span><i class="more"></i>Room for more</span></p>
+      <p class="fit-note" id="fit-more"></p>
+      <p class="fit-note" id="fit-limits"></p>
     </section>
 
     <section>
@@ -356,6 +369,7 @@
         <li>The arched porch is 10′ deep and stands outside the 48′ × 68′ box, with the upper-level deck on top (yours). The ground level has no windows: a 36″ walkout onto the porch and 86″ walkthroughs into the shop and south leg. The shop has no windows and no doors on the windward side (yours).</li>
         <li>Leg wall heights, the 5:12 roof pitch, the 1′‑6″ overhang, exact door positions, and the vestibule and south-leg openings are estimates from the listing photos.</li>
         <li>All three roofs are gables (yours). The ridges are assumed to run the long way, north–south on the center and east–west on the legs, so only the legs have south slopes.</li>
+        <li>The max fit puts a panel on every spot that pays on the south, east and west slopes, with your plan's clearances, and keeps your rows on the shop. It is priced with the Solar tab's model: its panel, inverter and install costs, your rates, the same heat pump setup, and one EG4 18kPV per 18&nbsp;kW of panels.</li>
         <li>Panels are your ZnShine 440&nbsp;W, 68″ × 45″, ½″ apart, kept 12″ clear of eaves and gable ends and 18″ off ridges. The shop has 72: your IronRidge layout (57 panels) carried east as far as the center block's shade allows. Shade from the other buildings is worked out hour by hour on the Casper weather year; trees are left out. <code>npm run roofpv</code> rebuilds the layout in <code>data/roofpv.json</code>.</li>
         <li>All inputs live in <code>model/params.js</code>, shared with the heating and cooling model. <code>npm run export</code> writes OBJ and GLB files to <code>export/</code>.</li>
       </ul>
@@ -1555,7 +1569,7 @@ select(first);
 zeroRd.page('model', async tabRoot => {
 const THREE = await import('three');
 const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-const { buildHouse, pvPanels, summary, DEFAULTS, wallsOf, centerPlate, gableOf } = await import('./model/building.js');
+const { buildHouse, pvPanels, pvMaxFit, summary, DEFAULTS, wallsOf, centerPlate, gableOf } = await import('./model/building.js');
 const P = DEFAULTS;
 const stage = tabRoot.getElementById('stage');
 const css = n => getComputedStyle(tabRoot.host).getPropertyValue(n).trim();
@@ -1672,6 +1686,11 @@ fetch(new URL('./data/roofpv.json', import.meta.url), { cache: 'no-cache' }).the
   pv.visible = tabRoot.getElementById('tgl-pv').checked;
   house.add(pv);
   tabRoot.getElementById('tgl-pv').addEventListener('change', e => { pv.visible = e.target.checked; });
+  const fit = pvMaxFit(L);
+  fit.visible = tabRoot.getElementById('tgl-max').checked;
+  house.add(fit);
+  tabRoot.getElementById('tgl-max').addEventListener('change', e => { fit.visible = e.target.checked; });
+  renderMaxFit(L);
   const n = v => Math.round(v).toLocaleString('en-US'), kw = v => v.toFixed(1);
   const shape = s => s.planned
     ? `rows of ${L.inputs.rows[s.key].join(', ')} from the eave up, ${s.orient}`
@@ -1701,6 +1720,34 @@ fetch(new URL('./data/roofpv.json', import.meta.url), { cache: 'no-cache' }).the
     <dt>Output a year</dt><dd>${n(T.kwh)} kWh</dd>
     <dt>Per kW, on a ${(L.pitch * 12).toFixed(0)}:12 roof</dt><dd>${n(T.kwh / T.kw)} kWh</dd>`;
 }).catch(() => { pvBox.textContent = 'The panel layout didn’t load. Reload the page to try again.'; });
+
+// The most that fits on every slope that doesn't face north, priced like the
+// solar plan (npm run roofpv).
+function renderMaxFit(L) {
+  const F = L.maxFit;
+  if (!F?.econ) { tabRoot.getElementById('fit-sec').hidden = true; tabRoot.querySelector('label[for="tgl-max"]').hidden = true; return; }
+  const E = F.econ, mine = L.totals.panels, n = v => Math.round(v).toLocaleString('en-US'), usd = v => '$' + n(v);
+  const yr = v => (v == null ? `not within ${E.horizon} years` : `${v.toFixed(1)} years`);
+  const face = { S: 'south', E: 'east', W: 'west' }, order = { S: 0, E: 1, W: 2 };
+  const south = Math.max(...F.slopes.filter(s => s.face === 'S').map(s => s.perKw));
+  tabRoot.getElementById('fit').innerHTML = [...F.slopes].sort((a, b) => order[a.face] - order[b.face]).map(s => `
+    <div class="vol-row">
+      <span class="vol-name">${s.name}, ${face[s.face]}</span>
+      <span class="vol-dim">${s.n} panels · ${s.kw.toFixed(1)} kW</span>
+      <span class="vol-sub">${s.planned ? `your ${s.planned} + ${s.n - s.planned} more, ` : ''}${s.orient}${s.face === 'S' ? '' : `; ${n(s.perKw)} kWh per kW, ${Math.round(s.perKw / south * 100)}% of a south slope's`}</span>
+    </div>`).join('');
+  tabRoot.getElementById('fit-totals').innerHTML = `
+    <dt>Panels</dt><dd>${F.totals.panels}</dd>
+    <dt>Size</dt><dd>${F.totals.kw.toFixed(1)} kW DC</dd>
+    <dt>Inverters</dt><dd>${E.inverters} × ${E.inverter}</dd>
+    <dt>Output a year, after the inverters</dt><dd>${n(E.all.prod)} kWh</dd>
+    <dt>Cost</dt><dd>${usd(E.all.capex)}</dd>
+    <dt>Saves the first year</dt><dd>${usd(E.all.save1)}</dd>
+    <dt>Pays back in</dt><dd>${yr(E.all.payback)}</dd>`;
+  tabRoot.getElementById('fit-key-own').textContent = `Your ${mine}`;
+  tabRoot.getElementById('fit-more').textContent = `Your ${mine} already make more than the building uses (${n(E.plan.prod)} kWh a year after the inverters, against ${n(E.use)}), so the ${F.totals.panels - mine} added panels only make surplus, paid at the $${E.avoided.toFixed(2)}/kWh avoided cost. They cost ${usd(E.more.capex)} and earn ${usd(E.more.save1)} a year: ${E.more.payback == null ? `they don't pay back within ${E.horizon} years` : `they pay back in ${yr(E.more.payback)}`}, and over ${E.horizon} years at ${Math.round(E.discount * 100)}% they're worth ${usd(Math.abs(E.more.npv))} ${E.more.npv < 0 ? 'less' : 'more'} than they cost. Your ${mine} alone pay back in ${yr(E.plan.payback)}.`;
+  tabRoot.getElementById('fit-limits').textContent = `Not priced: ${E.acKw} kW AC of inverters is past the ${E.nemCapKwAC} kW AC that Rocky Mountain Power's Wyoming net metering takes, so it needs its own interconnection and maybe a service upgrade. Covering ${Math.round(F.coverage * 100)}% of the roof, fire code wants ${F.code.ridgeFt * 12}″ clear of each ridge instead of ${L.inputs.ridgeFt * 12}″, which leaves ${F.code.panels} panels (${F.code.kw.toFixed(1)} kW).`;
+}
 
 // ---------------- views
 const VIEWS = {

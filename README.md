@@ -2,7 +2,7 @@
 
 Models of the U-shaped brick building at 7824 Zero Rd, Casper, WY, built on one set of geometry.
 
-- **`index.html`**: parametric three.js massing model (3D viewer), with solar panels laid out on the south roof slopes. `npm run roofpv` rebuilds the layout in `data/roofpv.json`.
+- **`index.html`**: parametric three.js massing model (3D viewer), with solar panels laid out on the south roof slopes, and in grey the max fit: every spot that pays on every slope that doesn't face north, priced with the solar plan's model. `npm run roofpv` rebuilds the layout in `data/roofpv.json`.
 - **`wiring.html`**: DC wiring for the shop's roof array: strings, home runs, the roof junction box, conduits to the inverters in the shop's SE corner, grounding, and the wire and parts list. `npm run roofpv` rebuilds `data/wiring.json` with the layout.
 - **`thermal.html`**: hourly heating & cooling model on the Casper TMY3 weather year, with Wyoming wind driving air leakage. Inputs are editable and the page reruns the model in a web worker.
 - **`solar.html`**: solar, heat pump and net-metering plan. It shows what to buy first, what to add later, and what never pays.
@@ -80,7 +80,7 @@ npm run thermal                 # print the model report
 npm run thermal:write           # refresh data/thermal-defaults.json for the page
 npm run solar                   # print the solar plan report
 npm run solar:write             # refresh data/solar-defaults.json for the page
-npm run roofpv                  # lay out panels on the south roofs; writes data/roofpv.json
+npm run roofpv                  # lay out panels on the south roofs, and the max fit; writes data/roofpv.json
 npm run weather                 # rebuild data/casper-tmy3.json from the EPW
 npm run bundle                  # rebuild zero-rd.html, every page as a tab
 npm run export                  # export/7824-zero-rd.{obj,mtl,glb}
